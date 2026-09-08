@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<feedback>
+  <report_metadata>
+    <org_name>Fastmail Pty Ltd</org_name>
+    <email>dmarc-reports@fastmail.com</email>
+    <report_id>fm-000111222</report_id>
+    <date_range>
+      <begin>1735689600</begin>
+      <end>1735776000</end>
+    </date_range>
+  </report_metadata>
+  <policy_published>
+    <domain>example.net</domain>
+    <p>none</p>
+  </policy_published>
+  <record>
+    <row>
+      <source_ip>198.51.100.7</source_ip>
+      <count>3</count>
+      <policy_evaluated>
+        <disposition>none</disposition>
+        <dkim>pass</dkim>
+        <spf>pass</spf>
+      </policy_evaluated>
+    </row>
+    <identifiers>
+      <header_from>example.net</header_from>
+    </identifiers>
+    <auth_results>
+      <dkim>
+        <domain>example.net</domain>
+        <result>pass</result>
+      </dkim>
+    </auth_results>
+  </record>
+</feedback>
