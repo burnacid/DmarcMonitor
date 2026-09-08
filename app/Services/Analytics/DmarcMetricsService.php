@@ -55,6 +55,8 @@ class DmarcMetricsService
             ->orderByDesc('total')
             ->get();
 
+        $envelopeDomains = $this->envelopeDomainsBySourceIp($domainId, $from, $to, $organisationId);
+
         return $rows->map(fn ($row) => [
             'source_ip' => $row->source_ip,
             'ptr_hostname' => $row->ptr_hostname,
@@ -62,11 +64,72 @@ class DmarcMetricsService
             'total' => (int) $row->total,
             'dmarc_pass' => (int) $row->dmarc_pass,
             'dmarc_fail' => (int) $row->total - (int) $row->dmarc_pass,
+            'spf_pass' => (int) $row->spf_pass,
+            'dkim_pass' => (int) $row->dkim_pass,
             'dmarc_pass_pct' => $this->percentage($row->dmarc_pass, $row->total),
             'spf_pass_pct' => $this->percentage($row->spf_pass, $row->total),
             'dkim_pass_pct' => $this->percentage($row->dkim_pass, $row->total),
             'enforced' => (int) $row->enforced,
+            'envelope_domains' => $envelopeDomains->get($row->source_ip, collect())->all(),
         ]);
+    }
+
+    /**
+     * Distinct envelope-from (RFC5321.MailFrom) domains seen per source IP —
+     * fetched separately from the aggregated breakdown since GROUP_CONCAT syntax
+     * isn't portable across MySQL/SQLite.
+     *
+     * @return Collection<string, Collection<int, string>>
+     */
+    private function envelopeDomainsBySourceIp(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId): Collection
+    {
+        return $this->baseQuery($domainId, $from, $to, $organisationId)
+            ->select('aggregate_report_records.source_ip', 'aggregate_report_records.envelope_from')
+            ->whereNotNull('aggregate_report_records.envelope_from')
+            ->distinct()
+            ->get()
+            ->groupBy('source_ip')
+            ->map(fn (Collection $rows) => $rows->pluck('envelope_from')->unique()->sort()->values());
+    }
+
+    /**
+     * Sending sources grouped by their resolved identity (ASN org, falling back to
+     * PTR hostname, falling back to the bare IP) — each group carries its own
+     * aggregated pass rates plus the individual IPs that make it up, so a shared
+     * sender (e.g. one ASN/org sending from several IPs) reads as one row instead
+     * of many near-duplicate ones.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function groupedSourceBreakdown(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null): Collection
+    {
+        $sources = $this->sourceBreakdown($domainId, $from, $to, $organisationId);
+
+        return $sources
+            ->groupBy(fn ($source) => $source['asn_org'] ?? $source['ptr_hostname'] ?? $source['source_ip'])
+            ->map(function (Collection $ips, string $label) {
+                $total = $ips->sum('total');
+                $dmarcPass = $ips->sum('dmarc_pass');
+                $spfPass = $ips->sum('spf_pass');
+                $dkimPass = $ips->sum('dkim_pass');
+                $enforced = $ips->sum('enforced');
+                $envelopeDomains = $ips->flatMap(fn ($ip) => $ip['envelope_domains'])->unique()->sort()->values();
+
+                return [
+                    'label' => $label,
+                    'ips' => $ips->values(),
+                    'ip_count' => $ips->count(),
+                    'total' => $total,
+                    'dmarc_pass_pct' => $this->percentage($dmarcPass, $total),
+                    'spf_pass_pct' => $this->percentage($spfPass, $total),
+                    'dkim_pass_pct' => $this->percentage($dkimPass, $total),
+                    'enforced' => $enforced,
+                    'envelope_domains' => $envelopeDomains->all(),
+                ];
+            })
+            ->values()
+            ->sortByDesc('total')
+            ->values();
     }
 
     /**

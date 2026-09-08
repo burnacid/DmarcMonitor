@@ -139,11 +139,63 @@ class DmarcMetricsServiceTest extends TestCase
         $this->assertEquals(0, $first['enforced']); // disposition=none
         $this->assertEquals(0.0, $first['spf_pass_pct']); // spf=fail
         $this->assertEquals(100.0, $first['dkim_pass_pct']); // dkim=pass
+        $this->assertEquals(['bounce.example.org'], $first['envelope_domains']);
 
         $second = $sources->last();
         $this->assertEquals('203.0.113.55', $second['source_ip']);
         $this->assertEquals(1, $second['enforced']); // disposition=quarantine
         $this->assertEquals(0.0, $second['spf_pass_pct']); // spf=fail
         $this->assertEquals(0.0, $second['dkim_pass_pct']); // dkim=fail
+        $this->assertEquals([], $second['envelope_domains']); // no envelope_from in this record
+    }
+
+    public function test_grouped_source_breakdown_merges_ips_sharing_the_same_org(): void
+    {
+        (new AggregateReportParser)->parseFile($this->fixture('multi-record-multi-auth.xml'));
+
+        // Both source IPs in the fixture resolve to the same ASN/org (as they might
+        // for a large sender operating multiple sending IPs behind one org name).
+        \App\Models\AggregateReportRecord::query()->update(['asn_org' => 'Shared Org LLC']);
+
+        $service = new DmarcMetricsService;
+        $from = Carbon::createFromTimestamp(1735689600)->subDay();
+        $to = Carbon::createFromTimestamp(1735689600)->addDay();
+
+        $groups = $service->groupedSourceBreakdown(null, $from, $to);
+
+        $this->assertCount(1, $groups);
+        $group = $groups->first();
+
+        $this->assertEquals('Shared Org LLC', $group['label']);
+        $this->assertEquals(2, $group['ip_count']);
+        $this->assertEquals(6, $group['total']); // 5 + 1
+        $this->assertEquals(1, $group['enforced']); // only the 203.0.113.55 record (quarantine)
+        // dmarc pass = record1 (5, dkim pass) only -> 5/6 = 83.3%
+        $this->assertEquals(83.3, $group['dmarc_pass_pct']);
+        $this->assertEquals(0.0, $group['spf_pass_pct']);
+        $this->assertEquals(83.3, $group['dkim_pass_pct']);
+
+        // The individual IPs are still available, ordered by volume.
+        $this->assertCount(2, $group['ips']);
+        $this->assertEquals('40.92.90.104', $group['ips'][0]['source_ip']);
+        $this->assertEquals('203.0.113.55', $group['ips'][1]['source_ip']);
+
+        // Envelope domains are the union across the group's IPs.
+        $this->assertEquals(['bounce.example.org'], $group['envelope_domains']);
+    }
+
+    public function test_grouped_source_breakdown_keeps_unrelated_ips_separate(): void
+    {
+        (new AggregateReportParser)->parseFile($this->fixture('multi-record-multi-auth.xml'));
+
+        // No shared org/hostname set — each IP falls back to grouping by itself.
+        $service = new DmarcMetricsService;
+        $from = Carbon::createFromTimestamp(1735689600)->subDay();
+        $to = Carbon::createFromTimestamp(1735689600)->addDay();
+
+        $groups = $service->groupedSourceBreakdown(null, $from, $to);
+
+        $this->assertCount(2, $groups);
+        $this->assertTrue($groups->every(fn ($group) => $group['ip_count'] === 1));
     }
 }

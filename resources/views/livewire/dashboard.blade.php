@@ -70,7 +70,7 @@ new #[Layout('layouts.app')] class extends Component
             'domains' => $domains->get(),
             'summary' => $service->summary($this->domainId, $from, $to, $this->organisationId),
             'trend' => $this->trendData(),
-            'sources' => $service->sourceBreakdown($this->domainId, $from, $to, $this->organisationId)->take(25),
+            'sourceGroups' => $service->groupedSourceBreakdown($this->domainId, $from, $to, $this->organisationId)->take(25),
             'hasAnyReports' => \App\Models\AggregateReport::query()->exists(),
         ];
     }
@@ -179,8 +179,7 @@ new #[Layout('layouts.app')] class extends Component
                         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 mt-2">
                             <thead class="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Source IP') }}</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Hostname / Org') }}</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Source') }}</th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Volume') }}</th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('DMARC Pass') }}</th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('SPF Pass') }}</th>
@@ -188,24 +187,46 @@ new #[Layout('layouts.app')] class extends Component
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Enforced') }}</th>
                                 </tr>
                             </thead>
-                            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                @forelse ($sources as $source)
-                                    @php($status = $this->statusFor($source['dmarc_pass_pct']))
-                                    @php($spfStatus = $this->statusFor($source['spf_pass_pct']))
-                                    @php($dkimStatus = $this->statusFor($source['dkim_pass_pct']))
-                                    <tr wire:key="source-{{ $source['source_ip'] }}">
-                                        <td class="px-6 py-3 whitespace-nowrap font-mono text-sm text-gray-900 dark:text-gray-100">{{ $source['source_ip'] }}</td>
-                                        <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                                            {{ $source['asn_org'] ?? $source['ptr_hostname'] ?? '—' }}
+                            @forelse ($sourceGroups as $group)
+                                @php($status = $this->statusFor($group['dmarc_pass_pct']))
+                                @php($spfStatus = $this->statusFor($group['spf_pass_pct']))
+                                @php($dkimStatus = $this->statusFor($group['dkim_pass_pct']))
+                                <tbody
+                                    wire:key="group-{{ $group['label'] }}"
+                                    x-data="{ open: false }"
+                                    class="divide-y divide-gray-200 dark:divide-gray-700"
+                                >
+                                    <tr
+                                        @if ($group['ip_count'] > 1) @click="open = ! open" class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" @endif
+                                    >
+                                        <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100">
+                                            <div class="flex items-center gap-2">
+                                                @if ($group['ip_count'] > 1)
+                                                    <svg :class="{ 'rotate-90': open }" class="h-3.5 w-3.5 text-gray-400 dark:text-gray-500 transition-transform shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                                                    </svg>
+                                                @else
+                                                    <span class="inline-block w-3.5"></span>
+                                                @endif
+                                                <span class="whitespace-nowrap">{{ $group['label'] }}</span>
+                                                @if ($group['ip_count'] > 1)
+                                                    <span class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ __(':count IPs', ['count' => $group['ip_count']]) }}</span>
+                                                @endif
+                                            </div>
+                                            @if (! empty($group['envelope_domains']))
+                                                <div class="mt-0.5 pl-5 text-xs text-gray-400 dark:text-gray-500">
+                                                    {{ __('Envelope from:') }} {{ implode(', ', $group['envelope_domains']) }}
+                                                </div>
+                                            @endif
                                         </td>
-                                        <td class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($source['total']) }}</td>
+                                        <td class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($group['total']) }}</td>
                                         <td class="px-6 py-3 whitespace-nowrap text-right text-sm tabular-nums">
                                             <span @class([
                                                 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                                                 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $status === 'good',
                                                 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200' => $status === 'warning',
                                                 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $status === 'critical',
-                                            ])>{{ $source['dmarc_pass_pct'] }}%</span>
+                                            ])>{{ $group['dmarc_pass_pct'] }}%</span>
                                         </td>
                                         <td class="px-6 py-3 whitespace-nowrap text-right text-sm tabular-nums">
                                             <span @class([
@@ -213,7 +234,7 @@ new #[Layout('layouts.app')] class extends Component
                                                 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $spfStatus === 'good',
                                                 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200' => $spfStatus === 'warning',
                                                 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $spfStatus === 'critical',
-                                            ])>{{ $source['spf_pass_pct'] }}%</span>
+                                            ])>{{ $group['spf_pass_pct'] }}%</span>
                                         </td>
                                         <td class="px-6 py-3 whitespace-nowrap text-right text-sm tabular-nums">
                                             <span @class([
@@ -221,16 +242,67 @@ new #[Layout('layouts.app')] class extends Component
                                                 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $dkimStatus === 'good',
                                                 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200' => $dkimStatus === 'warning',
                                                 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $dkimStatus === 'critical',
-                                            ])>{{ $source['dkim_pass_pct'] }}%</span>
+                                            ])>{{ $group['dkim_pass_pct'] }}%</span>
                                         </td>
-                                        <td class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($source['enforced']) }}</td>
+                                        <td class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($group['enforced']) }}</td>
                                     </tr>
-                                @empty
+
+                                    @if ($group['ip_count'] > 1)
+                                        @foreach ($group['ips'] as $ip)
+                                            @php($ipStatus = $this->statusFor($ip['dmarc_pass_pct']))
+                                            @php($ipSpfStatus = $this->statusFor($ip['spf_pass_pct']))
+                                            @php($ipDkimStatus = $this->statusFor($ip['dkim_pass_pct']))
+                                            <tr x-show="open" x-cloak class="bg-gray-50 dark:bg-gray-900/40">
+                                                <td class="pl-14 pr-6 py-2 font-mono text-xs text-gray-500 dark:text-gray-400">
+                                                    <span class="whitespace-nowrap">
+                                                        {{ $ip['source_ip'] }}
+                                                        @if ($ip['ptr_hostname'])
+                                                            <span class="text-gray-400 dark:text-gray-500">({{ $ip['ptr_hostname'] }})</span>
+                                                        @endif
+                                                    </span>
+                                                    @if (! empty($ip['envelope_domains']))
+                                                        <div class="mt-0.5 font-sans text-gray-400 dark:text-gray-500">
+                                                            {{ __('Envelope from:') }} {{ implode(', ', $ip['envelope_domains']) }}
+                                                        </div>
+                                                    @endif
+                                                </td>
+                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($ip['total']) }}</td>
+                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs tabular-nums">
+                                                    <span @class([
+                                                        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                                                        'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $ipStatus === 'good',
+                                                        'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200' => $ipStatus === 'warning',
+                                                        'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $ipStatus === 'critical',
+                                                    ])>{{ $ip['dmarc_pass_pct'] }}%</span>
+                                                </td>
+                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs tabular-nums">
+                                                    <span @class([
+                                                        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                                                        'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $ipSpfStatus === 'good',
+                                                        'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200' => $ipSpfStatus === 'warning',
+                                                        'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $ipSpfStatus === 'critical',
+                                                    ])>{{ $ip['spf_pass_pct'] }}%</span>
+                                                </td>
+                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs tabular-nums">
+                                                    <span @class([
+                                                        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                                                        'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $ipDkimStatus === 'good',
+                                                        'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200' => $ipDkimStatus === 'warning',
+                                                        'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $ipDkimStatus === 'critical',
+                                                    ])>{{ $ip['dkim_pass_pct'] }}%</span>
+                                                </td>
+                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($ip['enforced']) }}</td>
+                                            </tr>
+                                        @endforeach
+                                    @endif
+                                </tbody>
+                            @empty
+                                <tbody>
                                     <tr>
-                                        <td colspan="7" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No sending sources in this window.') }}</td>
+                                        <td colspan="6" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No sending sources in this window.') }}</td>
                                     </tr>
-                                @endforelse
-                            </tbody>
+                                </tbody>
+                            @endforelse
                         </table>
                     </div>
                 </div>
