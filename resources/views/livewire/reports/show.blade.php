@@ -12,17 +12,6 @@ new #[Layout('layouts.app')] class extends Component
     {
         $this->report = $report->load(['domain', 'records']);
     }
-
-    public function countryFlag(?string $countryCode): string
-    {
-        if (! $countryCode || strlen($countryCode) !== 2) {
-            return '';
-        }
-
-        return collect(str_split(strtoupper($countryCode)))
-            ->map(fn (string $letter) => mb_chr(127397 + ord($letter)))
-            ->implode('');
-    }
 }; ?>
 
 <div>
@@ -100,7 +89,7 @@ new #[Layout('layouts.app')] class extends Component
                             @forelse ($report->records as $record)
                                 <tr wire:key="record-{{ $record->id }}">
                                     <td class="px-6 py-3 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-gray-100">
-                                        {{ $this->countryFlag($record->country) }} {{ $record->source_ip }}
+                                        <x-country-flag :code="$record->country" /> {{ $record->source_ip }}
                                         @if ($record->ptr_hostname)
                                             <div class="text-xs text-gray-400 dark:text-gray-500">{{ $record->ptr_hostname }}</div>
                                         @endif

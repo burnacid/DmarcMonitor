@@ -121,17 +121,6 @@ new #[Layout('layouts.app')] class extends Component
             default => 'critical',
         };
     }
-
-    public function countryFlag(?string $countryCode): string
-    {
-        if (! $countryCode || strlen($countryCode) !== 2) {
-            return '';
-        }
-
-        return collect(str_split(strtoupper($countryCode)))
-            ->map(fn (string $letter) => mb_chr(127397 + ord($letter)))
-            ->implode('');
-    }
 }; ?>
 
 <div>
@@ -285,12 +274,12 @@ new #[Layout('layouts.app')] class extends Component
                                                     {{ __(':count IP addresses', ['count' => $group['ip_count']]) }}
                                                     <span class="pointer-events-none absolute left-1/2 bottom-full z-10 mb-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 dark:bg-gray-700 px-2 py-1 font-mono text-xs text-white shadow-lg group-hover/ips:block">
                                                         @foreach ($group['ips'] as $ip)
-                                                            <span class="block">{{ $this->countryFlag($ip['country']) }} {{ $ip['source_ip'] }}</span>
+                                                            <span class="block"><x-country-flag :code="$ip['country']" /> {{ $ip['source_ip'] }}</span>
                                                         @endforeach
                                                     </span>
                                                 </span>
                                             @else
-                                                <span class="font-mono text-xs">{{ $this->countryFlag($group['ips'][0]['country'] ?? null) }} {{ $group['ips'][0]['source_ip'] ?? '' }}</span>
+                                                <span class="font-mono text-xs"><x-country-flag :code="$group['ips'][0]['country'] ?? null" /> {{ $group['ips'][0]['source_ip'] ?? '' }}</span>
                                             @endif
                                         </td>
                                         <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
@@ -350,12 +339,12 @@ new #[Layout('layouts.app')] class extends Component
                                                             {{ __(':count IP addresses', ['count' => count($envelope['ips'])]) }}
                                                             <span class="pointer-events-none absolute left-1/2 bottom-full z-10 mb-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 dark:bg-gray-700 px-2 py-1 font-mono text-xs text-white shadow-lg group-hover:block">
                                                                 @foreach ($envelope['ips'] as $ip)
-                                                                    <span class="block">{{ $this->countryFlag($group['country_by_ip'][$ip] ?? null) }} {{ $ip }}</span>
+                                                                    <span class="block"><x-country-flag :code="$group['country_by_ip'][$ip] ?? null" /> {{ $ip }}</span>
                                                                 @endforeach
                                                             </span>
                                                         </span>
                                                     @else
-                                                        <span class="font-mono">{{ $this->countryFlag($group['country_by_ip'][$envelope['ips'][0]] ?? null) }} {{ $envelope['ips'][0] ?? '' }}</span>
+                                                        <span class="font-mono"><x-country-flag :code="$group['country_by_ip'][$envelope['ips'][0]] ?? null" /> {{ $envelope['ips'][0] ?? '' }}</span>
                                                     @endif
                                                 </td>
                                                 <td class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{{ $envelope['domain'] }}</td>
