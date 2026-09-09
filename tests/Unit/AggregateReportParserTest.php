@@ -3,7 +3,6 @@
 namespace Tests\Unit;
 
 use App\Jobs\EnrichReportRecordsJob;
-use App\Models\AggregateReport;
 use App\Models\Domain;
 use App\Services\Dmarc\AggregateReportParser;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -110,6 +109,17 @@ class AggregateReportParserTest extends TestCase
         $report = (new AggregateReportParser)->parseFile($this->fixture('google-single-record.xml.zip'));
 
         $this->assertEquals('google.com', $report->org_name);
+        $this->assertCount(1, $report->records);
+    }
+
+    public function test_it_normalizes_a_non_standard_version_identifier(): void
+    {
+        // Amazon SES has been observed sending <version>0.1</version> instead
+        // of the "1.0" the parser strictly expects, despite the report itself
+        // being a perfectly valid, otherwise-standard aggregate report.
+        $report = (new AggregateReportParser)->parseFile($this->fixture('non-standard-version.xml'));
+
+        $this->assertEquals('AMAZON-SES', $report->org_name);
         $this->assertCount(1, $report->records);
     }
 

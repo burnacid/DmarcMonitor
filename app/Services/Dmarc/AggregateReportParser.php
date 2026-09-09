@@ -6,6 +6,7 @@ use App\Jobs\EnrichReportRecordsJob;
 use App\Models\AggregateReport;
 use App\Models\Domain;
 use App\Models\ImapAccount;
+use App\Support\CompressedFileReader;
 use Avvertix\DmarcReportParser\Data\DmarcReport;
 use Avvertix\DmarcReportParser\Data\Record;
 use Avvertix\DmarcReportParser\DmarcReportParser;
@@ -28,9 +29,22 @@ class AggregateReportParser
         ?string $rawXmlPath = null,
         ?string $messageUid = null,
     ): ?AggregateReport {
-        $report = $this->parser->fromFile($path);
+        $xml = CompressedFileReader::read($path);
+        $report = $this->parser->fromString($this->normalizeVersion($xml));
 
         return $this->store($report, $imapAccount, $rawXmlPath, $messageUid);
+    }
+
+    /**
+     * Some senders (Amazon SES observed in the wild) emit a non-standard
+     * <version> value — e.g. "0.1" — despite the report otherwise being a
+     * perfectly parseable RFC 7489 aggregate report. The underlying parser
+     * strictly rejects anything but "1.0", so normalize it here rather than
+     * losing real reports over a cosmetic version mismatch.
+     */
+    private function normalizeVersion(string $xml): string
+    {
+        return preg_replace('/<version>.*?<\/version>/', '<version>1.0</version>', $xml, 1) ?? $xml;
     }
 
     public function store(
