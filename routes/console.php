@@ -23,3 +23,5 @@ Schedule::command('dmarc:update-geoip')->weekly()->withoutOverlapping();
 // alternative; if a real queue worker is set up later, this becomes redundant
 // (an empty queue makes it a no-op) and can be removed.
 Schedule::command('queue:work --stop-when-empty --max-time=50 --tries=3')->everyFiveMinutes()->withoutOverlapping();
+
+Schedule::command('dmarc:cleanup')->daily()->withoutOverlapping();
