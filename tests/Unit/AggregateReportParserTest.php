@@ -123,6 +123,18 @@ class AggregateReportParserTest extends TestCase
         $this->assertCount(1, $report->records);
     }
 
+    public function test_it_normalizes_non_standard_result_casing(): void
+    {
+        // KDDI/au.com has been observed sending <result>Fail</result> instead
+        // of the lowercase "fail" the parser's enums strictly require.
+        $report = (new AggregateReportParser)->parseFile($this->fixture('non-standard-case.xml'));
+
+        $record = $report->records->first();
+        $this->assertEquals('fail', $record->spf_result);
+        $this->assertEquals('fail', $record->spf_auth_result);
+        $this->assertEquals('none', $record->dkim_auth_result);
+    }
+
     public function test_reprocessing_the_same_report_is_idempotent(): void
     {
         $parser = new AggregateReportParser;

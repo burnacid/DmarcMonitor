@@ -30,7 +30,7 @@ class AggregateReportParser
         ?string $messageUid = null,
     ): ?AggregateReport {
         $xml = CompressedFileReader::read($path);
-        $report = $this->parser->fromString($this->normalizeVersion($xml));
+        $report = $this->parser->fromString($this->normalizeEnumCase($this->normalizeVersion($xml)));
 
         return $this->store($report, $imapAccount, $rawXmlPath, $messageUid);
     }
@@ -45,6 +45,27 @@ class AggregateReportParser
     private function normalizeVersion(string $xml): string
     {
         return preg_replace('/<version>.*?<\/version>/', '<version>1.0</version>', $xml, 1) ?? $xml;
+    }
+
+    /**
+     * The underlying parser backs disposition/DKIM/SPF results with strict
+     * lowercase-only enums, but not every sender complies — KDDI/au.com has
+     * been observed sending <result>Fail</result>. Lowercase the handful of
+     * tags that carry those enum values wherever they appear as plain text.
+     *
+     * The `[^<]*` content class is what keeps this safe: `dkim` and `spf` are
+     * also used as *container* tags elsewhere in the schema (auth_results),
+     * and a container's content always includes a `<` from its child
+     * elements, so this only ever matches the scalar policy_evaluated/
+     * auth_results.result values it's meant to, never those containers.
+     */
+    private function normalizeEnumCase(string $xml): string
+    {
+        return preg_replace_callback(
+            '/<(dkim|spf|disposition|result)>([^<]*)<\/\1>/',
+            fn (array $matches) => '<'.$matches[1].'>'.strtolower($matches[2]).'</'.$matches[1].'>',
+            $xml,
+        ) ?? $xml;
     }
 
     public function store(
