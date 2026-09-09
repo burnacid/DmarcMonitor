@@ -57,6 +57,12 @@ new class extends Component
                     <x-nav-link :href="route('admin.geoip')" :active="request()->routeIs('admin.geoip')" wire:navigate>
                         {{ __('GeoIP') }}
                     </x-nav-link>
+                    <x-nav-link :href="route('admin.alert-rules')" :active="request()->routeIs('admin.alert-rules')" wire:navigate>
+                        {{ __('Alert Rules') }}
+                    </x-nav-link>
+                    <x-nav-link :href="route('admin.alert-events')" :active="request()->routeIs('admin.alert-events')" wire:navigate>
+                        {{ __('Alerts') }}
+                    </x-nav-link>
                 </div>
             </div>
 
@@ -144,6 +150,12 @@ new class extends Component
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('admin.geoip')" :active="request()->routeIs('admin.geoip')" wire:navigate>
                 {{ __('GeoIP') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('admin.alert-rules')" :active="request()->routeIs('admin.alert-rules')" wire:navigate>
+                {{ __('Alert Rules') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('admin.alert-events')" :active="request()->routeIs('admin.alert-events')" wire:navigate>
+                {{ __('Alerts') }}
             </x-responsive-nav-link>
         </div>
 

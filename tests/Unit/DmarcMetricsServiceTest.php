@@ -2,7 +2,9 @@
 
 namespace Tests\Unit;
 
+use App\Models\AggregateReportRecord;
 use App\Models\Domain;
+use App\Models\Organisation;
 use App\Services\Analytics\DmarcMetricsService;
 use App\Services\Dmarc\AggregateReportParser;
 use Carbon\Carbon;
@@ -75,7 +77,7 @@ class DmarcMetricsServiceTest extends TestCase
         (new AggregateReportParser)->parseFile($this->fixture('google-single-record.xml'));
         (new AggregateReportParser)->parseFile($this->fixture('multi-record-multi-auth.xml'));
 
-        $org = \App\Models\Organisation::create(['name' => 'Acme']);
+        $org = Organisation::create(['name' => 'Acme']);
         $exampleCom = Domain::where('fqdn', 'example.com')->firstOrFail();
         $exampleCom->update(['organisation_id' => $org->id]);
 
@@ -135,6 +137,7 @@ class DmarcMetricsServiceTest extends TestCase
         // Highest volume source (count=5) should be first
         $first = $sources->first();
         $this->assertEquals('40.92.90.104', $first['source_ip']);
+        $this->assertEquals('example.org', $first['domain']);
         $this->assertEquals(5, $first['total']);
         $this->assertEquals(0, $first['enforced']); // disposition=none
         $this->assertEquals(0.0, $first['spf_pass_pct']); // spf=fail
@@ -155,7 +158,7 @@ class DmarcMetricsServiceTest extends TestCase
 
         // Both source IPs in the fixture resolve to the same ASN/org (as they might
         // for a large sender operating multiple sending IPs behind one org name).
-        \App\Models\AggregateReportRecord::query()->update(['asn_org' => 'Shared Org LLC']);
+        AggregateReportRecord::query()->update(['asn_org' => 'Shared Org LLC']);
 
         $service = new DmarcMetricsService;
         $from = Carbon::createFromTimestamp(1735689600)->subDay();
@@ -167,6 +170,7 @@ class DmarcMetricsServiceTest extends TestCase
         $group = $groups->first();
 
         $this->assertEquals('Shared Org LLC', $group['label']);
+        $this->assertEquals('example.org', $group['domain']);
         $this->assertEquals(2, $group['ip_count']);
         $this->assertEquals(6, $group['total']); // 5 + 1
         $this->assertEquals(1, $group['enforced']); // only the 203.0.113.55 record (quarantine)
@@ -180,8 +184,14 @@ class DmarcMetricsServiceTest extends TestCase
         $this->assertEquals('40.92.90.104', $group['ips'][0]['source_ip']);
         $this->assertEquals('203.0.113.55', $group['ips'][1]['source_ip']);
 
-        // Envelope domains are the union across the group's IPs.
-        $this->assertEquals(['bounce.example.org'], $group['envelope_domains']);
+        // Envelopes are split out individually (not merged), each with its own
+        // stats and the IPs that sent under it.
+        $this->assertEquals(1, $group['envelope_count']);
+        $envelope = $group['envelopes'][0];
+        $this->assertEquals('bounce.example.org', $envelope['domain']);
+        $this->assertEquals(['40.92.90.104'], $envelope['ips']);
+        $this->assertEquals(5, $envelope['total']);
+        $this->assertEquals(100.0, $envelope['dmarc_pass_pct']);
     }
 
     public function test_grouped_source_breakdown_keeps_unrelated_ips_separate(): void

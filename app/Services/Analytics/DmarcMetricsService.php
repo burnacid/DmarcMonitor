@@ -5,7 +5,6 @@ namespace App\Services\Analytics;
 use App\Models\AggregateReportRecord;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 class DmarcMetricsService
 {
@@ -44,14 +43,17 @@ class DmarcMetricsService
     {
         $rows = $this->baseQuery($domainId, $from, $to, $organisationId)
             ->selectRaw('aggregate_report_records.source_ip')
+            ->selectRaw('aggregate_reports.domain_id')
+            ->selectRaw('MAX(domains.fqdn) as domain')
             ->selectRaw('MAX(aggregate_report_records.ptr_hostname) as ptr_hostname')
             ->selectRaw('MAX(aggregate_report_records.asn_org) as asn_org')
+            ->selectRaw('MAX(aggregate_report_records.country) as country')
             ->selectRaw('SUM(aggregate_report_records.count) as total')
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.dkim_result = 'pass' OR aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as dmarc_pass")
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as spf_pass")
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.dkim_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as dkim_pass")
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.disposition != 'none' AND aggregate_report_records.disposition != 'pass' THEN aggregate_report_records.count ELSE 0 END) as enforced")
-            ->groupBy('aggregate_report_records.source_ip')
+            ->groupBy('aggregate_report_records.source_ip', 'aggregate_reports.domain_id')
             ->orderByDesc('total')
             ->get();
 
@@ -59,8 +61,11 @@ class DmarcMetricsService
 
         return $rows->map(fn ($row) => [
             'source_ip' => $row->source_ip,
+            'domain_id' => $row->domain_id,
+            'domain' => $row->domain,
             'ptr_hostname' => $row->ptr_hostname,
             'asn_org' => $row->asn_org,
+            'country' => $row->country,
             'total' => (int) $row->total,
             'dmarc_pass' => (int) $row->dmarc_pass,
             'dmarc_fail' => (int) $row->total - (int) $row->dmarc_pass,
@@ -70,7 +75,7 @@ class DmarcMetricsService
             'spf_pass_pct' => $this->percentage($row->spf_pass, $row->total),
             'dkim_pass_pct' => $this->percentage($row->dkim_pass, $row->total),
             'enforced' => (int) $row->enforced,
-            'envelope_domains' => $envelopeDomains->get($row->source_ip, collect())->all(),
+            'envelope_domains' => $envelopeDomains->get("{$row->domain_id}|{$row->source_ip}", collect())->all(),
         ]);
     }
 
@@ -84,12 +89,45 @@ class DmarcMetricsService
     private function envelopeDomainsBySourceIp(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId): Collection
     {
         return $this->baseQuery($domainId, $from, $to, $organisationId)
-            ->select('aggregate_report_records.source_ip', 'aggregate_report_records.envelope_from')
+            ->select('aggregate_reports.domain_id', 'aggregate_report_records.source_ip', 'aggregate_report_records.envelope_from')
             ->whereNotNull('aggregate_report_records.envelope_from')
             ->distinct()
             ->get()
-            ->groupBy('source_ip')
+            ->groupBy(fn ($row) => "{$row->domain_id}|{$row->source_ip}")
             ->map(fn (Collection $rows) => $rows->pluck('envelope_from')->unique()->sort()->values());
+    }
+
+    /**
+     * Volume and pass-rate aggregates per (source IP, envelope-from domain) pair,
+     * used to split a grouped source's envelopes out individually instead of
+     * merging them into one summed total.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function envelopeStatsBySourceIp(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId): Collection
+    {
+        return $this->baseQuery($domainId, $from, $to, $organisationId)
+            ->whereNotNull('aggregate_report_records.envelope_from')
+            ->selectRaw('aggregate_report_records.source_ip')
+            ->selectRaw('aggregate_reports.domain_id')
+            ->selectRaw('aggregate_report_records.envelope_from')
+            ->selectRaw('SUM(aggregate_report_records.count) as total')
+            ->selectRaw("SUM(CASE WHEN aggregate_report_records.dkim_result = 'pass' OR aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as dmarc_pass")
+            ->selectRaw("SUM(CASE WHEN aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as spf_pass")
+            ->selectRaw("SUM(CASE WHEN aggregate_report_records.dkim_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as dkim_pass")
+            ->selectRaw("SUM(CASE WHEN aggregate_report_records.disposition != 'none' AND aggregate_report_records.disposition != 'pass' THEN aggregate_report_records.count ELSE 0 END) as enforced")
+            ->groupBy('aggregate_report_records.source_ip', 'aggregate_reports.domain_id', 'aggregate_report_records.envelope_from')
+            ->get()
+            ->map(fn ($row) => [
+                'source_ip' => $row->source_ip,
+                'domain_id' => $row->domain_id,
+                'envelope_from' => $row->envelope_from,
+                'total' => (int) $row->total,
+                'dmarc_pass' => (int) $row->dmarc_pass,
+                'spf_pass' => (int) $row->spf_pass,
+                'dkim_pass' => (int) $row->dkim_pass,
+                'enforced' => (int) $row->enforced,
+            ]);
     }
 
     /**
@@ -104,27 +142,52 @@ class DmarcMetricsService
     public function groupedSourceBreakdown(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null): Collection
     {
         $sources = $this->sourceBreakdown($domainId, $from, $to, $organisationId);
+        $envelopeStats = $this->envelopeStatsBySourceIp($domainId, $from, $to, $organisationId)
+            ->groupBy(fn ($row) => "{$row['domain_id']}|{$row['source_ip']}");
 
         return $sources
-            ->groupBy(fn ($source) => $source['asn_org'] ?? $source['ptr_hostname'] ?? $source['source_ip'])
-            ->map(function (Collection $ips, string $label) {
+            ->groupBy(fn ($source) => $source['domain_id'].'|'.($source['asn_org'] ?? $source['ptr_hostname'] ?? $source['source_ip']))
+            ->map(function (Collection $ips) use ($envelopeStats) {
+                $label = $ips->first()['asn_org'] ?? $ips->first()['ptr_hostname'] ?? $ips->first()['source_ip'];
                 $total = $ips->sum('total');
                 $dmarcPass = $ips->sum('dmarc_pass');
                 $spfPass = $ips->sum('spf_pass');
                 $dkimPass = $ips->sum('dkim_pass');
                 $enforced = $ips->sum('enforced');
-                $envelopeDomains = $ips->flatMap(fn ($ip) => $ip['envelope_domains'])->unique()->sort()->values();
+
+                $envelopes = $ips
+                    ->flatMap(fn ($ip) => $envelopeStats->get("{$ip['domain_id']}|{$ip['source_ip']}", collect()))
+                    ->groupBy('envelope_from')
+                    ->map(function (Collection $rows, string $domain) {
+                        $envelopeTotal = $rows->sum('total');
+
+                        return [
+                            'domain' => $domain,
+                            'ips' => $rows->pluck('source_ip')->unique()->sort()->values()->all(),
+                            'total' => $envelopeTotal,
+                            'dmarc_pass_pct' => $this->percentage($rows->sum('dmarc_pass'), $envelopeTotal),
+                            'spf_pass_pct' => $this->percentage($rows->sum('spf_pass'), $envelopeTotal),
+                            'dkim_pass_pct' => $this->percentage($rows->sum('dkim_pass'), $envelopeTotal),
+                            'enforced' => $rows->sum('enforced'),
+                        ];
+                    })
+                    ->values()
+                    ->sortByDesc('total')
+                    ->values();
 
                 return [
                     'label' => $label,
+                    'domain' => $ips->first()['domain'],
                     'ips' => $ips->values(),
                     'ip_count' => $ips->count(),
+                    'country_by_ip' => $ips->pluck('country', 'source_ip')->all(),
                     'total' => $total,
                     'dmarc_pass_pct' => $this->percentage($dmarcPass, $total),
                     'spf_pass_pct' => $this->percentage($spfPass, $total),
                     'dkim_pass_pct' => $this->percentage($dkimPass, $total),
                     'enforced' => $enforced,
-                    'envelope_domains' => $envelopeDomains->all(),
+                    'envelopes' => $envelopes->all(),
+                    'envelope_count' => $envelopes->count(),
                 ];
             })
             ->values()
@@ -156,10 +219,43 @@ class DmarcMetricsService
         ];
     }
 
+    /**
+     * Distinct source IPs already seen for a domain before the given cutoff —
+     * the baseline used by the "new sending source" alert to detect newly
+     * appearing IPs.
+     *
+     * @return Collection<int, string>
+     */
+    public function sourceIpsBefore(int $domainId, CarbonInterface $before): Collection
+    {
+        return AggregateReportRecord::query()
+            ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
+            ->where('aggregate_reports.domain_id', $domainId)
+            ->where('aggregate_reports.date_range_begin', '<', $before)
+            ->distinct()
+            ->pluck('aggregate_report_records.source_ip');
+    }
+
+    /**
+     * Distinct source IPs seen for a domain within the given window.
+     *
+     * @return Collection<int, string>
+     */
+    public function sourceIpsBetween(int $domainId, CarbonInterface $from, CarbonInterface $to): Collection
+    {
+        return AggregateReportRecord::query()
+            ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
+            ->where('aggregate_reports.domain_id', $domainId)
+            ->whereBetween('aggregate_reports.date_range_begin', [$from, $to])
+            ->distinct()
+            ->pluck('aggregate_report_records.source_ip');
+    }
+
     private function baseQuery(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null)
     {
         $query = AggregateReportRecord::query()
             ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
+            ->join('domains', 'domains.id', '=', 'aggregate_reports.domain_id')
             ->whereBetween('aggregate_reports.date_range_begin', [$from, $to]);
 
         if ($domainId !== null) {
@@ -167,8 +263,7 @@ class DmarcMetricsService
         }
 
         if ($organisationId !== null) {
-            $query->join('domains', 'domains.id', '=', 'aggregate_reports.domain_id')
-                ->where('domains.organisation_id', $organisationId);
+            $query->where('domains.organisation_id', $organisationId);
         }
 
         return $query;

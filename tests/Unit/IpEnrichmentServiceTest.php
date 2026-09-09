@@ -84,4 +84,19 @@ class IpEnrichmentServiceTest extends TestCase
         $this->assertNull($result['asn']);
         $this->assertNull($result['asn_org']);
     }
+
+    public function test_country_lookup_is_skipped_gracefully_when_no_mmdb_file_is_configured(): void
+    {
+        config(['geoip.country_mmdb_path' => '/nonexistent/path/GeoLite2-Country.mmdb']);
+
+        $service = new IpEnrichmentService(fn (string $ip) => 'mail.example.com');
+
+        $result = $service->enrich('203.0.113.60');
+
+        $this->assertNull($result['country']);
+        $this->assertDatabaseHas('ip_enrichment_cache', [
+            'ip' => '203.0.113.60',
+            'country' => null,
+        ]);
+    }
 }

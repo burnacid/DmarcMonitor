@@ -17,6 +17,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | GeoLite2 Country database path
+    |--------------------------------------------------------------------------
+    |
+    | Path to the MaxMind GeoLite2-Country.mmdb file used to resolve sending
+    | IPs to their country, shown as a flag next to each source. Downloaded
+    | and refreshed the same way as the ASN database. When the file is
+    | missing, country enrichment is skipped gracefully.
+    |
+    */
+    'country_mmdb_path' => env('MAXMIND_COUNTRY_DB_PATH', storage_path('app/geoip/GeoLite2-Country.mmdb')),
+
+    /*
+    |--------------------------------------------------------------------------
     | MaxMind license key
     |--------------------------------------------------------------------------
     |

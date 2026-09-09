@@ -83,6 +83,17 @@ new #[Layout('layouts.app')] class extends Component
             default => 'critical',
         };
     }
+
+    public function countryFlag(?string $countryCode): string
+    {
+        if (! $countryCode || strlen($countryCode) !== 2) {
+            return '';
+        }
+
+        return collect(str_split(strtoupper($countryCode)))
+            ->map(fn (string $letter) => mb_chr(127397 + ord($letter)))
+            ->implode('');
+    }
 }; ?>
 
 <div>
@@ -179,7 +190,10 @@ new #[Layout('layouts.app')] class extends Component
                         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 mt-2">
                             <thead class="bg-gray-50 dark:bg-gray-700">
                                 <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Domain') }}</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Source') }}</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('IP Addresses') }}</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Envelope From') }}</th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Volume') }}</th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('DMARC Pass') }}</th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('SPF Pass') }}</th>
@@ -191,17 +205,19 @@ new #[Layout('layouts.app')] class extends Component
                                 @php($status = $this->statusFor($group['dmarc_pass_pct']))
                                 @php($spfStatus = $this->statusFor($group['spf_pass_pct']))
                                 @php($dkimStatus = $this->statusFor($group['dkim_pass_pct']))
+                                @php($expandable = $group['ip_count'] > 1 || $group['envelope_count'] > 1)
                                 <tbody
                                     wire:key="group-{{ $group['label'] }}"
                                     x-data="{ open: false }"
                                     class="divide-y divide-gray-200 dark:divide-gray-700"
                                 >
                                     <tr
-                                        @if ($group['ip_count'] > 1) @click="open = ! open" class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" @endif
+                                        @if ($expandable) @click="open = ! open" class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" @endif
                                     >
+                                        <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ $group['domain'] }}</td>
                                         <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100">
                                             <div class="flex items-center gap-2">
-                                                @if ($group['ip_count'] > 1)
+                                                @if ($expandable)
                                                     <svg :class="{ 'rotate-90': open }" class="h-3.5 w-3.5 text-gray-400 dark:text-gray-500 transition-transform shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
                                                     </svg>
@@ -209,14 +225,27 @@ new #[Layout('layouts.app')] class extends Component
                                                     <span class="inline-block w-3.5"></span>
                                                 @endif
                                                 <span class="whitespace-nowrap">{{ $group['label'] }}</span>
-                                                @if ($group['ip_count'] > 1)
-                                                    <span class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ __(':count IPs', ['count' => $group['ip_count']]) }}</span>
-                                                @endif
                                             </div>
-                                            @if (! empty($group['envelope_domains']))
-                                                <div class="mt-0.5 pl-5 text-xs text-gray-400 dark:text-gray-500">
-                                                    {{ __('Envelope from:') }} {{ implode(', ', $group['envelope_domains']) }}
-                                                </div>
+                                        </td>
+                                        <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                            @if ($group['ip_count'] > 1)
+                                                <span class="group/ips relative inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap cursor-default">
+                                                    {{ __(':count IP addresses', ['count' => $group['ip_count']]) }}
+                                                    <span class="pointer-events-none absolute left-1/2 bottom-full z-10 mb-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 dark:bg-gray-700 px-2 py-1 font-mono text-xs text-white shadow-lg group-hover/ips:block">
+                                                        @foreach ($group['ips'] as $ip)
+                                                            <span class="block">{{ $this->countryFlag($ip['country']) }} {{ $ip['source_ip'] }}</span>
+                                                        @endforeach
+                                                    </span>
+                                                </span>
+                                            @else
+                                                <span class="font-mono text-xs">{{ $this->countryFlag($group['ips'][0]['country'] ?? null) }} {{ $group['ips'][0]['source_ip'] ?? '' }}</span>
+                                            @endif
+                                        </td>
+                                        <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                            @if ($group['envelope_count'] > 1)
+                                                {{ __(':count domains', ['count' => $group['envelope_count']]) }}
+                                            @else
+                                                {{ $group['envelopes'][0]['domain'] ?? '—' }}
                                             @endif
                                         </td>
                                         <td class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($group['total']) }}</td>
@@ -247,59 +276,70 @@ new #[Layout('layouts.app')] class extends Component
                                         <td class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($group['enforced']) }}</td>
                                     </tr>
 
-                                    @if ($group['ip_count'] > 1)
-                                        @foreach ($group['ips'] as $ip)
-                                            @php($ipStatus = $this->statusFor($ip['dmarc_pass_pct']))
-                                            @php($ipSpfStatus = $this->statusFor($ip['spf_pass_pct']))
-                                            @php($ipDkimStatus = $this->statusFor($ip['dkim_pass_pct']))
-                                            <tr x-show="open" x-cloak class="bg-gray-50 dark:bg-gray-900/40">
-                                                <td class="pl-14 pr-6 py-2 font-mono text-xs text-gray-500 dark:text-gray-400">
-                                                    <span class="whitespace-nowrap">
-                                                        {{ $ip['source_ip'] }}
-                                                        @if ($ip['ptr_hostname'])
-                                                            <span class="text-gray-400 dark:text-gray-500">({{ $ip['ptr_hostname'] }})</span>
-                                                        @endif
-                                                    </span>
-                                                    @if (! empty($ip['envelope_domains']))
-                                                        <div class="mt-0.5 font-sans text-gray-400 dark:text-gray-500">
-                                                            {{ __('Envelope from:') }} {{ implode(', ', $ip['envelope_domains']) }}
-                                                        </div>
+                                    @if ($expandable)
+                                        @forelse ($group['envelopes'] as $envelope)
+                                            @php($envelopeStatus = $this->statusFor($envelope['dmarc_pass_pct']))
+                                            @php($envelopeSpfStatus = $this->statusFor($envelope['spf_pass_pct']))
+                                            @php($envelopeDkimStatus = $this->statusFor($envelope['dkim_pass_pct']))
+                                            <tr x-show="open" x-cloak class="bg-gray-100 dark:bg-gray-900/40">
+                                                <td class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{{ $group['domain'] }}</td>
+                                                <td class="pl-14 pr-6 py-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ $group['label'] }}</td>
+                                                <td class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                                                    @if (count($envelope['ips']) > 1)
+                                                        <span class="group relative inline-flex items-center rounded-full bg-gray-200 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap cursor-default">
+                                                            {{ __(':count IP addresses', ['count' => count($envelope['ips'])]) }}
+                                                            <span class="pointer-events-none absolute left-1/2 bottom-full z-10 mb-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 dark:bg-gray-700 px-2 py-1 font-mono text-xs text-white shadow-lg group-hover:block">
+                                                                @foreach ($envelope['ips'] as $ip)
+                                                                    <span class="block">{{ $this->countryFlag($group['country_by_ip'][$ip] ?? null) }} {{ $ip }}</span>
+                                                                @endforeach
+                                                            </span>
+                                                        </span>
+                                                    @else
+                                                        <span class="font-mono">{{ $this->countryFlag($group['country_by_ip'][$envelope['ips'][0]] ?? null) }} {{ $envelope['ips'][0] ?? '' }}</span>
                                                     @endif
                                                 </td>
-                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($ip['total']) }}</td>
+                                                <td class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{{ $envelope['domain'] }}</td>
+                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($envelope['total']) }}</td>
                                                 <td class="px-6 py-2 whitespace-nowrap text-right text-xs tabular-nums">
                                                     <span @class([
                                                         'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                                                        'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $ipStatus === 'good',
-                                                        'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200' => $ipStatus === 'warning',
-                                                        'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $ipStatus === 'critical',
-                                                    ])>{{ $ip['dmarc_pass_pct'] }}%</span>
+                                                        'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $envelopeStatus === 'good',
+                                                        'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200' => $envelopeStatus === 'warning',
+                                                        'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $envelopeStatus === 'critical',
+                                                    ])>{{ $envelope['dmarc_pass_pct'] }}%</span>
                                                 </td>
                                                 <td class="px-6 py-2 whitespace-nowrap text-right text-xs tabular-nums">
                                                     <span @class([
                                                         'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                                                        'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $ipSpfStatus === 'good',
-                                                        'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200' => $ipSpfStatus === 'warning',
-                                                        'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $ipSpfStatus === 'critical',
-                                                    ])>{{ $ip['spf_pass_pct'] }}%</span>
+                                                        'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $envelopeSpfStatus === 'good',
+                                                        'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200' => $envelopeSpfStatus === 'warning',
+                                                        'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $envelopeSpfStatus === 'critical',
+                                                    ])>{{ $envelope['spf_pass_pct'] }}%</span>
                                                 </td>
                                                 <td class="px-6 py-2 whitespace-nowrap text-right text-xs tabular-nums">
                                                     <span @class([
                                                         'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                                                        'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $ipDkimStatus === 'good',
-                                                        'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200' => $ipDkimStatus === 'warning',
-                                                        'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $ipDkimStatus === 'critical',
-                                                    ])>{{ $ip['dkim_pass_pct'] }}%</span>
+                                                        'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $envelopeDkimStatus === 'good',
+                                                        'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200' => $envelopeDkimStatus === 'warning',
+                                                        'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $envelopeDkimStatus === 'critical',
+                                                    ])>{{ $envelope['dkim_pass_pct'] }}%</span>
                                                 </td>
-                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($ip['enforced']) }}</td>
+                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($envelope['enforced']) }}</td>
                                             </tr>
-                                        @endforeach
+                                        @empty
+                                            <tr x-show="open" x-cloak class="bg-gray-100 dark:bg-gray-900/40">
+                                                <td class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{{ $group['domain'] }}</td>
+                                                <td class="pl-14 pr-6 py-2 text-xs text-gray-400 dark:text-gray-500" colspan="7">
+                                                    {{ __('No envelope-from data recorded.') }}
+                                                </td>
+                                            </tr>
+                                        @endforelse
                                     @endif
                                 </tbody>
                             @empty
                                 <tbody>
                                     <tr>
-                                        <td colspan="6" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No sending sources in this window.') }}</td>
+                                        <td colspan="9" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No sending sources in this window.') }}</td>
                                     </tr>
                                 </tbody>
                             @endforelse

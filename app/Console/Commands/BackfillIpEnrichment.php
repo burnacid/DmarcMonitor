@@ -44,6 +44,7 @@ class BackfillIpEnrichment extends Command
                         'ptr_hostname' => $enrichment['ptr_hostname'],
                         'asn' => $enrichment['asn'],
                         'asn_org' => $enrichment['asn_org'],
+                        'country' => $enrichment['country'],
                         'enriched_at' => now(),
                     ]);
 

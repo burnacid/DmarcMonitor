@@ -17,7 +17,7 @@ class IpEnrichmentService
 
     /**
      * @param  (callable(string): (string|false))|null  $ptrResolver  Defaults to the real gethostbyaddr();
-     *                                                                 injectable so tests never hit real DNS.
+     *                                                                injectable so tests never hit real DNS.
      */
     public function __construct(?callable $ptrResolver = null)
     {
@@ -25,9 +25,9 @@ class IpEnrichmentService
     }
 
     /**
-     * Resolve PTR hostname and ASN/org for an IP, using and refreshing the cache.
+     * Resolve PTR hostname, ASN/org, and country for an IP, using and refreshing the cache.
      *
-     * @return array{ptr_hostname: ?string, asn: ?int, asn_org: ?string}
+     * @return array{ptr_hostname: ?string, asn: ?int, asn_org: ?string, country: ?string}
      */
     public function enrich(string $ip): array
     {
@@ -38,13 +38,15 @@ class IpEnrichmentService
                 'ptr_hostname' => $cached->ptr_hostname,
                 'asn' => $cached->asn,
                 'asn_org' => $cached->asn_org,
+                'country' => $cached->country,
             ];
         }
 
         $ptrHostname = $this->resolvePtr($ip);
         $asn = $this->resolveAsn($ip);
+        $country = $this->resolveCountry($ip);
 
-        $failed = $ptrHostname === null && $asn['asn'] === null;
+        $failed = $ptrHostname === null && $asn['asn'] === null && $country === null;
 
         IpEnrichmentCache::updateOrCreate(
             ['ip' => $ip],
@@ -52,6 +54,7 @@ class IpEnrichmentService
                 'ptr_hostname' => $ptrHostname,
                 'asn' => $asn['asn'],
                 'asn_org' => $asn['asn_org'],
+                'country' => $country,
                 'looked_up_at' => now(),
                 'lookup_failed' => $failed,
             ]
@@ -61,6 +64,7 @@ class IpEnrichmentService
             'ptr_hostname' => $ptrHostname,
             'asn' => $asn['asn'],
             'asn_org' => $asn['asn_org'],
+            'country' => $country,
         ];
     }
 
@@ -115,6 +119,25 @@ class IpEnrichmentService
             Log::warning("GeoLite2 ASN lookup failed for {$ip}: {$e->getMessage()}");
 
             return ['asn' => null, 'asn_org' => null];
+        }
+    }
+
+    private function resolveCountry(string $ip): ?string
+    {
+        $path = config('geoip.country_mmdb_path');
+
+        if (! $path || ! is_file($path)) {
+            return null;
+        }
+
+        try {
+            return (new Reader($path))->country($ip)->country->isoCode;
+        } catch (AddressNotFoundException) {
+            return null;
+        } catch (Throwable $e) {
+            Log::warning("GeoLite2 Country lookup failed for {$ip}: {$e->getMessage()}");
+
+            return null;
         }
     }
 }

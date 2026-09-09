@@ -9,3 +9,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('imap:poll')->everyMinute()->withoutOverlapping();
+Schedule::command('dmarc:evaluate-alerts')->everyFifteenMinutes()->withoutOverlapping();

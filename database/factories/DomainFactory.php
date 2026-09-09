@@ -18,7 +18,8 @@ class DomainFactory extends Factory
     public function definition(): array
     {
         return [
-            //
+            'fqdn' => $this->faker->unique()->domainName(),
+            'is_active' => true,
         ];
     }
 }

@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\AlertRule;
+use App\Models\Domain;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -18,7 +19,13 @@ class AlertRuleFactory extends Factory
     public function definition(): array
     {
         return [
-            //
+            'domain_id' => Domain::factory(),
+            'type' => 'pass_rate_drop',
+            'threshold_percent' => 95,
+            'lookback_window' => '24h',
+            'channels' => ['email'],
+            'notify_emails' => [$this->faker->safeEmail()],
+            'is_active' => true,
         ];
     }
 }
