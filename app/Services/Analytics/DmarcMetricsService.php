@@ -9,6 +9,13 @@ use Illuminate\Support\Collection;
 class DmarcMetricsService
 {
     /**
+     * Label used for records with no envelope-from (RFC5321.MailFrom) recorded,
+     * so their volume and pass rates still show up as their own row in the
+     * envelope breakdown instead of silently vanishing from it.
+     */
+    private const NO_ENVELOPE_LABEL = '(no envelope-from data)';
+
+    /**
      * Daily DMARC/SPF/DKIM pass-rate trend across the given window.
      *
      * @return Collection<int, array{date: string, total: int, dmarc_pass_pct: float, spf_pass_pct: float, dkim_pass_pct: float}>
@@ -107,7 +114,6 @@ class DmarcMetricsService
     private function envelopeStatsBySourceIp(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId): Collection
     {
         return $this->baseQuery($domainId, $from, $to, $organisationId)
-            ->whereNotNull('aggregate_report_records.envelope_from')
             ->selectRaw('aggregate_report_records.source_ip')
             ->selectRaw('aggregate_reports.domain_id')
             ->selectRaw('aggregate_report_records.envelope_from')
@@ -121,7 +127,7 @@ class DmarcMetricsService
             ->map(fn ($row) => [
                 'source_ip' => $row->source_ip,
                 'domain_id' => $row->domain_id,
-                'envelope_from' => $row->envelope_from,
+                'envelope_from' => $row->envelope_from ?? self::NO_ENVELOPE_LABEL,
                 'total' => (int) $row->total,
                 'dmarc_pass' => (int) $row->dmarc_pass,
                 'spf_pass' => (int) $row->spf_pass,
@@ -178,6 +184,7 @@ class DmarcMetricsService
                 return [
                     'label' => $label,
                     'domain' => $ips->first()['domain'],
+                    'domain_id' => $ips->first()['domain_id'],
                     'ips' => $ips->values(),
                     'ip_count' => $ips->count(),
                     'country_by_ip' => $ips->pluck('country', 'source_ip')->all(),

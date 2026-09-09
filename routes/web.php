@@ -1,9 +1,10 @@
 <?php
 
+use App\Http\Controllers\ReportDownloadController;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 
-Route::view('/', 'welcome');
+Route::redirect('/', '/dashboard');
 
 Volt::route('dashboard', 'dashboard')
     ->middleware(['auth', 'verified'])
@@ -12,6 +13,12 @@ Volt::route('dashboard', 'dashboard')
 Route::view('profile', 'profile')
     ->middleware(['auth'])
     ->name('profile');
+
+Route::middleware(['auth', 'verified'])->group(function () {
+    Volt::route('reports', 'reports.index')->name('reports.index');
+    Route::get('reports/{report}/download', ReportDownloadController::class)->name('reports.download');
+    Volt::route('reports/{report}', 'reports.show')->name('reports.show');
+});
 
 Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(function () {
     Volt::route('organisations', 'admin.organisations')->name('organisations');

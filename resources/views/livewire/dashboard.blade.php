@@ -15,12 +15,30 @@ new #[Layout('layouts.app')] class extends Component
 
     public int $days = 30;
 
+    public ?string $selectedDay = null;
+
     private function window(): array
     {
         return [
             Carbon::now()->subDays($this->days - 1)->startOfDay(),
             Carbon::now()->endOfDay(),
         ];
+    }
+
+    /**
+     * The window driving the stat tiles and sending-sources table: a single
+     * day when the trend chart has been clicked to drill in, otherwise the
+     * same rolling window as the trend chart.
+     */
+    private function effectiveWindow(): array
+    {
+        if ($this->selectedDay !== null) {
+            $day = Carbon::parse($this->selectedDay);
+
+            return [$day->copy()->startOfDay(), $day->copy()->endOfDay()];
+        }
+
+        return $this->window();
     }
 
     private function trendData(): array
@@ -41,23 +59,41 @@ new #[Layout('layouts.app')] class extends Component
             }
         }
 
+        $this->selectedDay = null;
         $this->dispatch('trend-updated', trend: $this->trendData());
     }
 
     public function updatedDomainId(): void
     {
+        $this->selectedDay = null;
         $this->dispatch('trend-updated', trend: $this->trendData());
     }
 
     public function updatedDays(): void
     {
+        $this->selectedDay = null;
         $this->dispatch('trend-updated', trend: $this->trendData());
+    }
+
+    /**
+     * Called when a point on the trend chart is clicked, to drill the stat
+     * tiles and sending-sources table down into that single day. Clicking
+     * the same day again clears the drill-down.
+     */
+    public function selectDay(string $date): void
+    {
+        $this->selectedDay = $this->selectedDay === $date ? null : $date;
+    }
+
+    public function clearSelectedDay(): void
+    {
+        $this->selectedDay = null;
     }
 
     public function with(): array
     {
         $service = app(DmarcMetricsService::class);
-        [$from, $to] = $this->window();
+        [$from, $to] = $this->effectiveWindow();
 
         $domains = Domain::orderBy('fqdn');
 
@@ -72,6 +108,8 @@ new #[Layout('layouts.app')] class extends Component
             'trend' => $this->trendData(),
             'sourceGroups' => $service->groupedSourceBreakdown($this->domainId, $from, $to, $this->organisationId)->take(25),
             'hasAnyReports' => \App\Models\AggregateReport::query()->exists(),
+            'windowFrom' => $from->toDateString(),
+            'windowTo' => $to->toDateString(),
         ];
     }
 
@@ -102,7 +140,7 @@ new #[Layout('layouts.app')] class extends Component
     </x-slot>
 
     <div class="py-8">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+        <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8 space-y-6">
 
             {{-- Filters --}}
             <div class="flex flex-wrap items-center gap-3">
@@ -144,6 +182,16 @@ new #[Layout('layouts.app')] class extends Component
                     </p>
                 </div>
             @else
+                @if ($selectedDay)
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-gray-500 dark:text-gray-400">{{ __('Showing:') }}</span>
+                        <span class="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 dark:bg-indigo-900 px-3 py-1 text-xs font-medium text-indigo-800 dark:text-indigo-200">
+                            {{ \Illuminate\Support\Carbon::parse($selectedDay)->format('M j, Y') }}
+                            <button type="button" wire:click="clearSelectedDay" class="hover:text-indigo-900 dark:hover:text-indigo-100" aria-label="{{ __('Clear day filter') }}">&times;</button>
+                        </span>
+                    </div>
+                @endif
+
                 {{-- Stat tiles --}}
                 <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
                     <div class="bg-white dark:bg-gray-800 shadow-sm rounded-lg p-4">
@@ -177,7 +225,10 @@ new #[Layout('layouts.app')] class extends Component
                     x-init="init($el.querySelector('canvas'))"
                     class="bg-white dark:bg-gray-800 shadow-sm rounded-lg p-4"
                 >
-                    <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{{ __('Pass rate over time') }}</h3>
+                    <div class="flex items-baseline justify-between mb-3">
+                        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Pass rate over time') }}</h3>
+                        <span class="text-xs text-gray-400 dark:text-gray-500">{{ __('Click a day to drill in') }}</span>
+                    </div>
                     <div class="relative" style="height: 280px">
                         <canvas></canvas>
                     </div>
@@ -199,6 +250,7 @@ new #[Layout('layouts.app')] class extends Component
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('SPF Pass') }}</th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('DKIM Pass') }}</th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Enforced') }}</th>
+                                    <th class="px-6 py-3"></th>
                                 </tr>
                             </thead>
                             @forelse ($sourceGroups as $group)
@@ -274,6 +326,14 @@ new #[Layout('layouts.app')] class extends Component
                                             ])>{{ $group['dkim_pass_pct'] }}%</span>
                                         </td>
                                         <td class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($group['enforced']) }}</td>
+                                        <td class="px-6 py-3 whitespace-nowrap text-right text-sm">
+                                            <a
+                                                href="{{ route('reports.index', ['domain_id' => $group['domain_id'], 'ip' => $group['ips']->pluck('source_ip')->implode(','), 'from' => $windowFrom, 'to' => $windowTo]) }}"
+                                                wire:navigate
+                                                @click.stop
+                                                class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"
+                                            >{{ __('Reports') }}</a>
+                                        </td>
                                     </tr>
 
                                     @if ($expandable)
@@ -325,11 +385,18 @@ new #[Layout('layouts.app')] class extends Component
                                                     ])>{{ $envelope['dkim_pass_pct'] }}%</span>
                                                 </td>
                                                 <td class="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($envelope['enforced']) }}</td>
+                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs">
+                                                    <a
+                                                        href="{{ route('reports.index', ['domain_id' => $group['domain_id'], 'ip' => implode(',', $envelope['ips']), 'from' => $windowFrom, 'to' => $windowTo]) }}"
+                                                        wire:navigate
+                                                        class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"
+                                                    >{{ __('Reports') }}</a>
+                                                </td>
                                             </tr>
                                         @empty
                                             <tr x-show="open" x-cloak class="bg-gray-100 dark:bg-gray-900/40">
                                                 <td class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{{ $group['domain'] }}</td>
-                                                <td class="pl-14 pr-6 py-2 text-xs text-gray-400 dark:text-gray-500" colspan="7">
+                                                <td class="pl-14 pr-6 py-2 text-xs text-gray-400 dark:text-gray-500" colspan="8">
                                                     {{ __('No envelope-from data recorded.') }}
                                                 </td>
                                             </tr>
@@ -339,7 +406,7 @@ new #[Layout('layouts.app')] class extends Component
                             @empty
                                 <tbody>
                                     <tr>
-                                        <td colspan="9" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No sending sources in this window.') }}</td>
+                                        <td colspan="10" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No sending sources in this window.') }}</td>
                                     </tr>
                                 </tbody>
                             @endforelse
@@ -387,6 +454,15 @@ new #[Layout('layouts.app')] class extends Component
                         responsive: true,
                         maintainAspectRatio: false,
                         interaction: { mode: 'index', intersect: false },
+                        onClick: (evt, elements) => {
+                            if (!elements.length) return;
+
+                            const date = chart.data.labels[elements[0].index];
+                            this.$wire.call('selectDay', date);
+                        },
+                        onHover: (evt, elements) => {
+                            evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+                        },
                         scales: {
                             y: {
                                 min: 0,

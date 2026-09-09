@@ -185,13 +185,20 @@ class DmarcMetricsServiceTest extends TestCase
         $this->assertEquals('203.0.113.55', $group['ips'][1]['source_ip']);
 
         // Envelopes are split out individually (not merged), each with its own
-        // stats and the IPs that sent under it.
-        $this->assertEquals(1, $group['envelope_count']);
+        // stats and the IPs that sent under it. The record with no envelope_from
+        // still gets its own row instead of vanishing from the breakdown.
+        $this->assertEquals(2, $group['envelope_count']);
         $envelope = $group['envelopes'][0];
         $this->assertEquals('bounce.example.org', $envelope['domain']);
         $this->assertEquals(['40.92.90.104'], $envelope['ips']);
         $this->assertEquals(5, $envelope['total']);
         $this->assertEquals(100.0, $envelope['dmarc_pass_pct']);
+
+        $noEnvelope = $group['envelopes'][1];
+        $this->assertEquals('(no envelope-from data)', $noEnvelope['domain']);
+        $this->assertEquals(['203.0.113.55'], $noEnvelope['ips']);
+        $this->assertEquals(1, $noEnvelope['total']);
+        $this->assertEquals(0.0, $noEnvelope['dmarc_pass_pct']);
     }
 
     public function test_grouped_source_breakdown_keeps_unrelated_ips_separate(): void
