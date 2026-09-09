@@ -48,24 +48,31 @@ new class extends Component
                     <x-nav-link :href="route('reports.index')" :active="request()->routeIs('reports.*')" wire:navigate>
                         {{ __('Reports') }}
                     </x-nav-link>
-                    <x-nav-link :href="route('admin.organisations')" :active="request()->routeIs('admin.organisations')" wire:navigate>
-                        {{ __('Organisations') }}
-                    </x-nav-link>
-                    <x-nav-link :href="route('admin.domains')" :active="request()->routeIs('admin.domains')" wire:navigate>
-                        {{ __('Domains') }}
-                    </x-nav-link>
-                    <x-nav-link :href="route('admin.imap-accounts')" :active="request()->routeIs('admin.imap-accounts')" wire:navigate>
-                        {{ __('IMAP Accounts') }}
-                    </x-nav-link>
-                    <x-nav-link :href="route('admin.geoip')" :active="request()->routeIs('admin.geoip')" wire:navigate>
-                        {{ __('GeoIP') }}
-                    </x-nav-link>
-                    <x-nav-link :href="route('admin.alert-rules')" :active="request()->routeIs('admin.alert-rules')" wire:navigate>
-                        {{ __('Alert Rules') }}
-                    </x-nav-link>
-                    <x-nav-link :href="route('admin.alert-events')" :active="request()->routeIs('admin.alert-events')" wire:navigate>
-                        {{ __('Alerts') }}
-                    </x-nav-link>
+                    @if (auth()->user()->canManage())
+                        <x-nav-link :href="route('admin.organisations')" :active="request()->routeIs('admin.organisations')" wire:navigate>
+                            {{ __('Organisations') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('admin.domains')" :active="request()->routeIs('admin.domains')" wire:navigate>
+                            {{ __('Domains') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('admin.imap-accounts')" :active="request()->routeIs('admin.imap-accounts')" wire:navigate>
+                            {{ __('IMAP Accounts') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('admin.geoip')" :active="request()->routeIs('admin.geoip')" wire:navigate>
+                            {{ __('GeoIP') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('admin.alert-rules')" :active="request()->routeIs('admin.alert-rules')" wire:navigate>
+                            {{ __('Alert Rules') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('admin.alert-events')" :active="request()->routeIs('admin.alert-events')" wire:navigate>
+                            {{ __('Alerts') }}
+                        </x-nav-link>
+                    @endif
+                    @if (auth()->user()->isAdmin())
+                        <x-nav-link :href="route('admin.users')" :active="request()->routeIs('admin.users')" wire:navigate>
+                            {{ __('Users') }}
+                        </x-nav-link>
+                    @endif
                 </div>
             </div>
 
@@ -145,24 +152,31 @@ new class extends Component
             <x-responsive-nav-link :href="route('reports.index')" :active="request()->routeIs('reports.*')" wire:navigate>
                 {{ __('Reports') }}
             </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('admin.organisations')" :active="request()->routeIs('admin.organisations')" wire:navigate>
-                {{ __('Organisations') }}
-            </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('admin.domains')" :active="request()->routeIs('admin.domains')" wire:navigate>
-                {{ __('Domains') }}
-            </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('admin.imap-accounts')" :active="request()->routeIs('admin.imap-accounts')" wire:navigate>
-                {{ __('IMAP Accounts') }}
-            </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('admin.geoip')" :active="request()->routeIs('admin.geoip')" wire:navigate>
-                {{ __('GeoIP') }}
-            </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('admin.alert-rules')" :active="request()->routeIs('admin.alert-rules')" wire:navigate>
-                {{ __('Alert Rules') }}
-            </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('admin.alert-events')" :active="request()->routeIs('admin.alert-events')" wire:navigate>
-                {{ __('Alerts') }}
-            </x-responsive-nav-link>
+            @if (auth()->user()->canManage())
+                <x-responsive-nav-link :href="route('admin.organisations')" :active="request()->routeIs('admin.organisations')" wire:navigate>
+                    {{ __('Organisations') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('admin.domains')" :active="request()->routeIs('admin.domains')" wire:navigate>
+                    {{ __('Domains') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('admin.imap-accounts')" :active="request()->routeIs('admin.imap-accounts')" wire:navigate>
+                    {{ __('IMAP Accounts') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('admin.geoip')" :active="request()->routeIs('admin.geoip')" wire:navigate>
+                    {{ __('GeoIP') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('admin.alert-rules')" :active="request()->routeIs('admin.alert-rules')" wire:navigate>
+                    {{ __('Alert Rules') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('admin.alert-events')" :active="request()->routeIs('admin.alert-events')" wire:navigate>
+                    {{ __('Alerts') }}
+                </x-responsive-nav-link>
+            @endif
+            @if (auth()->user()->isAdmin())
+                <x-responsive-nav-link :href="route('admin.users')" :active="request()->routeIs('admin.users')" wire:navigate>
+                    {{ __('Users') }}
+                </x-responsive-nav-link>
+            @endif
         </div>
 
         <!-- Responsive Settings Options -->
