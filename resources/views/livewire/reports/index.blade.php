@@ -71,7 +71,7 @@ new #[Layout('layouts.app')] class extends Component
     </x-slot>
 
     <div class="py-8">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-4">
+        <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8 space-y-4">
             <div class="flex flex-wrap items-end gap-3">
                 <div>
                     <x-input-label for="domain_id" :value="__('Domain')" />

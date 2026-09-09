@@ -42,7 +42,7 @@ new #[Layout('layouts.app')] class extends Component
     </x-slot>
 
     <div class="py-8">
-        <div class="max-w-4xl mx-auto sm:px-6 lg:px-8 space-y-6">
+        <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8 space-y-6">
 
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6">
                 <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">{{ __('GeoLite2 ASN database') }}</h3>

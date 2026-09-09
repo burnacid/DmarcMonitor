@@ -22,7 +22,7 @@ new #[Layout('layouts.app')] class extends Component
     </x-slot>
 
     <div class="py-8">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+        <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8 space-y-6">
             <a href="{{ route('reports.index') }}" wire:navigate class="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">&larr; {{ __('Back to reports') }}</a>
 
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6">

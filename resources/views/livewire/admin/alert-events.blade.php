@@ -41,7 +41,7 @@ new #[Layout('layouts.app')] class extends Component
     </x-slot>
 
     <div class="py-8">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+        <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8">
             <div class="flex justify-end mb-4">
                 <select wire:model.live="status" class="border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
                     <option value="open">{{ __('Open') }}</option>

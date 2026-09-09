@@ -161,7 +161,7 @@ new #[Layout('layouts.app')] class extends Component
     </x-slot>
 
     <div class="py-8">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+        <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8">
             <div class="flex justify-end mb-4">
                 <x-primary-button wire:click="create">{{ __('New IMAP Account') }}</x-primary-button>
             </div>
