@@ -33,9 +33,9 @@ return [
     | MaxMind license key
     |--------------------------------------------------------------------------
     |
-    | Not used directly by the app (the database is refreshed by MaxMind's own
-    | `geoipupdate` tool, configured separately), but surfaced in the admin
-    | status page so it's obvious whether one is configured.
+    | Used both to download fresh GeoLite2 builds automatically (see the
+    | `dmarc:update-geoip` command, scheduled weekly) and surfaced on the
+    | admin status page so it's obvious whether one is configured.
     |
     */
     'license_key' => env('MAXMIND_LICENSE_KEY'),

@@ -191,6 +191,39 @@ class AlertEvaluationServiceTest extends TestCase
         $this->assertEquals('198.51.100.9', AlertEvent::first()->details['source_ip']);
     }
 
+    public function test_new_domain_discovered_rule_fires_once_per_inactive_domain(): void
+    {
+        Mail::fake();
+
+        $discovered = Domain::factory()->create(['is_active' => false, 'fqdn' => 'unexpected.example']);
+        AggregateReport::factory()->create(['domain_id' => $discovered->id]);
+
+        // An inactive domain with no reports yet isn't "discovered" — nothing
+        // has actually come in for it.
+        Domain::factory()->create(['is_active' => false, 'fqdn' => 'placeholder.example']);
+
+        // An active domain, even with reports, isn't a candidate either.
+        $active = Domain::factory()->create(['is_active' => true]);
+        AggregateReport::factory()->create(['domain_id' => $active->id]);
+
+        $rule = AlertRule::factory()->create([
+            'domain_id' => null,
+            'type' => 'new_domain_discovered',
+            'threshold_percent' => null,
+        ]);
+
+        $service = app(AlertEvaluationService::class);
+        $service->evaluate($rule);
+        $service->evaluate($rule);
+
+        $this->assertDatabaseCount('alert_events', 1);
+        $event = AlertEvent::first();
+        $this->assertEquals($discovered->id, $event->domain_id);
+        $this->assertEquals('unexpected.example', $event->details['domain']);
+
+        Mail::assertQueued(AlertTriggered::class);
+    }
+
     public function test_rule_is_skipped_when_there_is_no_volume_in_the_window(): void
     {
         Mail::fake();

@@ -11,6 +11,11 @@ Artisan::command('inspire', function () {
 Schedule::command('imap:poll')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('dmarc:evaluate-alerts')->everyFifteenMinutes()->withoutOverlapping();
 
+// MaxMind publishes new GeoLite2 builds roughly twice a week; checking weekly
+// (their own geoipupdate tool's default cadence) keeps ASN/country lookups
+// current without hammering the download endpoint. No-ops without a license key.
+Schedule::command('dmarc:update-geoip')->weekly()->withoutOverlapping();
+
 // There's no persistent `queue:work` process configured for this app (no
 // supervisor/systemd unit), so background jobs — IP enrichment dispatched
 // per report, alert emails — would otherwise pile up in the `jobs` table

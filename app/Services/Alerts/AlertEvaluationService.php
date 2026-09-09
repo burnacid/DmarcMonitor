@@ -26,6 +26,15 @@ class AlertEvaluationService
 
     public function evaluate(AlertRule $rule): void
     {
+        // Unlike the other types, this one is inherently about domains that
+        // aren't active yet, so it doesn't fit the "for each active domain"
+        // loop below — it finds its own candidates instead.
+        if ($rule->type === 'new_domain_discovered') {
+            $this->checkNewDomains($rule);
+
+            return;
+        }
+
         $domains = $rule->domain_id !== null
             ? Domain::where('id', $rule->domain_id)->get()
             : Domain::where('is_active', true)->get();
@@ -100,6 +109,37 @@ class AlertEvaluationService
                 'domain_id' => $domain->id,
                 'fired_at' => now(),
                 'details' => ['source_ip' => $ip, 'window' => $rule->lookback_window],
+                'dedup_key' => $dedupKey,
+            ]);
+
+            $this->notifier->notify($event, $rule);
+        }
+    }
+
+    /**
+     * Domains are auto-created (inactive) the first time a report arrives for
+     * an fqdn nobody has configured yet — this surfaces those so someone
+     * notices and either activates or deliberately ignores them, instead of
+     * reports silently accumulating against a domain nobody is watching.
+     */
+    private function checkNewDomains(AlertRule $rule): void
+    {
+        $domains = Domain::where('is_active', false)
+            ->whereHas('aggregateReports')
+            ->get();
+
+        foreach ($domains as $domain) {
+            $dedupKey = hash('sha256', "{$rule->id}:new_domain:{$domain->id}");
+
+            if (AlertEvent::where('dedup_key', $dedupKey)->exists()) {
+                continue;
+            }
+
+            $event = AlertEvent::create([
+                'alert_rule_id' => $rule->id,
+                'domain_id' => $domain->id,
+                'fired_at' => now(),
+                'details' => ['domain' => $domain->fqdn],
                 'dedup_key' => $dedupKey,
             ]);
 

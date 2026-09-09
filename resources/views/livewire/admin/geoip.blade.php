@@ -44,8 +44,9 @@ new #[Layout('layouts.app')] class extends Component
     <div class="py-8">
         <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8 space-y-6">
 
-            <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6">
-                <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">{{ __('GeoLite2 ASN database') }}</h3>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6">
+                    <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">{{ __('GeoLite2 ASN database') }}</h3>
 
                 <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
                     <div>
@@ -88,18 +89,22 @@ new #[Layout('layouts.app')] class extends Component
                     <div class="mt-6 rounded-md bg-amber-50 dark:bg-amber-950 p-4 text-sm text-amber-800 dark:text-amber-200">
                         <p class="font-medium">{{ __('ASN/organisation enrichment is disabled until this file is installed.') }}</p>
                         <p class="mt-2">{{ __('Reverse DNS hostnames still resolve without it.') }}</p>
-                        <ol class="mt-3 list-decimal list-inside space-y-1">
-                            <li>{{ __('Create a free MaxMind account and generate a license key.') }}</li>
-                            <li>{{ __('Set MAXMIND_LICENSE_KEY in your .env file.') }}</li>
-                            <li>{{ __('Use MaxMind\'s geoipupdate tool to download GeoLite2-ASN.mmdb to:') }} <span class="font-mono">{{ $path }}</span></li>
-                            <li>{{ __('Schedule geoipupdate to run weekly so the database stays current.') }}</li>
-                        </ol>
+                        @if ($licenseKeyConfigured)
+                            <p class="mt-2">{{ __('A license key is configured, so this downloads automatically on the next scheduled run. To fetch it right now, run:') }}</p>
+                            <code class="block mt-2 font-mono text-xs bg-gray-900 text-gray-100 rounded px-3 py-2">php artisan dmarc:update-geoip</code>
+                        @else
+                            <ol class="mt-3 list-decimal list-inside space-y-1">
+                                <li>{{ __('Create a free MaxMind account and generate a license key.') }}</li>
+                                <li>{{ __('Set MAXMIND_LICENSE_KEY in your .env file.') }}</li>
+                                <li>{{ __('Run php artisan dmarc:update-geoip (or wait for its weekly schedule) to download it automatically.') }}</li>
+                            </ol>
+                        @endif
                     </div>
                 @endunless
-            </div>
+                </div>
 
-            <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6">
-                <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">{{ __('GeoLite2 Country database') }}</h3>
+                <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6">
+                    <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">{{ __('GeoLite2 Country database') }}</h3>
 
                 <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
                     <div>
@@ -134,14 +139,19 @@ new #[Layout('layouts.app')] class extends Component
                 @unless ($countryExists)
                     <div class="mt-6 rounded-md bg-amber-50 dark:bg-amber-950 p-4 text-sm text-amber-800 dark:text-amber-200">
                         <p class="font-medium">{{ __('Country flags on the dashboard are disabled until this file is installed.') }}</p>
-                        <ol class="mt-3 list-decimal list-inside space-y-1">
-                            <li>{{ __('Create a free MaxMind account and generate a license key.') }}</li>
-                            <li>{{ __('Set MAXMIND_LICENSE_KEY in your .env file.') }}</li>
-                            <li>{{ __('Use MaxMind\'s geoipupdate tool to download GeoLite2-Country.mmdb to:') }} <span class="font-mono">{{ $countryPath }}</span></li>
-                            <li>{{ __('Schedule geoipupdate to run weekly so the database stays current.') }}</li>
-                        </ol>
+                        @if ($licenseKeyConfigured)
+                            <p class="mt-2">{{ __('A license key is configured, so this downloads automatically on the next scheduled run. To fetch it right now, run:') }}</p>
+                            <code class="block mt-2 font-mono text-xs bg-gray-900 text-gray-100 rounded px-3 py-2">php artisan dmarc:update-geoip</code>
+                        @else
+                            <ol class="mt-3 list-decimal list-inside space-y-1">
+                                <li>{{ __('Create a free MaxMind account and generate a license key.') }}</li>
+                                <li>{{ __('Set MAXMIND_LICENSE_KEY in your .env file.') }}</li>
+                                <li>{{ __('Run php artisan dmarc:update-geoip (or wait for its weekly schedule) to download it automatically.') }}</li>
+                            </ol>
+                        @endif
                     </div>
                 @endunless
+                </div>
             </div>
 
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6">

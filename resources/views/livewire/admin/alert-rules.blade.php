@@ -10,7 +10,9 @@ new #[Layout('layouts.app')] class extends Component
 {
     use WithPagination;
 
-    public const array TYPES = ['pass_rate_drop', 'spf_fail_spike', 'dkim_fail_spike', 'new_source_detected'];
+    public const array TYPES = ['pass_rate_drop', 'spf_fail_spike', 'dkim_fail_spike', 'new_source_detected', 'new_domain_discovered'];
+
+    public const array NO_THRESHOLD_TYPES = ['new_source_detected', 'new_domain_discovered'];
 
     public ?int $editingId = null;
 
@@ -63,10 +65,14 @@ new #[Layout('layouts.app')] class extends Component
             'is_active' => 'boolean',
         ]);
 
-        if ($validated['type'] !== 'new_source_detected' && $validated['threshold_percent'] === null) {
+        if (! in_array($validated['type'], self::NO_THRESHOLD_TYPES, true) && $validated['threshold_percent'] === null) {
             $this->addError('threshold_percent', __('A threshold is required for this rule type.'));
 
             return;
+        }
+
+        if ($validated['type'] === 'new_domain_discovered') {
+            $validated['domain_id'] = null;
         }
 
         if (in_array('webhook', $validated['channels'], true) && blank($validated['webhook_url'])) {
@@ -190,22 +196,27 @@ new #[Layout('layouts.app')] class extends Component
                         <option value="spf_fail_spike">{{ __('SPF fail spike') }}</option>
                         <option value="dkim_fail_spike">{{ __('DKIM fail spike') }}</option>
                         <option value="new_source_detected">{{ __('New sending source detected') }}</option>
+                        <option value="new_domain_discovered">{{ __('New domain discovered') }}</option>
                     </select>
                     <x-input-error :messages="$errors->get('type')" class="mt-2" />
                 </div>
 
-                <div>
-                    <x-input-label for="domain_id" :value="__('Domain')" />
-                    <select wire:model="domain_id" id="domain_id" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
-                        <option value="">{{ __('— All domains —') }}</option>
-                        @foreach ($domains as $domain)
-                            <option value="{{ $domain->id }}">{{ $domain->fqdn }}</option>
-                        @endforeach
-                    </select>
-                    <x-input-error :messages="$errors->get('domain_id')" class="mt-2" />
-                </div>
+                @unless ($type === 'new_domain_discovered')
+                    <div>
+                        <x-input-label for="domain_id" :value="__('Domain')" />
+                        <select wire:model="domain_id" id="domain_id" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
+                            <option value="">{{ __('— All domains —') }}</option>
+                            @foreach ($domains as $domain)
+                                <option value="{{ $domain->id }}">{{ $domain->fqdn }}</option>
+                            @endforeach
+                        </select>
+                        <x-input-error :messages="$errors->get('domain_id')" class="mt-2" />
+                    </div>
+                @else
+                    <p class="text-sm text-gray-400 dark:text-gray-500 self-end pb-2">{{ __('Applies across all domains — there\'s no existing domain to scope it to.') }}</p>
+                @endunless
 
-                @unless ($type === 'new_source_detected')
+                @unless (in_array($type, ['new_source_detected', 'new_domain_discovered']))
                     <div>
                         <x-input-label for="threshold_percent" :value="__('Threshold %')" />
                         <x-text-input wire:model="threshold_percent" id="threshold_percent" type="number" step="0.1" min="0" max="100" class="mt-1 block w-full" />

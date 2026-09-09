@@ -423,7 +423,7 @@ new #[Layout('layouts.app')] class extends Component
                     dmarc: dark ? '#3987e5' : '#2a78d6',
                     spf: dark ? '#d95926' : '#eb6834',
                     dkim: dark ? '#199e70' : '#1baf7a',
-                    grid: dark ? '#2c2c2a' : '#e1e0d9',
+                    grid: dark ? 'rgba(148, 163, 184, 0.12)' : 'rgba(100, 116, 139, 0.15)',
                     ink: dark ? '#c3c2b7' : '#52514e',
                 };
             },
@@ -456,12 +456,14 @@ new #[Layout('layouts.app')] class extends Component
                             y: {
                                 min: 0,
                                 max: 100,
-                                ticks: { color: c.ink, callback: (v) => v + '%' },
+                                ticks: { color: c.ink, stepSize: 25, callback: (v) => v + '%' },
                                 grid: { color: c.grid },
+                                border: { display: false },
                             },
                             x: {
                                 ticks: { color: c.ink },
                                 grid: { display: false },
+                                border: { display: false },
                             },
                         },
                         plugins: {
