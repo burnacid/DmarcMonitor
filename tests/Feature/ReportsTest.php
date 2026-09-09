@@ -102,9 +102,48 @@ class ReportsTest extends TestCase
             'raw_xml_path' => 'dmarc-attachments/report.xml',
         ]);
 
-        $this->actingAs($user)
-            ->get(route('reports.download', $report))
-            ->assertOk();
+        $response = $this->actingAs($user)->get(route('reports.download', $report));
+
+        $response->assertOk();
+        $this->assertEquals('<feedback></feedback>', $response->streamedContent());
+    }
+
+    public function test_gzip_compressed_raw_xml_is_decompressed_on_download(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('dmarc-attachments/report.xml.gz', gzencode('<feedback>gzipped</feedback>'));
+
+        $user = User::factory()->create();
+        $report = AggregateReport::factory()->create([
+            'raw_xml_path' => 'dmarc-attachments/report.xml.gz',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('reports.download', $report));
+
+        $response->assertOk();
+        $this->assertEquals('<feedback>gzipped</feedback>', $response->streamedContent());
+    }
+
+    public function test_zip_compressed_raw_xml_is_extracted_on_download(): void
+    {
+        Storage::fake('local');
+
+        $zipPath = Storage::disk('local')->path('dmarc-attachments/report.zip');
+        Storage::disk('local')->makeDirectory('dmarc-attachments');
+        $zip = new \ZipArchive;
+        $zip->open($zipPath, \ZipArchive::CREATE);
+        $zip->addFromString('report.xml', '<feedback>zipped</feedback>');
+        $zip->close();
+
+        $user = User::factory()->create();
+        $report = AggregateReport::factory()->create([
+            'raw_xml_path' => 'dmarc-attachments/report.zip',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('reports.download', $report));
+
+        $response->assertOk();
+        $this->assertEquals('<feedback>zipped</feedback>', $response->streamedContent());
     }
 
     public function test_download_returns_404_when_raw_xml_is_missing(): void
