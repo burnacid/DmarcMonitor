@@ -233,7 +233,7 @@ new #[Layout('layouts.app')] class extends Component
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Domain') }}</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Source') }}</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('IP Addresses') }}</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Envelope From') }}</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Envelope To') }}</th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Volume') }}</th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('DMARC Pass') }}</th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('SPF Pass') }}</th>
@@ -386,7 +386,7 @@ new #[Layout('layouts.app')] class extends Component
                                             <tr x-show="open" x-cloak class="bg-gray-100 dark:bg-gray-900/40">
                                                 <td class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{{ $group['domain'] }}</td>
                                                 <td class="pl-14 pr-6 py-2 text-xs text-gray-400 dark:text-gray-500" colspan="8">
-                                                    {{ __('No envelope-from data recorded.') }}
+                                                    {{ __('No envelope-to data recorded.') }}
                                                 </td>
                                             </tr>
                                         @endforelse

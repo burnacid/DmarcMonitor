@@ -142,14 +142,14 @@ class DmarcMetricsServiceTest extends TestCase
         $this->assertEquals(0, $first['enforced']); // disposition=none
         $this->assertEquals(0.0, $first['spf_pass_pct']); // spf=fail
         $this->assertEquals(100.0, $first['dkim_pass_pct']); // dkim=pass
-        $this->assertEquals(['bounce.example.org'], $first['envelope_domains']);
+        $this->assertEquals(['recipient.example.net'], $first['envelope_domains']);
 
         $second = $sources->last();
         $this->assertEquals('203.0.113.55', $second['source_ip']);
         $this->assertEquals(1, $second['enforced']); // disposition=quarantine
         $this->assertEquals(0.0, $second['spf_pass_pct']); // spf=fail
         $this->assertEquals(0.0, $second['dkim_pass_pct']); // dkim=fail
-        $this->assertEquals([], $second['envelope_domains']); // no envelope_from in this record
+        $this->assertEquals([], $second['envelope_domains']); // no envelope_to in this record
     }
 
     public function test_grouped_source_breakdown_merges_ips_sharing_the_same_org(): void
@@ -185,17 +185,17 @@ class DmarcMetricsServiceTest extends TestCase
         $this->assertEquals('203.0.113.55', $group['ips'][1]['source_ip']);
 
         // Envelopes are split out individually (not merged), each with its own
-        // stats and the IPs that sent under it. The record with no envelope_from
+        // stats and the IPs that sent under it. The record with no envelope_to
         // still gets its own row instead of vanishing from the breakdown.
         $this->assertEquals(2, $group['envelope_count']);
         $envelope = $group['envelopes'][0];
-        $this->assertEquals('bounce.example.org', $envelope['domain']);
+        $this->assertEquals('recipient.example.net', $envelope['domain']);
         $this->assertEquals(['40.92.90.104'], $envelope['ips']);
         $this->assertEquals(5, $envelope['total']);
         $this->assertEquals(100.0, $envelope['dmarc_pass_pct']);
 
         $noEnvelope = $group['envelopes'][1];
-        $this->assertEquals('(no envelope-from data)', $noEnvelope['domain']);
+        $this->assertEquals('(no envelope-to data)', $noEnvelope['domain']);
         $this->assertEquals(['203.0.113.55'], $noEnvelope['ips']);
         $this->assertEquals(1, $noEnvelope['total']);
         $this->assertEquals(0.0, $noEnvelope['dmarc_pass_pct']);

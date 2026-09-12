@@ -9,11 +9,11 @@ use Illuminate\Support\Collection;
 class DmarcMetricsService
 {
     /**
-     * Label used for records with no envelope-from (RFC5321.MailFrom) recorded,
+     * Label used for records with no envelope-to (RFC5321.RcptTo) recorded,
      * so their volume and pass rates still show up as their own row in the
      * envelope breakdown instead of silently vanishing from it.
      */
-    private const NO_ENVELOPE_LABEL = '(no envelope-from data)';
+    private const NO_ENVELOPE_LABEL = '(no envelope-to data)';
 
     /**
      * Daily DMARC/SPF/DKIM pass-rate trend across the given window.
@@ -87,7 +87,7 @@ class DmarcMetricsService
     }
 
     /**
-     * Distinct envelope-from (RFC5321.MailFrom) domains seen per source IP —
+     * Distinct envelope-to (RFC5321.RcptTo) domains seen per source IP —
      * fetched separately from the aggregated breakdown since GROUP_CONCAT syntax
      * isn't portable across MySQL/SQLite.
      *
@@ -96,16 +96,16 @@ class DmarcMetricsService
     private function envelopeDomainsBySourceIp(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId): Collection
     {
         return $this->baseQuery($domainId, $from, $to, $organisationId)
-            ->select('aggregate_reports.domain_id', 'aggregate_report_records.source_ip', 'aggregate_report_records.envelope_from')
-            ->whereNotNull('aggregate_report_records.envelope_from')
+            ->select('aggregate_reports.domain_id', 'aggregate_report_records.source_ip', 'aggregate_report_records.envelope_to')
+            ->whereNotNull('aggregate_report_records.envelope_to')
             ->distinct()
             ->get()
             ->groupBy(fn ($row) => "{$row->domain_id}|{$row->source_ip}")
-            ->map(fn (Collection $rows) => $rows->pluck('envelope_from')->unique()->sort()->values());
+            ->map(fn (Collection $rows) => $rows->pluck('envelope_to')->unique()->sort()->values());
     }
 
     /**
-     * Volume and pass-rate aggregates per (source IP, envelope-from domain) pair,
+     * Volume and pass-rate aggregates per (source IP, envelope-to domain) pair,
      * used to split a grouped source's envelopes out individually instead of
      * merging them into one summed total.
      *
@@ -116,18 +116,18 @@ class DmarcMetricsService
         return $this->baseQuery($domainId, $from, $to, $organisationId)
             ->selectRaw('aggregate_report_records.source_ip')
             ->selectRaw('aggregate_reports.domain_id')
-            ->selectRaw('aggregate_report_records.envelope_from')
+            ->selectRaw('aggregate_report_records.envelope_to')
             ->selectRaw('SUM(aggregate_report_records.count) as total')
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.dkim_result = 'pass' OR aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as dmarc_pass")
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as spf_pass")
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.dkim_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as dkim_pass")
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.disposition != 'none' AND aggregate_report_records.disposition != 'pass' THEN aggregate_report_records.count ELSE 0 END) as enforced")
-            ->groupBy('aggregate_report_records.source_ip', 'aggregate_reports.domain_id', 'aggregate_report_records.envelope_from')
+            ->groupBy('aggregate_report_records.source_ip', 'aggregate_reports.domain_id', 'aggregate_report_records.envelope_to')
             ->get()
             ->map(fn ($row) => [
                 'source_ip' => $row->source_ip,
                 'domain_id' => $row->domain_id,
-                'envelope_from' => $row->envelope_from ?? self::NO_ENVELOPE_LABEL,
+                'envelope_to' => $row->envelope_to ?? self::NO_ENVELOPE_LABEL,
                 'total' => (int) $row->total,
                 'dmarc_pass' => (int) $row->dmarc_pass,
                 'spf_pass' => (int) $row->spf_pass,
@@ -163,7 +163,7 @@ class DmarcMetricsService
 
                 $envelopes = $ips
                     ->flatMap(fn ($ip) => $envelopeStats->get("{$ip['domain_id']}|{$ip['source_ip']}", collect()))
-                    ->groupBy('envelope_from')
+                    ->groupBy('envelope_to')
                     ->map(function (Collection $rows, string $domain) {
                         $envelopeTotal = $rows->sum('total');
 
