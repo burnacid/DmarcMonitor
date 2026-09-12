@@ -9,7 +9,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 #[Signature('imap:poll {account? : ID of a single IMAP account to poll}')]
-#[Description('Poll active IMAP accounts for new DMARC aggregate reports')]
+#[Description('Poll active IMAP accounts for new DMARC aggregate and forensic reports')]
 class PollImapAccounts extends Command
 {
     /**

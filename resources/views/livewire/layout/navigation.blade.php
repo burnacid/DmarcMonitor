@@ -48,6 +48,9 @@ new class extends Component
                     <x-nav-link :href="route('reports.index')" :active="request()->routeIs('reports.*')" wire:navigate>
                         {{ __('Reports') }}
                     </x-nav-link>
+                    <x-nav-link :href="route('forensic-reports.index')" :active="request()->routeIs('forensic-reports.*')" wire:navigate>
+                        {{ __('Forensic Reports') }}
+                    </x-nav-link>
                     @if (auth()->user()->canManage())
                         <x-nav-link :href="route('admin.organisations')" :active="request()->routeIs('admin.organisations')" wire:navigate>
                             {{ __('Organisations') }}
@@ -151,6 +154,9 @@ new class extends Component
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('reports.index')" :active="request()->routeIs('reports.*')" wire:navigate>
                 {{ __('Reports') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('forensic-reports.index')" :active="request()->routeIs('forensic-reports.*')" wire:navigate>
+                {{ __('Forensic Reports') }}
             </x-responsive-nav-link>
             @if (auth()->user()->canManage())
                 <x-responsive-nav-link :href="route('admin.organisations')" :active="request()->routeIs('admin.organisations')" wire:navigate>

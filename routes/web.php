@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ForensicReportDownloadController;
 use App\Http\Controllers\ReportDownloadController;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
@@ -18,6 +19,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Volt::route('reports', 'reports.index')->name('reports.index');
     Route::get('reports/{report}/download', ReportDownloadController::class)->name('reports.download');
     Volt::route('reports/{report}', 'reports.show')->name('reports.show');
+
+    Volt::route('forensic-reports', 'forensic-reports.index')->name('forensic-reports.index');
+    Route::get('forensic-reports/{forensicReport}/download', ForensicReportDownloadController::class)->name('forensic-reports.download');
+    Volt::route('forensic-reports/{forensicReport}', 'forensic-reports.show')->name('forensic-reports.show');
 });
 
 Route::middleware(['auth', 'verified', 'role:admin,editor'])->prefix('admin')->name('admin.')->group(function () {

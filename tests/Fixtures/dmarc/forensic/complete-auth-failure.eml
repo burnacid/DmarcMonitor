@@ -1,0 +1,42 @@
+From: <postmaster@mx.example.net>
+Date: Sun, 8 Mar 2026 17:03:22 -0600
+Subject: DMARC failure report for example.com
+MIME-Version: 1.0
+To: dmarc-forensic@example.com
+Content-Type: multipart/report; report-type=feedback-report;
+    boundary="RFC6591BOUNDARY"
+
+--RFC6591BOUNDARY
+Content-Type: text/plain; charset="us-ascii"
+
+This is an authentication failure report for an email message
+received from you.
+
+--RFC6591BOUNDARY
+Content-Type: message/feedback-report
+
+Feedback-Type: auth-failure
+User-Agent: ExampleGenerator/1.0
+Version: 1.0
+Original-Envelope-Id: 20260308-envelope-12345
+Original-Mail-From: bounce@bounce.example.com
+Original-Rcpt-To: recipient@example.net
+Arrival-Date: Sun, 8 Mar 2026 17:03:21 -0600
+Source-IP: 192.0.2.55
+Authentication-Results: mx.example.net; spf=fail smtp.mailfrom=example.com; dkim=fail header.d=example.com
+Delivery-Result: reject
+Auth-Failure: dkim, spf
+DKIM-Domain: example.com
+Reported-Domain: example.com
+
+--RFC6591BOUNDARY
+Content-Type: message/rfc822
+
+From: sender@example.com
+To: recipient@example.net
+Subject: Test message that failed authentication
+Date: Sun, 8 Mar 2026 17:03:20 -0600
+
+This is the original message body.
+
+--RFC6591BOUNDARY--

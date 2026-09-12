@@ -1,0 +1,25 @@
+From: <postmaster@mx.example.net>
+Date: Mon, 9 Mar 2026 09:15:00 -0600
+Subject: DMARC failure report
+MIME-Version: 1.0
+To: dmarc-forensic@example.com
+Content-Type: multipart/report; report-type=feedback-report;
+    boundary="RFC6591BOUNDARY"
+
+--RFC6591BOUNDARY
+Content-Type: text/plain; charset="us-ascii"
+
+This is an authentication failure report.
+
+--RFC6591BOUNDARY
+Content-Type: message/feedback-report
+
+Feedback-Type: auth-failure
+Version: 1.0
+Original-Mail-From: bounce@other-example.org
+Arrival-Date: Mon, 9 Mar 2026 09:14:58 -0600
+Source-IP: 198.51.100.23
+Delivery-Result: unrecognized-value
+Reported-Domain: other-example.org
+
+--RFC6591BOUNDARY--

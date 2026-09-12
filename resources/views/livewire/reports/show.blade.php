@@ -83,6 +83,7 @@ new #[Layout('layouts.app')] class extends Component
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('SPF') }}</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Header From') }}</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Envelope From') }}</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Envelope To') }}</th>
                             </tr>
                         </thead>
                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -115,10 +116,11 @@ new #[Layout('layouts.app')] class extends Component
                                     </td>
                                     <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ $record->header_from ?? '—' }}</td>
                                     <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ $record->envelope_from ?? '—' }}</td>
+                                    <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ $record->envelope_to ?? '—' }}</td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="7" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No records in this report.') }}</td>
+                                    <td colspan="8" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No records in this report.') }}</td>
                                 </tr>
                             @endforelse
                         </tbody>

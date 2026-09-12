@@ -72,6 +72,36 @@ class ReportsTest extends TestCase
             ->assertDontSee('Other Org');
     }
 
+    public function test_reports_index_filters_by_envelope_from_or_to(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::factory()->create();
+
+        $matching = AggregateReport::factory()->create(['domain_id' => $domain->id, 'org_name' => 'Matching Org']);
+        AggregateReportRecord::factory()->create([
+            'aggregate_report_id' => $matching->id,
+            'envelope_from' => 'bounce.example.com',
+            'envelope_to' => 'recipient.other.net',
+        ]);
+
+        $other = AggregateReport::factory()->create(['domain_id' => $domain->id, 'org_name' => 'Other Org']);
+        AggregateReportRecord::factory()->create([
+            'aggregate_report_id' => $other->id,
+            'envelope_from' => 'unrelated.net',
+            'envelope_to' => 'unrelated-too.net',
+        ]);
+
+        Volt::actingAs($user)->test('reports.index')
+            ->set('envelope', 'example.com')
+            ->assertSee('Matching Org')
+            ->assertDontSee('Other Org');
+
+        Volt::actingAs($user)->test('reports.index')
+            ->set('envelope', 'recipient.other.net')
+            ->assertSee('Matching Org')
+            ->assertDontSee('Other Org');
+    }
+
     public function test_reports_show_displays_report_details_and_records(): void
     {
         $user = User::factory()->create();
@@ -84,12 +114,14 @@ class ReportsTest extends TestCase
             'aggregate_report_id' => $report->id,
             'source_ip' => '203.0.113.9',
             'header_from' => 'example.com',
+            'envelope_to' => 'recipient.example.net',
         ]);
 
         Volt::actingAs($user)->test('reports.show', ['report' => $report])
             ->assertSee('Acme Mail')
             ->assertSee('example.com')
-            ->assertSee('203.0.113.9');
+            ->assertSee('203.0.113.9')
+            ->assertSee('recipient.example.net');
     }
 
     public function test_raw_xml_can_be_downloaded(): void

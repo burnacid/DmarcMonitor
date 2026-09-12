@@ -4,6 +4,7 @@ namespace App\Services\Imap;
 
 use App\Models\ImapAccount;
 use App\Services\Dmarc\AggregateReportParser;
+use App\Services\Dmarc\ForensicReportParser;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -42,11 +43,13 @@ class ImapIngestionService
 
     public function __construct(
         private readonly AggregateReportParser $parser = new AggregateReportParser,
+        private readonly ForensicReportParser $forensicParser = new ForensicReportParser,
     ) {}
 
     /**
-     * Poll a single IMAP account for new aggregate report attachments, in bounded
-     * batches so a large mailbox can't exhaust memory or the request time limit.
+     * Poll a single IMAP account for new aggregate report attachments and
+     * forensic (ARF) reports, in bounded batches so a large mailbox can't
+     * exhaust memory or the request time limit.
      *
      * @return array{fetched: int, parsed: int, failed: int, more_remaining: bool}
      */
@@ -55,7 +58,7 @@ class ImapIngestionService
         $stats = ['fetched' => 0, 'parsed' => 0, 'failed' => 0, 'more_remaining' => false];
         $startedAt = microtime(true);
 
-        $client = (new ClientManager())->make([
+        $client = (new ClientManager)->make([
             'host' => $account->host,
             'port' => $account->port,
             'encryption' => $account->encryption === 'none' ? false : $account->encryption,
@@ -165,6 +168,18 @@ class ImapIngestionService
      */
     private function processMessage(Message $message, ImapAccount $account, array &$stats): bool
     {
+        if ($this->looksLikeForensicReport($message)) {
+            if ($this->processForensicMessage($message, $account)) {
+                $stats['parsed']++;
+
+                return true;
+            }
+
+            $stats['failed']++;
+
+            return false;
+        }
+
         $anyAttachmentFound = false;
         $allSucceeded = true;
 
@@ -189,6 +204,28 @@ class ImapIngestionService
     private function looksLikeAggregateReport(Attachment $attachment): bool
     {
         return $this->isAggregateReportFilename((string) $attachment->name);
+    }
+
+    /**
+     * An RFC 6591 forensic (ARF) report is its own multipart/report email
+     * carrying a machine-readable message/feedback-report MIME part —
+     * distinct from (and never mixed with) an aggregate report's XML
+     * attachment, so detection happens up front rather than per-attachment.
+     */
+    private function looksLikeForensicReport(Message $message): bool
+    {
+        return $this->feedbackReportAttachment($message) !== null;
+    }
+
+    private function feedbackReportAttachment(Message $message): ?Attachment
+    {
+        foreach ($message->getAttachments() as $attachment) {
+            if (str_starts_with(strtolower((string) $attachment->content_type), 'message/feedback-report')) {
+                return $attachment;
+            }
+        }
+
+        return null;
     }
 
     private function isAggregateReportFilename(string $name): bool
@@ -224,6 +261,38 @@ class ImapIngestionService
             return true;
         } catch (Throwable $e) {
             Log::warning("Failed to parse DMARC attachment [{$attachment->name}] from account [{$account->label}]: {$e->getMessage()}");
+
+            if ($storedPath !== null) {
+                Storage::disk('local')->delete($storedPath);
+            }
+
+            return false;
+        }
+    }
+
+    private function processForensicMessage(Message $message, ImapAccount $account): bool
+    {
+        $attachment = $this->feedbackReportAttachment($message);
+        $storedPath = null;
+
+        try {
+            $filename = Str::uuid().'.eml';
+            $storedPath = "dmarc-attachments/{$account->id}/{$filename}";
+
+            $rawMessage = $message->getHeader()?->raw."\r\n\r\n".$message->getRawBody();
+            Storage::disk('local')->put($storedPath, $rawMessage);
+
+            $this->forensicParser->parseFromMessage(
+                $attachment->getContent(),
+                $account,
+                $storedPath,
+                (string) $message->getUid(),
+                (string) $message->getSubject(),
+            );
+
+            return true;
+        } catch (Throwable $e) {
+            Log::warning("Failed to parse forensic report from account [{$account->label}]: {$e->getMessage()}");
 
             if ($storedPath !== null) {
                 Storage::disk('local')->delete($storedPath);
