@@ -68,4 +68,36 @@ new #[Layout('layouts.guest')] class extends Component
             </x-primary-button>
         </div>
     </form>
+
+    <div
+        x-data="{
+            loading: false,
+            error: null,
+            supported: false,
+            init() { this.supported = window.Passkeys?.isSupported() ?? false; },
+            async signIn() {
+                this.error = null;
+                this.loading = true;
+                try {
+                    const remember = document.getElementById('remember')?.checked ?? false;
+                    const response = await window.Passkeys.verify({ remember });
+                    window.location.href = response.redirect;
+                } catch (e) {
+                    this.loading = false;
+                    if (e?.name !== 'UserCancelledError') {
+                        this.error = e?.message ?? '{{ __('Unable to sign in with a passkey.') }}';
+                    }
+                }
+            },
+        }"
+        x-show="supported"
+        x-cloak
+        class="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700"
+    >
+        <x-secondary-button type="button" x-on:click="signIn" x-bind:disabled="loading" class="w-full justify-center">
+            <span x-show="!loading">{{ __('Sign in with a passkey') }}</span>
+            <span x-show="loading" x-cloak>{{ __('Signing in…') }}</span>
+        </x-secondary-button>
+        <p x-show="error" x-text="error" x-cloak class="mt-2 text-sm text-red-600 dark:text-red-400"></p>
+    </div>
 </div>

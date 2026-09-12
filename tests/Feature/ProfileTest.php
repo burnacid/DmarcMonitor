@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Passkeys\Passkey;
 use Livewire\Volt\Volt;
 use Tests\TestCase;
 
@@ -21,6 +22,7 @@ class ProfileTest extends TestCase
             ->assertOk()
             ->assertSeeVolt('profile.update-profile-information-form')
             ->assertSeeVolt('profile.update-password-form')
+            ->assertSeeVolt('profile.manage-passkeys')
             ->assertSeeVolt('profile.delete-user-form');
     }
 
@@ -97,5 +99,55 @@ class ProfileTest extends TestCase
             ->assertNoRedirect();
 
         $this->assertNotNull($user->fresh());
+    }
+
+    public function test_user_can_see_their_registered_passkeys(): void
+    {
+        $user = User::factory()->create();
+        $passkey = $user->passkeys()->create([
+            'name' => 'MacBook Pro',
+            'credential_id' => 'credential-id-1',
+            'credential' => ['type' => 'public-key'],
+        ]);
+
+        $this->actingAs($user);
+
+        Volt::test('profile.manage-passkeys')
+            ->assertSee($passkey->name);
+    }
+
+    public function test_user_can_delete_their_own_passkey(): void
+    {
+        $user = User::factory()->create();
+        $passkey = $user->passkeys()->create([
+            'name' => 'MacBook Pro',
+            'credential_id' => 'credential-id-1',
+            'credential' => ['type' => 'public-key'],
+        ]);
+
+        $this->actingAs($user);
+
+        Volt::test('profile.manage-passkeys')
+            ->call('delete', $passkey->id);
+
+        $this->assertNull(Passkey::find($passkey->id));
+    }
+
+    public function test_user_cannot_delete_another_users_passkey(): void
+    {
+        $owner = User::factory()->create();
+        $passkey = $owner->passkeys()->create([
+            'name' => 'MacBook Pro',
+            'credential_id' => 'credential-id-1',
+            'credential' => ['type' => 'public-key'],
+        ]);
+
+        $this->actingAs(User::factory()->create());
+
+        Volt::test('profile.manage-passkeys')
+            ->call('delete', $passkey->id)
+            ->assertForbidden();
+
+        $this->assertNotNull(Passkey::find($passkey->id));
     }
 }

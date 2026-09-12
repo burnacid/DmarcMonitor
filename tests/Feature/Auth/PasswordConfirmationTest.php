@@ -53,4 +53,36 @@ class PasswordConfirmationTest extends TestCase
             ->assertNoRedirect()
             ->assertHasErrors('password');
     }
+
+    public function test_password_confirmation_redirects_to_the_given_local_redirect_param(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user);
+
+        $component = Volt::test('pages.auth.confirm-password', ['redirect' => '/profile'])
+            ->set('password', 'password');
+
+        $component->call('confirmPassword');
+
+        $component
+            ->assertRedirect('/profile')
+            ->assertHasNoErrors();
+    }
+
+    public function test_password_confirmation_ignores_an_external_redirect_param(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user);
+
+        $component = Volt::test('pages.auth.confirm-password', ['redirect' => '//evil.example.com'])
+            ->set('password', 'password');
+
+        $component->call('confirmPassword');
+
+        $component
+            ->assertRedirect('/dashboard')
+            ->assertHasNoErrors();
+    }
 }

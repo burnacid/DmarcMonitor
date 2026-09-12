@@ -1,13 +1,18 @@
 <?php
 
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 
 new #[Layout('layouts.guest')] class extends Component
 {
     public string $password = '';
+
+    #[Url]
+    public ?string $redirect = null;
 
     /**
      * Confirm the current user's password.
@@ -29,7 +34,15 @@ new #[Layout('layouts.guest')] class extends Component
 
         session(['auth.password_confirmed_at' => time()]);
 
-        $this->redirectIntended(default: route('dashboard', absolute: false), navigate: true);
+        // A redirect query param is used as a fallback for requests that
+        // failed password confirmation over JSON/fetch (e.g. the passkey
+        // registration ceremony), since Laravel only records the intended
+        // URL for non-JSON, browser-navigated redirects.
+        $default = $this->redirect && Str::startsWith($this->redirect, '/') && ! Str::startsWith($this->redirect, '//')
+            ? $this->redirect
+            : route('dashboard', absolute: false);
+
+        $this->redirectIntended(default: $default, navigate: true);
     }
 }; ?>
 
