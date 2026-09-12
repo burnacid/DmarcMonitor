@@ -376,7 +376,7 @@ new #[Layout('layouts.app')] class extends Component
                                                 <td class="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($envelope['enforced']) }}</td>
                                                 <td class="px-6 py-2 whitespace-nowrap text-right text-xs">
                                                     <a
-                                                        href="{{ route('reports.index', ['domain_id' => $group['domain_id'], 'ip' => implode(',', $envelope['ips']), 'from' => $windowFrom, 'to' => $windowTo]) }}"
+                                                        href="{{ route('reports.index', ['domain_id' => $group['domain_id'], 'ip' => implode(',', $envelope['ips']), 'envelope' => $envelope['domain'] === '(no envelope-to data)' ? null : $envelope['domain'], 'from' => $windowFrom, 'to' => $windowTo]) }}"
                                                         wire:navigate
                                                         class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"
                                                     >{{ __('Reports') }}</a>
