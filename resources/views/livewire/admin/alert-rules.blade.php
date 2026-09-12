@@ -60,7 +60,7 @@ new #[Layout('layouts.app')] class extends Component
             'threshold_percent' => 'nullable|numeric|min:0|max:100',
             'lookback_window' => ['required', 'regex:/^\d+[hd]$/'],
             'channels' => 'required|array|min:1',
-            'channels.*' => 'in:email,webhook',
+            'channels.*' => 'in:email,webhook,in_app',
             'webhook_url' => 'nullable|url',
             'is_active' => 'boolean',
         ]);
@@ -154,7 +154,7 @@ new #[Layout('layouts.app')] class extends Component
                                 <td class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{{ $rule->domain?->fqdn ?? __('All domains') }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{{ $rule->threshold_percent !== null ? $rule->threshold_percent.'%' : '—' }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{{ $rule->lookback_window }}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{{ implode(', ', $rule->channels ?? []) }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{{ implode(', ', array_map(fn ($channel) => str_replace('_', ' ', $channel), $rule->channels ?? [])) }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     @if ($rule->is_active)
                                         <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">{{ __('Active') }}</span>
@@ -242,7 +242,12 @@ new #[Layout('layouts.app')] class extends Component
                             <input wire:model.live="channels" value="webhook" id="channel_webhook" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
                             <label for="channel_webhook" class="ml-2 text-sm text-gray-700 dark:text-gray-300">{{ __('Webhook') }}</label>
                         </div>
+                        <div class="flex items-center">
+                            <input wire:model.live="channels" value="in_app" id="channel_in_app" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                            <label for="channel_in_app" class="ml-2 text-sm text-gray-700 dark:text-gray-300">{{ __('In-app only') }}</label>
+                        </div>
                     </div>
+                    <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ __('In-app alerts always appear on the Alerts page and the nav badge — enable it alone for alerts that shouldn\'t send email or a webhook.') }}</p>
                     <x-input-error :messages="$errors->get('channels')" class="mt-2" />
                 </div>
 

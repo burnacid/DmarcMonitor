@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\Actions\Logout;
+use App\Models\AlertEvent;
 use Livewire\Volt\Component;
 
 new class extends Component
@@ -13,6 +14,13 @@ new class extends Component
         $logout();
 
         $this->redirect('/', navigate: true);
+    }
+
+    public function with(): array
+    {
+        return [
+            'openAlertsCount' => auth()->user()->canManage() ? AlertEvent::whereNull('resolved_at')->count() : 0,
+        ];
     }
 }; ?>
 
@@ -27,6 +35,7 @@ new class extends Component
             window.dispatchEvent(new CustomEvent('theme-changed', { detail: { dark: this.dark } }));
         },
     }"
+    wire:poll.60s="$refresh"
     class="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700"
 >
     <!-- Primary Navigation Menu -->
@@ -69,6 +78,9 @@ new class extends Component
                         </x-nav-link>
                         <x-nav-link :href="route('admin.alert-events')" :active="request()->routeIs('admin.alert-events')" wire:navigate>
                             {{ __('Alerts') }}
+                            @if ($openAlertsCount > 0)
+                                <span class="ml-1.5 inline-flex items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-medium leading-none text-white">{{ $openAlertsCount > 99 ? '99+' : $openAlertsCount }}</span>
+                            @endif
                         </x-nav-link>
                     @endif
                     @if (auth()->user()->isAdmin())
@@ -176,6 +188,9 @@ new class extends Component
                 </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('admin.alert-events')" :active="request()->routeIs('admin.alert-events')" wire:navigate>
                     {{ __('Alerts') }}
+                    @if ($openAlertsCount > 0)
+                        <span class="ml-1.5 inline-flex items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-medium leading-none text-white">{{ $openAlertsCount > 99 ? '99+' : $openAlertsCount }}</span>
+                    @endif
                 </x-responsive-nav-link>
             @endif
             @if (auth()->user()->isAdmin())

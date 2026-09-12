@@ -85,6 +85,23 @@ class AlertRuleCrudTest extends TestCase
             ->assertHasErrors(['notify_emails']);
     }
 
+    public function test_a_rule_can_be_configured_as_in_app_only(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::factory()->create();
+
+        Volt::actingAs($user)->test('admin.alert-rules')
+            ->call('create')
+            ->set('domain_id', $domain->id)
+            ->set('type', 'new_source_detected')
+            ->set('channels', ['in_app'])
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $rule = AlertRule::firstWhere('domain_id', $domain->id);
+        $this->assertEquals(['in_app'], $rule->channels);
+    }
+
     public function test_new_domain_discovered_rule_is_forced_to_apply_across_all_domains(): void
     {
         $user = User::factory()->create();

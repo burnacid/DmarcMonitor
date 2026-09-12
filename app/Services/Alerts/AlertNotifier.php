@@ -17,6 +17,14 @@ class AlertNotifier
         $channels = $rule->channels ?? [];
         $notified = [];
 
+        // "in_app" has no delivery step of its own — the AlertEvent row is
+        // always created regardless of channel, which is what the alerts
+        // page and nav badge already read from. Recording it here just
+        // reflects the rule's own configuration back in notified_channels.
+        if (in_array('in_app', $channels, true)) {
+            $notified[] = 'in_app';
+        }
+
         if (in_array('email', $channels, true) && filled($rule->notify_emails)) {
             Mail::to($rule->notify_emails)->queue(new AlertTriggered($event));
             $notified[] = 'email';
