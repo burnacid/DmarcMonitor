@@ -226,9 +226,9 @@ new #[Layout('layouts.app')] class extends Component
                 {{-- Source breakdown --}}
                 <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                     <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 px-6 pt-4">{{ __('Sending sources') }}</h3>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 mt-2">
-                            <thead class="bg-gray-50 dark:bg-gray-700">
+                    <div class="md:overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 mt-2 max-md:block max-md:mt-4">
+                            <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
                                 <tr>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Domain') }}</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Source') }}</th>
@@ -250,13 +250,17 @@ new #[Layout('layouts.app')] class extends Component
                                 <tbody
                                     wire:key="group-{{ $group['label'] }}"
                                     x-data="{ open: false }"
-                                    class="divide-y divide-gray-200 dark:divide-gray-700"
+                                    class="divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:mb-3 max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:overflow-hidden"
                                 >
                                     <tr
-                                        @if ($expandable) @click="open = ! open" class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" @endif
+                                        @if ($expandable) @click="open = ! open" @endif
+                                        @class([
+                                            'max-md:block max-md:p-3 max-md:space-y-2',
+                                            'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700' => $expandable,
+                                        ])
                                     >
-                                        <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ $group['domain'] }}</td>
-                                        <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100">
+                                        <td data-label="{{ __('Domain') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $group['domain'] }}</td>
+                                        <td data-label="{{ __('Source') }}" class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                             <div class="flex items-center gap-2">
                                                 @if ($expandable)
                                                     <svg :class="{ 'rotate-90': open }" class="h-3.5 w-3.5 text-gray-400 dark:text-gray-500 transition-transform shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -268,7 +272,7 @@ new #[Layout('layouts.app')] class extends Component
                                                 <span class="whitespace-nowrap">{{ $group['label'] }}</span>
                                             </div>
                                         </td>
-                                        <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                        <td data-label="{{ __('IP Addresses') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                             @if ($group['ip_count'] > 1)
                                                 <span class="group/ips relative inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap cursor-default">
                                                     {{ __(':count IP addresses', ['count' => $group['ip_count']]) }}
@@ -282,15 +286,15 @@ new #[Layout('layouts.app')] class extends Component
                                                 <span class="font-mono text-xs"><x-country-flag :code="$group['ips'][0]['country'] ?? null" /> {{ $group['ips'][0]['source_ip'] ?? '' }}</span>
                                             @endif
                                         </td>
-                                        <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                        <td data-label="{{ __('Envelope To') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                             @if ($group['envelope_count'] > 1)
                                                 {{ __(':count domains', ['count' => $group['envelope_count']]) }}
                                             @else
                                                 {{ $group['envelopes'][0]['domain'] ?? '—' }}
                                             @endif
                                         </td>
-                                        <td class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($group['total']) }}</td>
-                                        <td class="px-6 py-3 whitespace-nowrap text-right text-sm tabular-nums">
+                                        <td data-label="{{ __('Volume') }}" class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ number_format($group['total']) }}</td>
+                                        <td data-label="{{ __('DMARC Pass') }}" class="px-6 py-3 whitespace-nowrap text-right text-sm tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                             <span @class([
                                                 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                                                 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $status === 'good',
@@ -298,7 +302,7 @@ new #[Layout('layouts.app')] class extends Component
                                                 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $status === 'critical',
                                             ])>{{ $group['dmarc_pass_pct'] }}%</span>
                                         </td>
-                                        <td class="px-6 py-3 whitespace-nowrap text-right text-sm tabular-nums">
+                                        <td data-label="{{ __('SPF Pass') }}" class="px-6 py-3 whitespace-nowrap text-right text-sm tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                             <span @class([
                                                 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                                                 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $spfStatus === 'good',
@@ -306,7 +310,7 @@ new #[Layout('layouts.app')] class extends Component
                                                 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $spfStatus === 'critical',
                                             ])>{{ $group['spf_pass_pct'] }}%</span>
                                         </td>
-                                        <td class="px-6 py-3 whitespace-nowrap text-right text-sm tabular-nums">
+                                        <td data-label="{{ __('DKIM Pass') }}" class="px-6 py-3 whitespace-nowrap text-right text-sm tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                             <span @class([
                                                 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                                                 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $dkimStatus === 'good',
@@ -314,8 +318,8 @@ new #[Layout('layouts.app')] class extends Component
                                                 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $dkimStatus === 'critical',
                                             ])>{{ $group['dkim_pass_pct'] }}%</span>
                                         </td>
-                                        <td class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($group['enforced']) }}</td>
-                                        <td class="px-6 py-3 whitespace-nowrap text-right text-sm">
+                                        <td data-label="{{ __('Enforced') }}" class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ number_format($group['enforced']) }}</td>
+                                        <td class="px-6 py-3 whitespace-nowrap text-right text-sm max-md:px-0 max-md:py-0 max-md:pt-1">
                                             <a
                                                 href="{{ route('reports.index', ['domain_id' => $group['domain_id'], 'ip' => $group['ips']->pluck('source_ip')->implode(','), 'from' => $windowFrom, 'to' => $windowTo]) }}"
                                                 wire:navigate
@@ -330,10 +334,10 @@ new #[Layout('layouts.app')] class extends Component
                                             @php($envelopeStatus = $this->statusFor($envelope['dmarc_pass_pct']))
                                             @php($envelopeSpfStatus = $this->statusFor($envelope['spf_pass_pct']))
                                             @php($envelopeDkimStatus = $this->statusFor($envelope['dkim_pass_pct']))
-                                            <tr x-show="open" x-cloak class="bg-gray-100 dark:bg-gray-900/40">
-                                                <td class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{{ $group['domain'] }}</td>
-                                                <td class="pl-14 pr-6 py-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ $group['label'] }}</td>
-                                                <td class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                                            <tr x-show="open" x-cloak class="bg-gray-100 dark:bg-gray-900/40 max-md:block max-md:p-3 max-md:space-y-2 max-md:border-t max-md:border-gray-200 dark:max-md:border-gray-700">
+                                                <td class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400 max-md:hidden">{{ $group['domain'] }}</td>
+                                                <td data-label="{{ __('Source') }}" class="md:pl-14 md:pr-6 py-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $group['label'] }}</td>
+                                                <td data-label="{{ __('IP Addresses') }}" class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                                     @if (count($envelope['ips']) > 1)
                                                         <span class="group relative inline-flex items-center rounded-full bg-gray-200 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap cursor-default">
                                                             {{ __(':count IP addresses', ['count' => count($envelope['ips'])]) }}
@@ -347,9 +351,9 @@ new #[Layout('layouts.app')] class extends Component
                                                         <span class="font-mono"><x-country-flag :code="$group['country_by_ip'][$envelope['ips'][0]] ?? null" /> {{ $envelope['ips'][0] ?? '' }}</span>
                                                     @endif
                                                 </td>
-                                                <td class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{{ $envelope['domain'] }}</td>
-                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($envelope['total']) }}</td>
-                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs tabular-nums">
+                                                <td data-label="{{ __('Envelope To') }}" class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $envelope['domain'] }}</td>
+                                                <td data-label="{{ __('Volume') }}" class="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-500 dark:text-gray-400 tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ number_format($envelope['total']) }}</td>
+                                                <td data-label="{{ __('DMARC Pass') }}" class="px-6 py-2 whitespace-nowrap text-right text-xs tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                                     <span @class([
                                                         'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                                                         'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $envelopeStatus === 'good',
@@ -357,7 +361,7 @@ new #[Layout('layouts.app')] class extends Component
                                                         'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $envelopeStatus === 'critical',
                                                     ])>{{ $envelope['dmarc_pass_pct'] }}%</span>
                                                 </td>
-                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs tabular-nums">
+                                                <td data-label="{{ __('SPF Pass') }}" class="px-6 py-2 whitespace-nowrap text-right text-xs tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                                     <span @class([
                                                         'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                                                         'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $envelopeSpfStatus === 'good',
@@ -365,7 +369,7 @@ new #[Layout('layouts.app')] class extends Component
                                                         'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $envelopeSpfStatus === 'critical',
                                                     ])>{{ $envelope['spf_pass_pct'] }}%</span>
                                                 </td>
-                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs tabular-nums">
+                                                <td data-label="{{ __('DKIM Pass') }}" class="px-6 py-2 whitespace-nowrap text-right text-xs tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                                     <span @class([
                                                         'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                                                         'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $envelopeDkimStatus === 'good',
@@ -373,8 +377,8 @@ new #[Layout('layouts.app')] class extends Component
                                                         'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $envelopeDkimStatus === 'critical',
                                                     ])>{{ $envelope['dkim_pass_pct'] }}%</span>
                                                 </td>
-                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($envelope['enforced']) }}</td>
-                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs">
+                                                <td data-label="{{ __('Enforced') }}" class="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-500 dark:text-gray-400 tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ number_format($envelope['enforced']) }}</td>
+                                                <td class="px-6 py-2 whitespace-nowrap text-right text-xs max-md:px-0 max-md:pt-1">
                                                     <a
                                                         href="{{ route('reports.index', ['domain_id' => $group['domain_id'], 'ip' => implode(',', $envelope['ips']), 'envelope' => $envelope['domain'] === '(no envelope-to data)' ? null : $envelope['domain'], 'from' => $windowFrom, 'to' => $windowTo]) }}"
                                                         wire:navigate
@@ -383,9 +387,9 @@ new #[Layout('layouts.app')] class extends Component
                                                 </td>
                                             </tr>
                                         @empty
-                                            <tr x-show="open" x-cloak class="bg-gray-100 dark:bg-gray-900/40">
-                                                <td class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{{ $group['domain'] }}</td>
-                                                <td class="pl-14 pr-6 py-2 text-xs text-gray-400 dark:text-gray-500" colspan="8">
+                                            <tr x-show="open" x-cloak class="bg-gray-100 dark:bg-gray-900/40 max-md:block max-md:p-3 max-md:border-t max-md:border-gray-200 dark:max-md:border-gray-700">
+                                                <td class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400 max-md:hidden">{{ $group['domain'] }}</td>
+                                                <td class="md:pl-14 md:pr-6 py-2 text-xs text-gray-400 dark:text-gray-500 max-md:px-0" colspan="8">
                                                     {{ __('No envelope-to data recorded.') }}
                                                 </td>
                                             </tr>

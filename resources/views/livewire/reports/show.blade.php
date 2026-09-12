@@ -72,9 +72,9 @@ new #[Layout('layouts.app')] class extends Component
 
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                 <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 px-6 pt-4">{{ __('Records') }}</h3>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 mt-2">
-                        <thead class="bg-gray-50 dark:bg-gray-700">
+                <div class="md:overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 mt-2 max-md:block max-md:mt-4">
+                        <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
                             <tr>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Source IP') }}</th>
                                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Count') }}</th>
@@ -86,37 +86,39 @@ new #[Layout('layouts.app')] class extends Component
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Envelope To') }}</th>
                             </tr>
                         </thead>
-                        <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                        <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:space-y-3 max-md:p-3">
                             @forelse ($report->records as $record)
-                                <tr wire:key="record-{{ $record->id }}">
-                                    <td class="px-6 py-3 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-gray-100">
-                                        <x-country-flag :code="$record->country" /> {{ $record->source_ip }}
-                                        @if ($record->ptr_hostname)
-                                            <div class="text-xs text-gray-400 dark:text-gray-500">{{ $record->ptr_hostname }}</div>
-                                        @endif
-                                        @if ($record->asn_org)
-                                            <div class="text-xs text-gray-400 dark:text-gray-500">{{ $record->asn_org }}</div>
-                                        @endif
+                                <tr wire:key="record-{{ $record->id }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
+                                    <td data-label="{{ __('Source IP') }}" class="px-6 py-3 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-start max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:font-sans max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400 max-md:before:shrink-0">
+                                        <span class="max-md:text-right">
+                                            <x-country-flag :code="$record->country" /> {{ $record->source_ip }}
+                                            @if ($record->ptr_hostname)
+                                                <div class="text-xs text-gray-400 dark:text-gray-500">{{ $record->ptr_hostname }}</div>
+                                            @endif
+                                            @if ($record->asn_org)
+                                                <div class="text-xs text-gray-400 dark:text-gray-500">{{ $record->asn_org }}</div>
+                                            @endif
+                                        </span>
                                     </td>
-                                    <td class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums">{{ number_format($record->count) }}</td>
-                                    <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ $record->disposition }}</td>
-                                    <td class="px-6 py-3 whitespace-nowrap text-sm">
+                                    <td data-label="{{ __('Count') }}" class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ number_format($record->count) }}</td>
+                                    <td data-label="{{ __('Disposition') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $record->disposition }}</td>
+                                    <td data-label="{{ __('DKIM') }}" class="px-6 py-3 whitespace-nowrap text-sm max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                         <span @class([
                                             'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                                             'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $record->dkim_result === 'pass',
                                             'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $record->dkim_result === 'fail',
                                         ])>{{ $record->dkim_result }}</span>
                                     </td>
-                                    <td class="px-6 py-3 whitespace-nowrap text-sm">
+                                    <td data-label="{{ __('SPF') }}" class="px-6 py-3 whitespace-nowrap text-sm max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                         <span @class([
                                             'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                                             'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $record->spf_result === 'pass',
                                             'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $record->spf_result === 'fail',
                                         ])>{{ $record->spf_result }}</span>
                                     </td>
-                                    <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ $record->header_from ?? '—' }}</td>
-                                    <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ $record->envelope_from ?? '—' }}</td>
-                                    <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ $record->envelope_to ?? '—' }}</td>
+                                    <td data-label="{{ __('Header From') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $record->header_from ?? '—' }}</td>
+                                    <td data-label="{{ __('Envelope From') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $record->envelope_from ?? '—' }}</td>
+                                    <td data-label="{{ __('Envelope To') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $record->envelope_to ?? '—' }}</td>
                                 </tr>
                             @empty
                                 <tr>
