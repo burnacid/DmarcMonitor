@@ -2,6 +2,7 @@
 
 use App\Models\Domain;
 use App\Models\Organisation;
+use App\Services\Dns\DomainAuthenticationChecker;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -55,12 +56,40 @@ new #[Layout('layouts.app')] class extends Component
         Domain::findOrFail($id)->delete();
     }
 
+    public function checkDns(int $id): void
+    {
+        $domain = Domain::findOrFail($id);
+
+        app(DomainAuthenticationChecker::class)->checkAndStore($domain);
+    }
+
     public function with(): array
     {
         return [
             'domains' => Domain::with('organisation')->orderBy('fqdn')->paginate(15),
             'organisations' => Organisation::orderBy('name')->get(),
         ];
+    }
+
+    public function authStatusBadgeClass(?string $status): string
+    {
+        return match ($status) {
+            'valid' => 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200',
+            'weak', 'unknown' => 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200',
+            'missing' => 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
+            default => 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500',
+        };
+    }
+
+    public function authStatusLabel(?string $status): string
+    {
+        return match ($status) {
+            'valid' => __('Valid'),
+            'weak' => __('Weak'),
+            'missing' => __('Missing'),
+            'unknown' => __('Unknown'),
+            default => __('Not checked'),
+        };
     }
 }; ?>
 
@@ -82,6 +111,9 @@ new #[Layout('layouts.app')] class extends Component
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Domain') }}</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Organisation') }}</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Status') }}</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('DMARC') }}</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('SPF') }}</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('DKIM') }}</th>
                             <th class="px-6 py-3"></th>
                         </tr>
                     </thead>
@@ -102,14 +134,41 @@ new #[Layout('layouts.app')] class extends Component
                                         <span class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">{{ __('Inactive') }}</span>
                                     @endif
                                 </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $this->authStatusBadgeClass($domain->dmarc_status) }}">{{ $this->authStatusLabel($domain->dmarc_status) }}</span>
+                                    @if ($domain->dmarc_status === 'weak')
+                                        <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{{ __('p=none') }}</div>
+                                    @endif
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $this->authStatusBadgeClass($domain->spf_status) }}">{{ $this->authStatusLabel($domain->spf_status) }}</span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $this->authStatusBadgeClass($domain->dkim_status) }}">{{ $this->authStatusLabel($domain->dkim_status) }}</span>
+                                    @if ($domain->dkim_status === 'valid')
+                                        <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-mono">{{ $domain->dkim_selector }}</div>
+                                    @elseif ($domain->dkim_status === 'unknown')
+                                        <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{{ __('No selector seen yet') }}</div>
+                                    @endif
+                                </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm space-x-3">
+                                    <button
+                                        wire:click="checkDns({{ $domain->id }})"
+                                        wire:loading.attr="disabled"
+                                        wire:target="checkDns({{ $domain->id }})"
+                                        title="{{ $domain->dns_checked_at ? __('Last checked :time', ['time' => $domain->dns_checked_at->diffForHumans()]) : __('Never checked') }}"
+                                        class="text-emerald-600 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-300"
+                                    >
+                                        <span wire:loading.remove wire:target="checkDns({{ $domain->id }})">{{ __('Recheck') }}</span>
+                                        <span wire:loading wire:target="checkDns({{ $domain->id }})">{{ __('Checking…') }}</span>
+                                    </button>
                                     <button wire:click="edit({{ $domain->id }})" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Edit') }}</button>
                                     <button wire:click="delete({{ $domain->id }})" wire:confirm="{{ __('Delete this domain?') }}" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">{{ __('Delete') }}</button>
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="4" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No domains yet.') }}</td>
+                                <td colspan="7" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No domains yet.') }}</td>
                             </tr>
                         @endforelse
                     </tbody>

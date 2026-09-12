@@ -25,3 +25,8 @@ Schedule::command('dmarc:update-geoip')->weekly()->withoutOverlapping();
 Schedule::command('queue:work --stop-when-empty --max-time=50 --tries=3')->everyFiveMinutes()->withoutOverlapping();
 
 Schedule::command('dmarc:cleanup')->daily()->withoutOverlapping();
+
+// DNS records change rarely; daily keeps the cached DMARC/SPF/DKIM status on
+// the domains page fresh without hammering resolvers. The per-domain
+// "Recheck" button on that page covers the "I just fixed my DNS" case.
+Schedule::command('dmarc:check-dns')->daily()->withoutOverlapping();
