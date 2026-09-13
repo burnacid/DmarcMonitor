@@ -5,6 +5,7 @@ namespace App\Services\Dmarc;
 use App\Models\Domain;
 use App\Models\ForensicReport;
 use App\Models\ImapAccount;
+use App\Models\Microsoft365MailAccount;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -22,7 +23,7 @@ class ForensicReportParser
      */
     public function parseFromMessage(
         string $feedbackReportText,
-        ?ImapAccount $imapAccount = null,
+        ImapAccount|Microsoft365MailAccount|null $sourceAccount = null,
         ?string $rawMessagePath = null,
         ?string $messageUid = null,
         ?string $subject = null,
@@ -39,12 +40,13 @@ class ForensicReportParser
             ? array_map('trim', explode(',', strtolower($fields['auth-failure'])))
             : [];
 
-        return DB::transaction(function () use ($fields, $reportedDomain, $authFailures, $imapAccount, $rawMessagePath, $messageUid, $subject) {
+        return DB::transaction(function () use ($fields, $reportedDomain, $authFailures, $sourceAccount, $rawMessagePath, $messageUid, $subject) {
             $domain = $this->resolveDomain($reportedDomain);
 
             return ForensicReport::updateOrCreate(
                 [
-                    'imap_account_id' => $imapAccount?->id,
+                    'imap_account_id' => $sourceAccount instanceof ImapAccount ? $sourceAccount->id : null,
+                    'microsoft365_mail_account_id' => $sourceAccount instanceof Microsoft365MailAccount ? $sourceAccount->id : null,
                     'message_uid' => $messageUid,
                 ],
                 [

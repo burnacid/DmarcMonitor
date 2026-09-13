@@ -6,6 +6,7 @@ use App\Jobs\EnrichReportRecordsJob;
 use App\Models\AggregateReport;
 use App\Models\Domain;
 use App\Models\ImapAccount;
+use App\Models\Microsoft365MailAccount;
 use App\Support\CompressedFileReader;
 use Avvertix\DmarcReportParser\Data\DmarcReport;
 use Avvertix\DmarcReportParser\Data\Record;
@@ -25,14 +26,14 @@ class AggregateReportParser
      */
     public function parseFile(
         string $path,
-        ?ImapAccount $imapAccount = null,
+        ImapAccount|Microsoft365MailAccount|null $sourceAccount = null,
         ?string $rawXmlPath = null,
         ?string $messageUid = null,
     ): ?AggregateReport {
         $xml = CompressedFileReader::read($path);
         $report = $this->parser->fromString($this->normalizeEnumCase($this->normalizeVersion($xml)));
 
-        return $this->store($report, $imapAccount, $rawXmlPath, $messageUid);
+        return $this->store($report, $sourceAccount, $rawXmlPath, $messageUid);
     }
 
     /**
@@ -70,11 +71,11 @@ class AggregateReportParser
 
     public function store(
         DmarcReport $report,
-        ?ImapAccount $imapAccount = null,
+        ImapAccount|Microsoft365MailAccount|null $sourceAccount = null,
         ?string $rawXmlPath = null,
         ?string $messageUid = null,
     ): AggregateReport {
-        $aggregateReport = DB::transaction(function () use ($report, $imapAccount, $rawXmlPath, $messageUid) {
+        $aggregateReport = DB::transaction(function () use ($report, $sourceAccount, $rawXmlPath, $messageUid) {
             $domain = $this->resolveDomain($report->publishedPolicy->domain);
 
             $aggregateReport = AggregateReport::updateOrCreate(
@@ -84,7 +85,8 @@ class AggregateReportParser
                     'org_name' => $report->org_name,
                 ],
                 [
-                    'imap_account_id' => $imapAccount?->id,
+                    'imap_account_id' => $sourceAccount instanceof ImapAccount ? $sourceAccount->id : null,
+                    'microsoft365_mail_account_id' => $sourceAccount instanceof Microsoft365MailAccount ? $sourceAccount->id : null,
                     'email' => $report->email,
                     'date_range_begin' => $report->date_range->begin,
                     'date_range_end' => $report->date_range->end,

@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Models\ForensicReport;
 use App\Models\ImapAccount;
 use App\Services\Imap\ImapIngestionService;
+use App\Support\DmarcAttachmentSniffer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -18,10 +19,7 @@ class ImapIngestionServiceTest extends TestCase
     #[DataProvider('attachmentNameProvider')]
     public function test_it_recognizes_dmarc_aggregate_report_attachment_names(string $name, bool $expected): void
     {
-        $service = new ImapIngestionService;
-        $method = new \ReflectionMethod($service, 'isAggregateReportFilename');
-
-        $this->assertSame($expected, $method->invoke($service, $name));
+        $this->assertSame($expected, DmarcAttachmentSniffer::isAggregateReportFilename($name));
     }
 
     public static function attachmentNameProvider(): array
