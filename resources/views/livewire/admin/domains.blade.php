@@ -1,8 +1,10 @@
 <?php
 
+use App\Models\AggregateReportRecord;
 use App\Models\Domain;
 use App\Models\Organisation;
 use App\Services\Dns\DomainAuthenticationChecker;
+use Illuminate\Support\Carbon;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -12,11 +14,17 @@ new #[Layout('layouts.app')] class extends Component
     use WithPagination;
 
     public ?int $editingId = null;
+    public ?int $expandedId = null;
 
     public string $fqdn = '';
     public ?int $organisation_id = null;
     public bool $is_active = true;
     public string $notes = '';
+
+    public function toggleExpand(int $id): void
+    {
+        $this->expandedId = $this->expandedId === $id ? null : $id;
+    }
 
     public function create(): void
     {
@@ -91,6 +99,22 @@ new #[Layout('layouts.app')] class extends Component
             default => __('Not checked'),
         };
     }
+
+    public function dkimLastSeenAt(Domain $domain): ?Carbon
+    {
+        if (! $domain->dkim_selector) {
+            return null;
+        }
+
+        $lastSeen = AggregateReportRecord::query()
+            ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
+            ->where('aggregate_reports.domain_id', $domain->id)
+            ->where('aggregate_report_records.dkim_domain', $domain->fqdn)
+            ->where('aggregate_report_records.dkim_selector', $domain->dkim_selector)
+            ->max('aggregate_reports.date_range_end');
+
+        return $lastSeen ? Carbon::parse($lastSeen) : null;
+    }
 }; ?>
 
 <div>
@@ -120,7 +144,14 @@ new #[Layout('layouts.app')] class extends Component
                     <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:space-y-3 max-md:p-3">
                         @forelse ($domains as $domain)
                             <tr wire:key="domain-{{ $domain->id }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
-                                <td data-label="{{ __('Domain') }}" class="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400 max-md:before:font-normal">{{ $domain->fqdn }}</td>
+                                <td data-label="{{ __('Domain') }}" class="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400 max-md:before:font-normal">
+                                    <button type="button" wire:click="toggleExpand({{ $domain->id }})" class="inline-flex items-center gap-2 hover:text-indigo-600 dark:hover:text-indigo-400">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 shrink-0 text-gray-400 dark:text-gray-500 transition-transform {{ $expandedId === $domain->id ? 'rotate-90' : '' }}">
+                                            <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                                        </svg>
+                                        <span>{{ $domain->fqdn }}</span>
+                                    </button>
+                                </td>
                                 <td data-label="{{ __('Organisation') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                     {{ $domain->organisation?->name ?? '—' }}
                                     @unless ($domain->organisation_id)
@@ -170,6 +201,37 @@ new #[Layout('layouts.app')] class extends Component
                                     <button wire:click="delete({{ $domain->id }})" wire:confirm="{{ __('Delete this domain?') }}" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">{{ __('Delete') }}</button>
                                 </td>
                             </tr>
+                            @if ($expandedId === $domain->id)
+                                <tr wire:key="domain-{{ $domain->id }}-details" class="max-md:block">
+                                    <td colspan="7" class="bg-gray-50 dark:bg-gray-900/50 px-6 py-4 max-md:block max-md:px-3 max-md:py-3 max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:mt-2">
+                                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div>
+                                                <h4 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('DMARC') }}</h4>
+                                                <span class="mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $this->authStatusBadgeClass($domain->dmarc_status) }}">{{ $this->authStatusLabel($domain->dmarc_status) }}</span>
+                                                <p class="mt-2 text-xs font-mono break-all text-gray-600 dark:text-gray-300">{{ $domain->dmarc_record ?: __('No record found.') }}</p>
+                                            </div>
+                                            <div>
+                                                <h4 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('SPF') }}</h4>
+                                                <span class="mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $this->authStatusBadgeClass($domain->spf_status) }}">{{ $this->authStatusLabel($domain->spf_status) }}</span>
+                                                <p class="mt-2 text-xs font-mono break-all text-gray-600 dark:text-gray-300">{{ $domain->spf_record ?: __('No record found.') }}</p>
+                                            </div>
+                                            <div>
+                                                <h4 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('DKIM') }}</h4>
+                                                <span class="mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $this->authStatusBadgeClass($domain->dkim_status) }}">{{ $this->authStatusLabel($domain->dkim_status) }}</span>
+                                                @if ($domain->dkim_selector)
+                                                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ __('Selector: :selector', ['selector' => $domain->dkim_selector]) }}</p>
+                                                @endif
+                                                <p class="mt-1 text-xs font-mono break-all text-gray-600 dark:text-gray-300">{{ $domain->dkim_record ?: __('No record found.') }}</p>
+                                                @php $dkimLastSeen = $this->dkimLastSeenAt($domain); @endphp
+                                                <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
+                                                    {{ __('Last seen:') }}
+                                                    {{ $dkimLastSeen ? $dkimLastSeen->diffForHumans() : __('Never seen in aggregate reports') }}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endif
                         @empty
                             <tr>
                                 <td colspan="7" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No domains yet.') }}</td>
