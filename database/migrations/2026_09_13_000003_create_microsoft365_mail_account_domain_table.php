@@ -13,7 +13,9 @@ return new class extends Migration
     {
         Schema::create('microsoft365_mail_account_domain', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('microsoft365_mail_account_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('microsoft365_mail_account_id')
+                ->constrained(indexName: 'm365_mail_account_domain_account_id_foreign')
+                ->cascadeOnDelete();
             $table->foreignId('domain_id')->constrained()->cascadeOnDelete();
             $table->timestamps();
 
