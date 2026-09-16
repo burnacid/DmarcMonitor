@@ -63,6 +63,31 @@ class AdminCrudTest extends TestCase
             ->assertHasErrors(['fqdn']);
     }
 
+    public function test_deleting_a_domain_soft_deletes_it(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::create(['fqdn' => 'example.com']);
+
+        Volt::actingAs($user)->test('admin.domains')
+            ->call('delete', $domain->id);
+
+        $this->assertDatabaseHas('domains', ['id' => $domain->id]);
+        $this->assertSoftDeleted('domains', ['id' => $domain->id]);
+        $this->assertNull(Domain::find($domain->id));
+    }
+
+    public function test_admin_can_restore_a_trashed_domain(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $domain = Domain::create(['fqdn' => 'example.com']);
+        $domain->delete();
+
+        Volt::actingAs($admin)->test('admin.domains-trash')
+            ->call('restore', $domain->id);
+
+        $this->assertDatabaseHas('domains', ['id' => $domain->id, 'deleted_at' => null]);
+    }
+
     public function test_authenticated_user_can_create_an_imap_account_with_domains(): void
     {
         $user = User::factory()->create();

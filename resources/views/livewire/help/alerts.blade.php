@@ -22,7 +22,7 @@ new #[Layout('layouts.app')] class extends Component
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-4 text-sm text-gray-600 dark:text-gray-300">
                 <h3 id="alert-rules" class="text-base font-medium text-gray-900 dark:text-gray-100">{{ __('Alert Rules') }}</h3>
                 <p>
-                    {{ __('An Alert Rule watches one domain for a condition — for example, DMARC pass rate dropping below a threshold percentage over a lookback window — and fires when it\'s met. Rules can notify by email and/or webhook, to the addresses/URL you configure.') }}
+                    {{ __('An Alert Rule watches one organisation (or every domain, if left unscoped) for a condition — for example, DMARC pass rate dropping below a threshold percentage over a lookback window — and fires per domain when it\'s met. Rules can notify by email and/or webhook, to the addresses/URL you configure.') }}
                 </p>
             </div>
 

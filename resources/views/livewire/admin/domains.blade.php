@@ -154,7 +154,12 @@ new #[Layout('layouts.app')] class extends Component
 
     <div class="py-8">
         <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8">
-            <div class="flex justify-end mb-4">
+            <div class="flex justify-end items-center gap-4 mb-4">
+                @if (auth()->user()->isAdmin())
+                    <a href="{{ route('admin.domains.trash') }}" wire:navigate class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                        {{ __('Trash') }}
+                    </a>
+                @endif
                 <x-primary-button wire:click="create">{{ __('New Domain') }}</x-primary-button>
             </div>
 
@@ -228,7 +233,7 @@ new #[Layout('layouts.app')] class extends Component
                                         <span wire:loading wire:target="checkDns({{ $domain->id }})">{{ __('Checking…') }}</span>
                                     </button>
                                     <button wire:click="edit({{ $domain->id }})" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Edit') }}</button>
-                                    <button wire:click="delete({{ $domain->id }})" wire:confirm="{{ __('Delete this domain?') }}" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">{{ __('Delete') }}</button>
+                                    <button wire:click="delete({{ $domain->id }})" wire:confirm="{{ __('Move this domain to the trash? Its reports will be hidden until it is restored.') }}" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">{{ __('Delete') }}</button>
                                 </td>
                             </tr>
                             @if ($expandedId === $domain->id)

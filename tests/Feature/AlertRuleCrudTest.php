@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AlertEvent;
 use App\Models\AlertRule;
 use App\Models\Domain;
+use App\Models\Organisation;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Volt\Volt;
@@ -23,11 +24,11 @@ class AlertRuleCrudTest extends TestCase
     public function test_authenticated_user_can_create_a_pass_rate_drop_rule(): void
     {
         $user = User::factory()->create();
-        $domain = Domain::factory()->create();
+        $org = Organisation::factory()->create();
 
         Volt::actingAs($user)->test('admin.alert-rules')
             ->call('create')
-            ->set('domain_id', $domain->id)
+            ->set('organisation_id', $org->id)
             ->set('type', 'pass_rate_drop')
             ->set('threshold_percent', 90)
             ->set('lookback_window', '24h')
@@ -36,12 +37,12 @@ class AlertRuleCrudTest extends TestCase
             ->call('save');
 
         $this->assertDatabaseHas('alert_rules', [
-            'domain_id' => $domain->id,
+            'organisation_id' => $org->id,
             'type' => 'pass_rate_drop',
             'threshold_percent' => 90,
         ]);
 
-        $rule = AlertRule::firstWhere('domain_id', $domain->id);
+        $rule = AlertRule::firstWhere('organisation_id', $org->id);
         $this->assertEquals(['ops@example.com'], $rule->notify_emails);
     }
 
@@ -88,28 +89,28 @@ class AlertRuleCrudTest extends TestCase
     public function test_a_rule_can_be_configured_as_in_app_only(): void
     {
         $user = User::factory()->create();
-        $domain = Domain::factory()->create();
+        $org = Organisation::factory()->create();
 
         Volt::actingAs($user)->test('admin.alert-rules')
             ->call('create')
-            ->set('domain_id', $domain->id)
+            ->set('organisation_id', $org->id)
             ->set('type', 'new_source_detected')
             ->set('channels', ['in_app'])
             ->call('save')
             ->assertHasNoErrors();
 
-        $rule = AlertRule::firstWhere('domain_id', $domain->id);
+        $rule = AlertRule::firstWhere('organisation_id', $org->id);
         $this->assertEquals(['in_app'], $rule->channels);
     }
 
     public function test_new_domain_discovered_rule_is_forced_to_apply_across_all_domains(): void
     {
         $user = User::factory()->create();
-        $domain = Domain::factory()->create();
+        $org = Organisation::factory()->create();
 
         Volt::actingAs($user)->test('admin.alert-rules')
             ->call('create')
-            ->set('domain_id', $domain->id)
+            ->set('organisation_id', $org->id)
             ->set('type', 'new_domain_discovered')
             ->set('channels', ['email'])
             ->set('notify_emails', 'ops@example.com')
@@ -117,14 +118,14 @@ class AlertRuleCrudTest extends TestCase
 
         $rule = AlertRule::firstWhere('type', 'new_domain_discovered');
         $this->assertNotNull($rule);
-        $this->assertNull($rule->domain_id);
+        $this->assertNull($rule->organisation_id);
     }
 
     public function test_authenticated_user_can_resolve_an_open_alert_event(): void
     {
         $user = User::factory()->create();
         $domain = Domain::factory()->create();
-        $rule = AlertRule::factory()->create(['domain_id' => $domain->id]);
+        $rule = AlertRule::factory()->create(['organisation_id' => $domain->organisation_id]);
         $event = AlertEvent::create([
             'alert_rule_id' => $rule->id,
             'domain_id' => $domain->id,

@@ -35,8 +35,8 @@ class AlertEvaluationService
             return;
         }
 
-        $domains = $rule->domain_id !== null
-            ? Domain::where('id', $rule->domain_id)->get()
+        $domains = $rule->organisation_id !== null
+            ? Domain::where('organisation_id', $rule->organisation_id)->where('is_active', true)->get()
             : Domain::where('is_active', true)->get();
 
         foreach ($domains as $domain) {

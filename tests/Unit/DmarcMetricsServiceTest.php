@@ -92,6 +92,21 @@ class DmarcMetricsServiceTest extends TestCase
         $this->assertEquals(100.0, $summary['dmarc_pass_pct']);
     }
 
+    public function test_summary_excludes_trashed_domains(): void
+    {
+        (new AggregateReportParser)->parseFile($this->fixture('google-single-record.xml'));
+
+        Domain::where('fqdn', 'example.com')->firstOrFail()->delete();
+
+        $service = new DmarcMetricsService;
+        $from = Carbon::createFromTimestamp(1735689600)->subDay();
+        $to = Carbon::createFromTimestamp(1735689600)->addDay();
+
+        $summary = $service->summary(null, $from, $to);
+
+        $this->assertEquals(0, $summary['total']);
+    }
+
     public function test_summary_returns_zeroes_when_no_data_in_window(): void
     {
         (new AggregateReportParser)->parseFile($this->fixture('google-single-record.xml'));

@@ -43,7 +43,7 @@ class CleanupOldDataTest extends TestCase
         config(['dmarc.retention_days' => 400]);
 
         $domain = Domain::factory()->create();
-        $rule = AlertRule::factory()->create(['domain_id' => $domain->id]);
+        $rule = AlertRule::factory()->create();
         $oldResolved = AlertEvent::create([
             'alert_rule_id' => $rule->id,
             'domain_id' => $domain->id,
@@ -62,7 +62,7 @@ class CleanupOldDataTest extends TestCase
         config(['dmarc.retention_days' => 400]);
 
         $domain = Domain::factory()->create();
-        $rule = AlertRule::factory()->create(['domain_id' => $domain->id]);
+        $rule = AlertRule::factory()->create();
         $oldOpen = AlertEvent::create([
             'alert_rule_id' => $rule->id,
             'domain_id' => $domain->id,
@@ -85,5 +85,30 @@ class CleanupOldDataTest extends TestCase
         $this->artisan('dmarc:cleanup');
 
         $this->assertDatabaseHas('aggregate_reports', ['id' => $old->id]);
+    }
+
+    public function test_permanently_deletes_trashed_domains_past_retention(): void
+    {
+        config(['dmarc.retention_days' => 400]);
+
+        $oldTrashed = Domain::factory()->create();
+        $oldTrashed->delete();
+        $oldTrashed->forceFill(['deleted_at' => now()->subDays(401)])->saveQuietly();
+
+        $this->artisan('dmarc:cleanup');
+
+        $this->assertDatabaseMissing('domains', ['id' => $oldTrashed->id]);
+    }
+
+    public function test_keeps_trashed_domains_within_retention(): void
+    {
+        config(['dmarc.retention_days' => 400]);
+
+        $recentlyTrashed = Domain::factory()->create();
+        $recentlyTrashed->delete();
+
+        $this->artisan('dmarc:cleanup');
+
+        $this->assertDatabaseHas('domains', ['id' => $recentlyTrashed->id]);
     }
 }

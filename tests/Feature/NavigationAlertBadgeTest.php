@@ -17,7 +17,7 @@ class NavigationAlertBadgeTest extends TestCase
     private function openEvent(): AlertEvent
     {
         $domain = Domain::factory()->create();
-        $rule = AlertRule::factory()->create(['domain_id' => $domain->id]);
+        $rule = AlertRule::factory()->create();
 
         return AlertEvent::create([
             'alert_rule_id' => $rule->id,

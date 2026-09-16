@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\AlertRule;
-use App\Models\Domain;
+use App\Models\Organisation;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -16,7 +16,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public ?int $editingId = null;
 
-    public ?int $domain_id = null;
+    public ?int $organisation_id = null;
     public string $type = 'pass_rate_drop';
     public ?float $threshold_percent = null;
     public string $lookback_window = '24h';
@@ -28,7 +28,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function create(): void
     {
-        $this->reset(['editingId', 'domain_id', 'webhook_url', 'notify_emails']);
+        $this->reset(['editingId', 'organisation_id', 'webhook_url', 'notify_emails']);
         $this->type = 'pass_rate_drop';
         $this->threshold_percent = 95.0;
         $this->lookback_window = '24h';
@@ -41,7 +41,7 @@ new #[Layout('layouts.app')] class extends Component
     {
         $rule = AlertRule::visibleTo(auth()->user())->findOrFail($id);
         $this->editingId = $rule->id;
-        $this->domain_id = $rule->domain_id;
+        $this->organisation_id = $rule->organisation_id;
         $this->type = $rule->type;
         $this->threshold_percent = $rule->threshold_percent !== null ? (float) $rule->threshold_percent : null;
         $this->lookback_window = $rule->lookback_window;
@@ -61,12 +61,12 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         $validated = $this->validate([
-            'domain_id' => [
+            'organisation_id' => [
                 'nullable',
-                'exists:domains,id',
+                'exists:organisations,id',
                 function (string $attribute, mixed $value, \Closure $fail) use ($user): void {
-                    if ($value !== null && ! Domain::visibleTo($user)->whereKey($value)->exists()) {
-                        $fail(__('You do not have access to that domain.'));
+                    if ($value !== null && ! Organisation::visibleTo($user)->whereKey($value)->exists()) {
+                        $fail(__('You do not have access to that organisation.'));
                     }
                 },
             ],
@@ -86,7 +86,7 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         if ($validated['type'] === 'new_domain_discovered') {
-            $validated['domain_id'] = null;
+            $validated['organisation_id'] = null;
         }
 
         if (in_array('webhook', $validated['channels'], true) && blank($validated['webhook_url'])) {
@@ -120,7 +120,7 @@ new #[Layout('layouts.app')] class extends Component
         AlertRule::updateOrCreate(['id' => $this->editingId], $validated);
 
         $this->dispatch('close-modal', 'alert-rule-form');
-        $this->reset(['editingId', 'domain_id', 'webhook_url', 'notify_emails']);
+        $this->reset(['editingId', 'organisation_id', 'webhook_url', 'notify_emails']);
     }
 
     public function delete(int $id): void
@@ -133,8 +133,8 @@ new #[Layout('layouts.app')] class extends Component
         $user = auth()->user();
 
         return [
-            'rules' => AlertRule::visibleTo($user)->with('domain')->orderBy('type')->paginate(15),
-            'domains' => Domain::visibleTo($user)->orderBy('fqdn')->get(),
+            'rules' => AlertRule::visibleTo($user)->with('organisation')->orderBy('type')->paginate(15),
+            'organisations' => Organisation::visibleTo($user)->orderBy('name')->get(),
         ];
     }
 }; ?>
@@ -155,7 +155,7 @@ new #[Layout('layouts.app')] class extends Component
                     <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Type') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Domain') }}</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Organisation') }}</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Threshold') }}</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Window') }}</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Channels') }}</th>
@@ -167,7 +167,7 @@ new #[Layout('layouts.app')] class extends Component
                         @forelse ($rules as $rule)
                             <tr wire:key="rule-{{ $rule->id }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
                                 <td data-label="{{ __('Type') }}" class="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400 max-md:before:font-normal">{{ str_replace('_', ' ', $rule->type) }}</td>
-                                <td data-label="{{ __('Domain') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $rule->domain?->fqdn ?? __('All domains') }}</td>
+                                <td data-label="{{ __('Organisation') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $rule->organisation?->name ?? __('All organisations') }}</td>
                                 <td data-label="{{ __('Threshold') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $rule->threshold_percent !== null ? $rule->threshold_percent.'%' : '—' }}</td>
                                 <td data-label="{{ __('Window') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $rule->lookback_window }}</td>
                                 <td data-label="{{ __('Channels') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ implode(', ', array_map(fn ($channel) => str_replace('_', ' ', $channel), $rule->channels ?? [])) }}</td>
@@ -219,17 +219,17 @@ new #[Layout('layouts.app')] class extends Component
 
                 @unless ($type === 'new_domain_discovered')
                     <div>
-                        <x-input-label for="domain_id" :value="__('Domain')" />
-                        <select wire:model="domain_id" id="domain_id" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
-                            <option value="">{{ __('— All domains —') }}</option>
-                            @foreach ($domains as $domain)
-                                <option value="{{ $domain->id }}">{{ $domain->fqdn }}</option>
+                        <x-input-label for="organisation_id" :value="__('Organisation')" />
+                        <select wire:model="organisation_id" id="organisation_id" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
+                            <option value="">{{ __('— All organisations —') }}</option>
+                            @foreach ($organisations as $organisation)
+                                <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
                             @endforeach
                         </select>
-                        <x-input-error :messages="$errors->get('domain_id')" class="mt-2" />
+                        <x-input-error :messages="$errors->get('organisation_id')" class="mt-2" />
                     </div>
                 @else
-                    <p class="text-sm text-gray-400 dark:text-gray-500 self-end pb-2">{{ __('Applies across all domains — there\'s no existing domain to scope it to.') }}</p>
+                    <p class="text-sm text-gray-400 dark:text-gray-500 self-end pb-2">{{ __('Applies across all domains — there\'s no existing organisation to scope it to.') }}</p>
                 @endunless
 
                 @unless (in_array($type, ['new_source_detected', 'new_domain_discovered']))
