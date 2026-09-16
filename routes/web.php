@@ -40,4 +40,15 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Volt::route('users', 'admin.users')->name('users');
 });
 
+Route::middleware(['auth', 'verified'])->prefix('help')->name('help.')->group(function () {
+    Volt::route('/', 'help.index')->name('index');
+    Volt::route('organisations-and-domains', 'help.organisations-and-domains')->name('organisations-and-domains');
+    Volt::route('dns-authentication', 'help.dns-authentication')->name('dns-authentication');
+    Volt::route('mail-ingestion', 'help.mail-ingestion')->name('mail-ingestion');
+    Volt::route('reports', 'help.reports')->name('reports');
+    Volt::route('alerts', 'help.alerts')->name('alerts');
+    Volt::route('dashboard', 'help.dashboard')->name('dashboard');
+    Volt::route('users-and-roles', 'help.users-and-roles')->name('users-and-roles');
+});
+
 require __DIR__.'/auth.php';
