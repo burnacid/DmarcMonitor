@@ -13,7 +13,7 @@ class AlertRule extends Model
     use HasFactory;
 
     protected $fillable = [
-        'domain_id', 'type', 'threshold_percent', 'lookback_window', 'channels',
+        'organisation_id', 'type', 'threshold_percent', 'lookback_window', 'channels',
         'webhook_url', 'notify_emails', 'is_active',
     ];
 
@@ -24,9 +24,9 @@ class AlertRule extends Model
         'threshold_percent' => 'decimal:2',
     ];
 
-    public function domain()
+    public function organisation()
     {
-        return $this->belongsTo(Domain::class);
+        return $this->belongsTo(Organisation::class);
     }
 
     public function events()
@@ -35,8 +35,9 @@ class AlertRule extends Model
     }
 
     /**
-     * A rule with no domain (e.g. a "new domain discovered" rule) is global
-     * and stays visible to everyone; domain-specific rules are scoped.
+     * A rule with no organisation (e.g. a "new domain discovered" rule) is
+     * global and stays visible to everyone; organisation-specific rules are
+     * scoped.
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
@@ -45,8 +46,8 @@ class AlertRule extends Model
         }
 
         return $query->where(
-            fn (Builder $q) => $q->whereNull('domain_id')
-                ->orWhereHas('domain', fn (Builder $dq) => $dq->visibleTo($user))
+            fn (Builder $q) => $q->whereNull('organisation_id')
+                ->orWhereHas('organisation', fn (Builder $oq) => $oq->visibleTo($user))
         );
     }
 }

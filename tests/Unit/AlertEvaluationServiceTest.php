@@ -8,6 +8,7 @@ use App\Models\AggregateReportRecord;
 use App\Models\AlertEvent;
 use App\Models\AlertRule;
 use App\Models\Domain;
+use App\Models\Organisation;
 use App\Services\Alerts\AlertEvaluationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -22,7 +23,8 @@ class AlertEvaluationServiceTest extends TestCase
     {
         Mail::fake();
 
-        $domain = Domain::factory()->create();
+        $org = Organisation::factory()->create();
+        $domain = Domain::factory()->create(['organisation_id' => $org->id]);
         $report = AggregateReport::factory()->create([
             'domain_id' => $domain->id,
             'date_range_begin' => now()->subHours(2),
@@ -35,7 +37,7 @@ class AlertEvaluationServiceTest extends TestCase
         ]);
 
         $rule = AlertRule::factory()->create([
-            'domain_id' => $domain->id,
+            'organisation_id' => $org->id,
             'type' => 'pass_rate_drop',
             'threshold_percent' => 95,
             'notify_emails' => ['ops@example.com'],
@@ -52,11 +54,49 @@ class AlertEvaluationServiceTest extends TestCase
         Mail::assertQueued(AlertTriggered::class);
     }
 
+    public function test_organisation_scoped_rule_evaluates_every_domain_in_the_organisation(): void
+    {
+        Mail::fake();
+
+        $org = Organisation::factory()->create();
+        $domainA = Domain::factory()->create(['organisation_id' => $org->id]);
+        $domainB = Domain::factory()->create(['organisation_id' => $org->id]);
+        $otherOrgDomain = Domain::factory()->create(['organisation_id' => Organisation::factory()]);
+
+        foreach ([$domainA, $domainB, $otherOrgDomain] as $domain) {
+            $report = AggregateReport::factory()->create([
+                'domain_id' => $domain->id,
+                'date_range_begin' => now()->subHours(2),
+            ]);
+            AggregateReportRecord::factory()->create([
+                'aggregate_report_id' => $report->id,
+                'count' => 10,
+                'dkim_result' => 'fail',
+                'spf_result' => 'fail',
+            ]);
+        }
+
+        $rule = AlertRule::factory()->create([
+            'organisation_id' => $org->id,
+            'type' => 'pass_rate_drop',
+            'threshold_percent' => 95,
+        ]);
+
+        app(AlertEvaluationService::class)->evaluate($rule);
+
+        // Both domains in the rule's organisation fire, the domain in the
+        // other organisation does not.
+        $this->assertDatabaseCount('alert_events', 2);
+        $firedDomainIds = AlertEvent::pluck('domain_id')->all();
+        $this->assertEqualsCanonicalizing([$domainA->id, $domainB->id], $firedDomainIds);
+    }
+
     public function test_pass_rate_drop_rule_does_not_refire_while_condition_holds(): void
     {
         Mail::fake();
 
-        $domain = Domain::factory()->create();
+        $org = Organisation::factory()->create();
+        $domain = Domain::factory()->create(['organisation_id' => $org->id]);
         $report = AggregateReport::factory()->create([
             'domain_id' => $domain->id,
             'date_range_begin' => now()->subHours(2),
@@ -69,7 +109,7 @@ class AlertEvaluationServiceTest extends TestCase
         ]);
 
         $rule = AlertRule::factory()->create([
-            'domain_id' => $domain->id,
+            'organisation_id' => $org->id,
             'type' => 'pass_rate_drop',
             'threshold_percent' => 95,
         ]);
@@ -85,7 +125,8 @@ class AlertEvaluationServiceTest extends TestCase
     {
         Mail::fake();
 
-        $domain = Domain::factory()->create();
+        $org = Organisation::factory()->create();
+        $domain = Domain::factory()->create(['organisation_id' => $org->id]);
         $report = AggregateReport::factory()->create([
             'domain_id' => $domain->id,
             'date_range_begin' => now()->subHours(2),
@@ -98,7 +139,7 @@ class AlertEvaluationServiceTest extends TestCase
         ]);
 
         $rule = AlertRule::factory()->create([
-            'domain_id' => $domain->id,
+            'organisation_id' => $org->id,
             'type' => 'pass_rate_drop',
             'threshold_percent' => 95,
         ]);
@@ -125,7 +166,8 @@ class AlertEvaluationServiceTest extends TestCase
     {
         Mail::fake();
 
-        $domain = Domain::factory()->create();
+        $org = Organisation::factory()->create();
+        $domain = Domain::factory()->create(['organisation_id' => $org->id]);
         $report = AggregateReport::factory()->create([
             'domain_id' => $domain->id,
             'date_range_begin' => now()->subHours(2),
@@ -138,7 +180,7 @@ class AlertEvaluationServiceTest extends TestCase
         ]);
 
         $rule = AlertRule::factory()->create([
-            'domain_id' => $domain->id,
+            'organisation_id' => $org->id,
             'type' => 'spf_fail_spike',
             'threshold_percent' => 10,
         ]);
@@ -153,7 +195,8 @@ class AlertEvaluationServiceTest extends TestCase
     {
         Mail::fake();
 
-        $domain = Domain::factory()->create();
+        $org = Organisation::factory()->create();
+        $domain = Domain::factory()->create(['organisation_id' => $org->id]);
 
         $baselineReport = AggregateReport::factory()->create([
             'domain_id' => $domain->id,
@@ -178,7 +221,7 @@ class AlertEvaluationServiceTest extends TestCase
         ]);
 
         $rule = AlertRule::factory()->create([
-            'domain_id' => $domain->id,
+            'organisation_id' => $org->id,
             'type' => 'new_source_detected',
             'threshold_percent' => null,
         ]);
@@ -207,7 +250,7 @@ class AlertEvaluationServiceTest extends TestCase
         AggregateReport::factory()->create(['domain_id' => $active->id]);
 
         $rule = AlertRule::factory()->create([
-            'domain_id' => null,
+            'organisation_id' => null,
             'type' => 'new_domain_discovered',
             'threshold_percent' => null,
         ]);
@@ -228,9 +271,10 @@ class AlertEvaluationServiceTest extends TestCase
     {
         Mail::fake();
 
-        $domain = Domain::factory()->create();
+        $org = Organisation::factory()->create();
+        $domain = Domain::factory()->create(['organisation_id' => $org->id]);
         $rule = AlertRule::factory()->create([
-            'domain_id' => $domain->id,
+            'organisation_id' => $org->id,
             'type' => 'pass_rate_drop',
             'threshold_percent' => 95,
         ]);
@@ -244,7 +288,8 @@ class AlertEvaluationServiceTest extends TestCase
     {
         Http::fake(['https://example.com/hook' => Http::response('', 200)]);
 
-        $domain = Domain::factory()->create();
+        $org = Organisation::factory()->create();
+        $domain = Domain::factory()->create(['organisation_id' => $org->id]);
         $report = AggregateReport::factory()->create([
             'domain_id' => $domain->id,
             'date_range_begin' => now()->subHours(2),
@@ -257,7 +302,7 @@ class AlertEvaluationServiceTest extends TestCase
         ]);
 
         $rule = AlertRule::factory()->create([
-            'domain_id' => $domain->id,
+            'organisation_id' => $org->id,
             'type' => 'pass_rate_drop',
             'threshold_percent' => 95,
             'channels' => ['webhook'],
@@ -277,7 +322,8 @@ class AlertEvaluationServiceTest extends TestCase
     {
         Http::fake(['https://example.com/hook' => Http::response('', 500)]);
 
-        $domain = Domain::factory()->create();
+        $org = Organisation::factory()->create();
+        $domain = Domain::factory()->create(['organisation_id' => $org->id]);
         $report = AggregateReport::factory()->create([
             'domain_id' => $domain->id,
             'date_range_begin' => now()->subHours(2),
@@ -290,7 +336,7 @@ class AlertEvaluationServiceTest extends TestCase
         ]);
 
         $rule = AlertRule::factory()->create([
-            'domain_id' => $domain->id,
+            'organisation_id' => $org->id,
             'type' => 'pass_rate_drop',
             'threshold_percent' => 95,
             'channels' => ['webhook'],

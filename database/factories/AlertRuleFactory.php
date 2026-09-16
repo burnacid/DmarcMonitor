@@ -3,7 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\AlertRule;
-use App\Models\Domain;
+use App\Models\Organisation;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -19,7 +19,7 @@ class AlertRuleFactory extends Factory
     public function definition(): array
     {
         return [
-            'domain_id' => Domain::factory(),
+            'organisation_id' => Organisation::factory(),
             'type' => 'pass_rate_drop',
             'threshold_percent' => 95,
             'lookback_window' => '24h',

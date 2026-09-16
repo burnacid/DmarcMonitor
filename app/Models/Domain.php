@@ -6,11 +6,12 @@ use Database\Factories\DomainFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Domain extends Model
 {
     /** @use HasFactory<DomainFactory> */
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'organisation_id', 'fqdn', 'is_active', 'notes',
@@ -21,6 +22,7 @@ class Domain extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'dns_checked_at' => 'datetime',
+        'deleted_at' => 'datetime',
     ];
 
     public function organisation()
@@ -41,11 +43,6 @@ class Domain extends Model
     public function forensicReports()
     {
         return $this->hasMany(ForensicReport::class);
-    }
-
-    public function alertRules()
-    {
-        return $this->hasMany(AlertRule::class);
     }
 
     public function scopeVisibleTo(Builder $query, User $user): Builder

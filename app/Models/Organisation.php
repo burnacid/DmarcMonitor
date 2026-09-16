@@ -19,6 +19,11 @@ class Organisation extends Model
         return $this->hasMany(Domain::class);
     }
 
+    public function alertRules()
+    {
+        return $this->hasMany(AlertRule::class);
+    }
+
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         $organisationIds = $user->scopedOrganisationIds();

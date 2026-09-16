@@ -263,6 +263,7 @@ class DmarcMetricsService
         $query = AggregateReportRecord::query()
             ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
             ->join('domains', 'domains.id', '=', 'aggregate_reports.domain_id')
+            ->whereNull('domains.deleted_at')
             ->whereBetween('aggregate_reports.date_range_begin', [$from, $to]);
 
         if ($domainId !== null) {

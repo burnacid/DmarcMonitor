@@ -16,11 +16,11 @@ class AlertNotifierTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function event(AlertRule $rule): AlertEvent
+    private function event(AlertRule $rule, Domain $domain): AlertEvent
     {
         return AlertEvent::create([
             'alert_rule_id' => $rule->id,
-            'domain_id' => $rule->domain_id,
+            'domain_id' => $domain->id,
             'fired_at' => now(),
             'dedup_key' => 'test-dedup-key',
         ]);
@@ -33,12 +33,12 @@ class AlertNotifierTest extends TestCase
 
         $domain = Domain::factory()->create();
         $rule = AlertRule::factory()->create([
-            'domain_id' => $domain->id,
+            'organisation_id' => $domain->organisation_id,
             'channels' => ['in_app'],
             'notify_emails' => null,
             'webhook_url' => null,
         ]);
-        $event = $this->event($rule);
+        $event = $this->event($rule, $domain);
 
         app(AlertNotifier::class)->notify($event, $rule);
 
@@ -53,11 +53,11 @@ class AlertNotifierTest extends TestCase
 
         $domain = Domain::factory()->create();
         $rule = AlertRule::factory()->create([
-            'domain_id' => $domain->id,
+            'organisation_id' => $domain->organisation_id,
             'channels' => ['in_app', 'email'],
             'notify_emails' => ['ops@example.com'],
         ]);
-        $event = $this->event($rule);
+        $event = $this->event($rule, $domain);
 
         app(AlertNotifier::class)->notify($event, $rule);
 

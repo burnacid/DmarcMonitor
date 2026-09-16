@@ -38,6 +38,7 @@ Route::middleware(['auth', 'verified', 'role:admin,editor'])->prefix('admin')->n
 
 Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
     Volt::route('users', 'admin.users')->name('users');
+    Volt::route('domains/trash', 'admin.domains-trash')->name('domains.trash');
 });
 
 Route::middleware(['auth', 'verified'])->prefix('help')->name('help.')->group(function () {
