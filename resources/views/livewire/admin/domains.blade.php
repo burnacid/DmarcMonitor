@@ -36,6 +36,7 @@ new #[Layout('layouts.app')] class extends Component
     public function edit(int $id): void
     {
         $domain = Domain::findOrFail($id);
+        abort_unless(auth()->user()->canAccessOrganisation($domain->organisation_id), 404);
         $this->editingId = $domain->id;
         $this->fqdn = $domain->fqdn;
         $this->organisation_id = $domain->organisation_id;
@@ -46,9 +47,22 @@ new #[Layout('layouts.app')] class extends Component
 
     public function save(): void
     {
+        if ($this->editingId !== null) {
+            $existing = Domain::findOrFail($this->editingId);
+            abort_unless(auth()->user()->canAccessOrganisation($existing->organisation_id), 404);
+        }
+
         $validated = $this->validate([
             'fqdn' => 'required|string|max:255|unique:domains,fqdn,'.$this->editingId,
-            'organisation_id' => 'nullable|exists:organisations,id',
+            'organisation_id' => [
+                'nullable',
+                'exists:organisations,id',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (! auth()->user()->canAccessOrganisation($value)) {
+                        $fail(__('You do not have access to that organisation.'));
+                    }
+                },
+            ],
             'is_active' => 'boolean',
             'notes' => 'nullable|string',
         ]);
@@ -61,21 +75,27 @@ new #[Layout('layouts.app')] class extends Component
 
     public function delete(int $id): void
     {
-        Domain::findOrFail($id)->delete();
+        $domain = Domain::findOrFail($id);
+        abort_unless(auth()->user()->canAccessOrganisation($domain->organisation_id), 404);
+
+        $domain->delete();
     }
 
     public function checkDns(int $id): void
     {
         $domain = Domain::findOrFail($id);
+        abort_unless(auth()->user()->canAccessOrganisation($domain->organisation_id), 404);
 
         app(DomainAuthenticationChecker::class)->checkAndStore($domain);
     }
 
     public function with(): array
     {
+        $user = auth()->user();
+
         return [
-            'domains' => Domain::with('organisation')->orderBy('fqdn')->paginate(15),
-            'organisations' => Organisation::orderBy('name')->get(),
+            'domains' => Domain::visibleTo($user)->with('organisation')->orderBy('fqdn')->paginate(15),
+            'organisations' => Organisation::visibleTo($user)->orderBy('name')->get(),
         ];
     }
 

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Database\Factories\AggregateReportFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -42,5 +43,10 @@ class AggregateReport extends Model
     public function records()
     {
         return $this->hasMany(AggregateReportRecord::class);
+    }
+
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        return $query->whereHas('domain', fn (Builder $q) => $q->visibleTo($user));
     }
 }

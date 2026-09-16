@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use Database\Factories\AlertEventFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class AlertEvent extends Model
 {
-    /** @use HasFactory<\Database\Factories\AlertEventFactory> */
+    /** @use HasFactory<AlertEventFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -30,5 +32,10 @@ class AlertEvent extends Model
     public function domain()
     {
         return $this->belongsTo(Domain::class);
+    }
+
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        return $query->whereHas('domain', fn (Builder $q) => $q->visibleTo($user));
     }
 }

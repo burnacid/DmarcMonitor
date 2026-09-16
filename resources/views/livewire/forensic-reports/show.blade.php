@@ -10,6 +10,10 @@ new #[Layout('layouts.app')] class extends Component
 
     public function mount(ForensicReport $forensicReport): void
     {
+        $forensicReport->loadMissing('domain');
+
+        abort_unless(auth()->user()->canAccessOrganisation($forensicReport->domain?->organisation_id), 404);
+
         $this->forensicReport = $forensicReport->load('domain');
     }
 }; ?>

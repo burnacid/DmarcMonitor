@@ -13,7 +13,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function resolve(int $id): void
     {
-        AlertEvent::findOrFail($id)->update(['resolved_at' => now()]);
+        AlertEvent::visibleTo(auth()->user())->findOrFail($id)->update(['resolved_at' => now()]);
     }
 
     public function updatedStatus(): void
@@ -23,7 +23,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function with(): array
     {
-        $events = AlertEvent::with(['alertRule', 'domain'])
+        $events = AlertEvent::visibleTo(auth()->user())->with(['alertRule', 'domain'])
             ->when($this->status === 'open', fn ($query) => $query->whereNull('resolved_at'))
             ->when($this->status === 'resolved', fn ($query) => $query->whereNotNull('resolved_at'))
             ->orderByDesc('fired_at')

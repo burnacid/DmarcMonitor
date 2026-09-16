@@ -21,6 +21,10 @@ new #[Layout('layouts.app')] class extends Component
 
     public function mount(AggregateReport $report): void
     {
+        $report->loadMissing('domain');
+
+        abort_unless(auth()->user()->canAccessOrganisation($report->domain?->organisation_id), 404);
+
         $this->report = $report->load(['domain', 'records']);
     }
 

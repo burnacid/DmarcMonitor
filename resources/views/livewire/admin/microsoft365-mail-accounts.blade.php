@@ -48,7 +48,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function edit(int $id): void
     {
-        $account = Microsoft365MailAccount::findOrFail($id);
+        $account = Microsoft365MailAccount::visibleTo(auth()->user())->findOrFail($id);
         $this->editingId = $account->id;
         $this->label = $account->label;
         $this->tenant_id = $account->tenant_id;
@@ -68,6 +68,12 @@ new #[Layout('layouts.app')] class extends Component
 
     public function save(): void
     {
+        $user = auth()->user();
+
+        if ($this->editingId !== null) {
+            Microsoft365MailAccount::visibleTo($user)->findOrFail($this->editingId);
+        }
+
         $validated = $this->validate([
             'label' => 'required|string|max:255',
             'tenant_id' => 'required|string|max:255',
@@ -82,7 +88,14 @@ new #[Layout('layouts.app')] class extends Component
             'delete_after_processing' => 'boolean',
             'is_active' => 'boolean',
             'domain_ids' => 'array',
-            'domain_ids.*' => 'exists:domains,id',
+            'domain_ids.*' => [
+                'exists:domains,id',
+                function (string $attribute, mixed $value, \Closure $fail) use ($user): void {
+                    if (! Domain::visibleTo($user)->whereKey($value)->exists()) {
+                        $fail(__('You do not have access to that domain.'));
+                    }
+                },
+            ],
         ]);
 
         $domainIds = $validated['domain_ids'] ?? [];
@@ -104,12 +117,12 @@ new #[Layout('layouts.app')] class extends Component
 
     public function delete(int $id): void
     {
-        Microsoft365MailAccount::findOrFail($id)->delete();
+        Microsoft365MailAccount::visibleTo(auth()->user())->findOrFail($id)->delete();
     }
 
     public function testConnection(int $id): void
     {
-        $account = Microsoft365MailAccount::findOrFail($id);
+        $account = Microsoft365MailAccount::visibleTo(auth()->user())->findOrFail($id);
 
         $result = app(GraphConnectionTester::class)->test($account);
 
@@ -125,7 +138,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function fetchNow(int $id): void
     {
-        $account = Microsoft365MailAccount::findOrFail($id);
+        $account = Microsoft365MailAccount::visibleTo(auth()->user())->findOrFail($id);
 
         $stats = app(GraphIngestionService::class)->pollAccount($account);
 
@@ -139,9 +152,11 @@ new #[Layout('layouts.app')] class extends Component
 
     public function with(): array
     {
+        $user = auth()->user();
+
         return [
-            'accounts' => Microsoft365MailAccount::withCount('domains')->orderBy('label')->paginate(15),
-            'domains' => Domain::orderBy('fqdn')->get(),
+            'accounts' => Microsoft365MailAccount::visibleTo($user)->withCount('domains')->orderBy('label')->paginate(15),
+            'domains' => Domain::visibleTo($user)->orderBy('fqdn')->get(),
         ];
     }
 }; ?>

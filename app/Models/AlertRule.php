@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use Database\Factories\AlertRuleFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class AlertRule extends Model
 {
-    /** @use HasFactory<\Database\Factories\AlertRuleFactory> */
+    /** @use HasFactory<AlertRuleFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -30,5 +32,21 @@ class AlertRule extends Model
     public function events()
     {
         return $this->hasMany(AlertEvent::class);
+    }
+
+    /**
+     * A rule with no domain (e.g. a "new domain discovered" rule) is global
+     * and stays visible to everyone; domain-specific rules are scoped.
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if (! $user->hasOrganisationScope()) {
+            return $query;
+        }
+
+        return $query->where(
+            fn (Builder $q) => $q->whereNull('domain_id')
+                ->orWhereHas('domain', fn (Builder $dq) => $dq->visibleTo($user))
+        );
     }
 }

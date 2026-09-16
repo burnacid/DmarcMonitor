@@ -22,6 +22,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function edit(int $id): void
     {
+        abort_unless(auth()->user()->canAccessOrganisation($id), 404);
+
         $organisation = Organisation::findOrFail($id);
         $this->editingId = $organisation->id;
         $this->name = $organisation->name;
@@ -31,6 +33,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function save(): void
     {
+        abort_unless(auth()->user()->canAccessOrganisation($this->editingId), 404);
+
         $validated = $this->validate([
             'name' => 'required|string|max:255',
             'notes' => 'nullable|string',
@@ -44,13 +48,15 @@ new #[Layout('layouts.app')] class extends Component
 
     public function delete(int $id): void
     {
+        abort_unless(auth()->user()->canAccessOrganisation($id), 404);
+
         Organisation::findOrFail($id)->delete();
     }
 
     public function with(): array
     {
         return [
-            'organisations' => Organisation::withCount('domains')->orderBy('name')->paginate(15),
+            'organisations' => Organisation::visibleTo(auth()->user())->withCount('domains')->orderBy('name')->paginate(15),
         ];
     }
 }; ?>

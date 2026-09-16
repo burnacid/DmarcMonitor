@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Database\Factories\Microsoft365MailAccountFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -32,5 +33,14 @@ class Microsoft365MailAccount extends Model
     public function domains()
     {
         return $this->belongsToMany(Domain::class, 'microsoft365_mail_account_domain');
+    }
+
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if (! $user->hasOrganisationScope()) {
+            return $query;
+        }
+
+        return $query->whereHas('domains', fn (Builder $q) => $q->visibleTo($user));
     }
 }

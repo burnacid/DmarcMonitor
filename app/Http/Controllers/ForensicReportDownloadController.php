@@ -13,6 +13,8 @@ class ForensicReportDownloadController extends Controller
      */
     public function __invoke(ForensicReport $forensicReport): StreamedResponse
     {
+        abort_unless(request()->user()->canAccessOrganisation($forensicReport->domain?->organisation_id), 404);
+
         if (! $forensicReport->raw_message_path || ! Storage::disk('local')->exists($forensicReport->raw_message_path)) {
             abort(404);
         }

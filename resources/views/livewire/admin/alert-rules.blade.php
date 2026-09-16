@@ -39,7 +39,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function edit(int $id): void
     {
-        $rule = AlertRule::findOrFail($id);
+        $rule = AlertRule::visibleTo(auth()->user())->findOrFail($id);
         $this->editingId = $rule->id;
         $this->domain_id = $rule->domain_id;
         $this->type = $rule->type;
@@ -54,8 +54,22 @@ new #[Layout('layouts.app')] class extends Component
 
     public function save(): void
     {
+        $user = auth()->user();
+
+        if ($this->editingId !== null) {
+            AlertRule::visibleTo($user)->findOrFail($this->editingId);
+        }
+
         $validated = $this->validate([
-            'domain_id' => 'nullable|exists:domains,id',
+            'domain_id' => [
+                'nullable',
+                'exists:domains,id',
+                function (string $attribute, mixed $value, \Closure $fail) use ($user): void {
+                    if ($value !== null && ! Domain::visibleTo($user)->whereKey($value)->exists()) {
+                        $fail(__('You do not have access to that domain.'));
+                    }
+                },
+            ],
             'type' => 'required|in:'.implode(',', self::TYPES),
             'threshold_percent' => 'nullable|numeric|min:0|max:100',
             'lookback_window' => ['required', 'regex:/^\d+[hd]$/'],
@@ -111,14 +125,16 @@ new #[Layout('layouts.app')] class extends Component
 
     public function delete(int $id): void
     {
-        AlertRule::findOrFail($id)->delete();
+        AlertRule::visibleTo(auth()->user())->findOrFail($id)->delete();
     }
 
     public function with(): array
     {
+        $user = auth()->user();
+
         return [
-            'rules' => AlertRule::with('domain')->orderBy('type')->paginate(15),
-            'domains' => Domain::orderBy('fqdn')->get(),
+            'rules' => AlertRule::visibleTo($user)->with('domain')->orderBy('type')->paginate(15),
+            'domains' => Domain::visibleTo($user)->orderBy('fqdn')->get(),
         ];
     }
 }; ?>

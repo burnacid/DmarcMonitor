@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Organisation;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Attributes\Layout;
@@ -21,6 +22,9 @@ new #[Layout('layouts.app')] class extends Component
     public string $password = '';
     public string $role = 'viewer';
 
+    /** @var array<int> */
+    public array $organisation_ids = [];
+
     private function isLastAdmin(User $user): bool
     {
         return $user->role === 'admin' && User::where('role', 'admin')->count() <= 1;
@@ -28,7 +32,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function create(): void
     {
-        $this->reset(['editingId', 'name', 'email', 'password']);
+        $this->reset(['editingId', 'name', 'email', 'password', 'organisation_ids']);
         $this->role = 'viewer';
         $this->dispatch('open-modal', 'user-form');
     }
@@ -41,6 +45,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->email = $user->email;
         $this->password = '';
         $this->role = $user->role;
+        $this->organisation_ids = $user->organisations()->pluck('organisations.id')->all();
         $this->dispatch('open-modal', 'user-form');
     }
 
@@ -51,7 +56,12 @@ new #[Layout('layouts.app')] class extends Component
             'email' => 'required|email|max:255|unique:users,email,'.$this->editingId,
             'password' => ($this->editingId ? 'nullable' : 'required').'|string|min:8',
             'role' => 'required|in:'.implode(',', self::ROLES),
+            'organisation_ids' => 'array',
+            'organisation_ids.*' => 'exists:organisations,id',
         ]);
+
+        $organisationIds = $validated['organisation_ids'] ?? [];
+        unset($validated['organisation_ids']);
 
         if ($this->editingId && $validated['role'] !== 'admin') {
             $existing = User::findOrFail($this->editingId);
@@ -70,13 +80,14 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         $user = User::updateOrCreate(['id' => $this->editingId], $validated);
+        $user->organisations()->sync($organisationIds);
 
         if (! $this->editingId) {
             $user->forceFill(['email_verified_at' => now()])->save();
         }
 
         $this->dispatch('close-modal', 'user-form');
-        $this->reset(['editingId', 'name', 'email', 'password']);
+        $this->reset(['editingId', 'name', 'email', 'password', 'organisation_ids']);
     }
 
     public function delete(int $id): void
@@ -105,6 +116,7 @@ new #[Layout('layouts.app')] class extends Component
         return [
             'users' => User::orderBy('name')->paginate(15),
             'roles' => self::ROLES,
+            'organisations' => Organisation::orderBy('name')->get(),
         ];
     }
 }; ?>
@@ -211,6 +223,17 @@ new #[Layout('layouts.app')] class extends Component
                     @endforeach
                 </select>
                 <x-input-error :messages="$errors->get('role')" class="mt-2" />
+            </div>
+
+            <div class="mt-6">
+                <x-input-label for="organisation_ids" :value="__('Restrict to organisations')" />
+                <select wire:model="organisation_ids" id="organisation_ids" multiple size="4" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
+                    @foreach ($organisations as $organisation)
+                        <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
+                    @endforeach
+                </select>
+                <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ __('Leave empty for unrestricted access to all organisations.') }}</p>
+                <x-input-error :messages="$errors->get('organisation_ids')" class="mt-2" />
             </div>
 
             <div class="mt-6 flex justify-end space-x-3">

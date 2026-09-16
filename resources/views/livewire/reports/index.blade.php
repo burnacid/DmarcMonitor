@@ -52,6 +52,7 @@ new #[Layout('layouts.app')] class extends Component
     public function with(): array
     {
         $reports = AggregateReport::query()
+            ->visibleTo(auth()->user())
             ->with('domain')
             ->withCount('records')
             ->withSum('records as message_count', 'count')
@@ -81,7 +82,7 @@ new #[Layout('layouts.app')] class extends Component
 
         return [
             'reports' => $reports,
-            'domains' => Domain::orderBy('fqdn')->get(),
+            'domains' => Domain::visibleTo(auth()->user())->orderBy('fqdn')->get(),
         ];
     }
 }; ?>

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Database\Factories\ForensicReportFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -36,5 +37,10 @@ class ForensicReport extends Model
     public function microsoft365MailAccount()
     {
         return $this->belongsTo(Microsoft365MailAccount::class);
+    }
+
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        return $query->whereHas('domain', fn (Builder $q) => $q->visibleTo($user));
     }
 }

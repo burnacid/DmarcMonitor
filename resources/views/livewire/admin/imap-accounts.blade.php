@@ -52,7 +52,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function edit(int $id): void
     {
-        $account = ImapAccount::findOrFail($id);
+        $account = ImapAccount::visibleTo(auth()->user())->findOrFail($id);
         $this->editingId = $account->id;
         $this->label = $account->label;
         $this->host = $account->host;
@@ -73,6 +73,12 @@ new #[Layout('layouts.app')] class extends Component
 
     public function save(): void
     {
+        $user = auth()->user();
+
+        if ($this->editingId !== null) {
+            ImapAccount::visibleTo($user)->findOrFail($this->editingId);
+        }
+
         $validated = $this->validate([
             'label' => 'required|string|max:255',
             'host' => 'required|string|max:255',
@@ -88,7 +94,14 @@ new #[Layout('layouts.app')] class extends Component
             'delete_after_processing' => 'boolean',
             'is_active' => 'boolean',
             'domain_ids' => 'array',
-            'domain_ids.*' => 'exists:domains,id',
+            'domain_ids.*' => [
+                'exists:domains,id',
+                function (string $attribute, mixed $value, \Closure $fail) use ($user): void {
+                    if (! Domain::visibleTo($user)->whereKey($value)->exists()) {
+                        $fail(__('You do not have access to that domain.'));
+                    }
+                },
+            ],
         ]);
 
         $domainIds = $validated['domain_ids'] ?? [];
@@ -110,12 +123,12 @@ new #[Layout('layouts.app')] class extends Component
 
     public function delete(int $id): void
     {
-        ImapAccount::findOrFail($id)->delete();
+        ImapAccount::visibleTo(auth()->user())->findOrFail($id)->delete();
     }
 
     public function testConnection(int $id): void
     {
-        $account = ImapAccount::findOrFail($id);
+        $account = ImapAccount::visibleTo(auth()->user())->findOrFail($id);
         $this->testingId = $id;
 
         $result = app(ImapConnectionTester::class)->test($account);
@@ -134,7 +147,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function fetchNow(int $id): void
     {
-        $account = ImapAccount::findOrFail($id);
+        $account = ImapAccount::visibleTo(auth()->user())->findOrFail($id);
 
         $stats = app(ImapIngestionService::class)->pollAccount($account);
 
@@ -148,9 +161,11 @@ new #[Layout('layouts.app')] class extends Component
 
     public function with(): array
     {
+        $user = auth()->user();
+
         return [
-            'accounts' => ImapAccount::withCount('domains')->orderBy('label')->paginate(15),
-            'domains' => Domain::orderBy('fqdn')->get(),
+            'accounts' => ImapAccount::visibleTo($user)->withCount('domains')->orderBy('label')->paginate(15),
+            'domains' => Domain::visibleTo($user)->orderBy('fqdn')->get(),
         ];
     }
 }; ?>

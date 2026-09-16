@@ -20,9 +20,9 @@ class DmarcMetricsService
      *
      * @return Collection<int, array{date: string, total: int, dmarc_pass_pct: float, spf_pass_pct: float, dkim_pass_pct: float}>
      */
-    public function trend(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null): Collection
+    public function trend(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null): Collection
     {
-        $rows = $this->baseQuery($domainId, $from, $to, $organisationId)
+        $rows = $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds)
             ->selectRaw('DATE(aggregate_reports.date_range_begin) as day')
             ->selectRaw('SUM(aggregate_report_records.count) as total')
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.dkim_result = 'pass' OR aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as dmarc_pass")
@@ -46,9 +46,9 @@ class DmarcMetricsService
      *
      * @return Collection<int, array<string, mixed>>
      */
-    public function sourceBreakdown(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null): Collection
+    public function sourceBreakdown(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null): Collection
     {
-        $rows = $this->baseQuery($domainId, $from, $to, $organisationId)
+        $rows = $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds)
             ->selectRaw('aggregate_report_records.source_ip')
             ->selectRaw('aggregate_reports.domain_id')
             ->selectRaw('MAX(domains.fqdn) as domain')
@@ -64,7 +64,7 @@ class DmarcMetricsService
             ->orderByDesc('total')
             ->get();
 
-        $envelopeDomains = $this->envelopeDomainsBySourceIp($domainId, $from, $to, $organisationId);
+        $envelopeDomains = $this->envelopeDomainsBySourceIp($domainId, $from, $to, $organisationId, $allowedDomainIds);
 
         return $rows->map(fn ($row) => [
             'source_ip' => $row->source_ip,
@@ -93,9 +93,9 @@ class DmarcMetricsService
      *
      * @return Collection<string, Collection<int, string>>
      */
-    private function envelopeDomainsBySourceIp(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId): Collection
+    private function envelopeDomainsBySourceIp(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId, ?array $allowedDomainIds = null): Collection
     {
-        return $this->baseQuery($domainId, $from, $to, $organisationId)
+        return $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds)
             ->select('aggregate_reports.domain_id', 'aggregate_report_records.source_ip', 'aggregate_report_records.envelope_to')
             ->whereNotNull('aggregate_report_records.envelope_to')
             ->distinct()
@@ -111,9 +111,9 @@ class DmarcMetricsService
      *
      * @return Collection<int, array<string, mixed>>
      */
-    private function envelopeStatsBySourceIp(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId): Collection
+    private function envelopeStatsBySourceIp(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId, ?array $allowedDomainIds = null): Collection
     {
-        return $this->baseQuery($domainId, $from, $to, $organisationId)
+        return $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds)
             ->selectRaw('aggregate_report_records.source_ip')
             ->selectRaw('aggregate_reports.domain_id')
             ->selectRaw('aggregate_report_records.envelope_to')
@@ -145,10 +145,10 @@ class DmarcMetricsService
      *
      * @return Collection<int, array<string, mixed>>
      */
-    public function groupedSourceBreakdown(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null): Collection
+    public function groupedSourceBreakdown(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null): Collection
     {
-        $sources = $this->sourceBreakdown($domainId, $from, $to, $organisationId);
-        $envelopeStats = $this->envelopeStatsBySourceIp($domainId, $from, $to, $organisationId)
+        $sources = $this->sourceBreakdown($domainId, $from, $to, $organisationId, $allowedDomainIds);
+        $envelopeStats = $this->envelopeStatsBySourceIp($domainId, $from, $to, $organisationId, $allowedDomainIds)
             ->groupBy(fn ($row) => "{$row['domain_id']}|{$row['source_ip']}");
 
         return $sources
@@ -207,9 +207,9 @@ class DmarcMetricsService
      *
      * @return array{total: int, dmarc_pass_pct: float, spf_pass_pct: float, dkim_pass_pct: float, distinct_sources: int}
      */
-    public function summary(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null): array
+    public function summary(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null): array
     {
-        $row = $this->baseQuery($domainId, $from, $to, $organisationId)
+        $row = $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds)
             ->selectRaw('SUM(aggregate_report_records.count) as total')
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.dkim_result = 'pass' OR aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as dmarc_pass")
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as spf_pass")
@@ -258,7 +258,7 @@ class DmarcMetricsService
             ->pluck('aggregate_report_records.source_ip');
     }
 
-    private function baseQuery(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null)
+    private function baseQuery(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null)
     {
         $query = AggregateReportRecord::query()
             ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
@@ -271,6 +271,10 @@ class DmarcMetricsService
 
         if ($organisationId !== null) {
             $query->where('domains.organisation_id', $organisationId);
+        }
+
+        if ($allowedDomainIds !== null) {
+            $query->whereIn('aggregate_reports.domain_id', $allowedDomainIds);
         }
 
         return $query;
