@@ -30,6 +30,15 @@ new #[Layout('layouts.app')] class extends Component
     #[Url]
     public string $search = '';
 
+    #[Url]
+    public string $spf_result = '';
+
+    #[Url]
+    public string $dkim_result = '';
+
+    #[Url]
+    public string $disposition = '';
+
     public function updated(): void
     {
         $this->resetPage();
@@ -37,7 +46,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function clearFilters(): void
     {
-        $this->reset(['domain_id', 'ip', 'envelope', 'from', 'to', 'search']);
+        $this->reset(['domain_id', 'ip', 'envelope', 'from', 'to', 'search', 'spf_result', 'dkim_result', 'disposition']);
     }
 
     public function with(): array
@@ -61,6 +70,11 @@ new #[Layout('layouts.app')] class extends Component
             ->when($this->envelope, fn (Builder $query) => $query->whereHas('records', fn (Builder $q) => $q
                 ->where('envelope_from', 'like', "%{$this->envelope}%")
                 ->orWhere('envelope_to', 'like', "%{$this->envelope}%")
+            ))
+            ->when($this->spf_result || $this->dkim_result || $this->disposition, fn (Builder $query) => $query->whereHas('records', fn (Builder $q) => $q
+                ->when($this->spf_result, fn (Builder $q) => $q->where('spf_result', $this->spf_result))
+                ->when($this->dkim_result, fn (Builder $q) => $q->where('dkim_result', $this->dkim_result))
+                ->when($this->disposition, fn (Builder $q) => $q->where('disposition', $this->disposition))
             ))
             ->orderByDesc('date_range_begin')
             ->paginate(15);
@@ -117,7 +131,35 @@ new #[Layout('layouts.app')] class extends Component
                     <x-text-input wire:model.live.debounce.400ms="envelope" id="envelope" type="text" class="mt-1 block text-sm" />
                 </div>
 
-                @if ($domain_id || $ip || $envelope || $from || $to || $search)
+                <div>
+                    <x-input-label for="spf_result" :value="__('SPF')" />
+                    <select wire:model.live="spf_result" id="spf_result" class="mt-1 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
+                        <option value="">{{ __('Any') }}</option>
+                        <option value="pass">{{ __('Pass') }}</option>
+                        <option value="fail">{{ __('Fail') }}</option>
+                    </select>
+                </div>
+
+                <div>
+                    <x-input-label for="dkim_result" :value="__('DKIM')" />
+                    <select wire:model.live="dkim_result" id="dkim_result" class="mt-1 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
+                        <option value="">{{ __('Any') }}</option>
+                        <option value="pass">{{ __('Pass') }}</option>
+                        <option value="fail">{{ __('Fail') }}</option>
+                    </select>
+                </div>
+
+                <div>
+                    <x-input-label for="disposition" :value="__('Disposition')" />
+                    <select wire:model.live="disposition" id="disposition" class="mt-1 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
+                        <option value="">{{ __('Any') }}</option>
+                        <option value="none">{{ __('None') }}</option>
+                        <option value="quarantine">{{ __('Quarantine') }}</option>
+                        <option value="reject">{{ __('Reject') }}</option>
+                    </select>
+                </div>
+
+                @if ($domain_id || $ip || $envelope || $from || $to || $search || $spf_result || $dkim_result || $disposition)
                     <x-secondary-button wire:click="clearFilters">{{ __('Clear filters') }}</x-secondary-button>
                 @endif
             </div>

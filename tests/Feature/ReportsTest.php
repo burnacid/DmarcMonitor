@@ -102,6 +102,48 @@ class ReportsTest extends TestCase
             ->assertDontSee('Other Org');
     }
 
+    public function test_reports_index_filters_by_spf_dkim_result_and_disposition(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::factory()->create();
+
+        $matching = AggregateReport::factory()->create(['domain_id' => $domain->id, 'org_name' => 'Matching Org']);
+        AggregateReportRecord::factory()->create([
+            'aggregate_report_id' => $matching->id,
+            'spf_result' => 'fail',
+            'dkim_result' => 'fail',
+            'disposition' => 'quarantine',
+        ]);
+
+        $other = AggregateReport::factory()->create(['domain_id' => $domain->id, 'org_name' => 'Other Org']);
+        AggregateReportRecord::factory()->create([
+            'aggregate_report_id' => $other->id,
+            'spf_result' => 'pass',
+            'dkim_result' => 'pass',
+            'disposition' => 'none',
+        ]);
+
+        Volt::actingAs($user)->test('reports.index')
+            ->set('spf_result', 'fail')
+            ->assertSee('Matching Org')
+            ->assertDontSee('Other Org');
+
+        Volt::actingAs($user)->test('reports.index')
+            ->set('dkim_result', 'fail')
+            ->assertSee('Matching Org')
+            ->assertDontSee('Other Org');
+
+        Volt::actingAs($user)->test('reports.index')
+            ->set('disposition', 'quarantine')
+            ->assertSee('Matching Org')
+            ->assertDontSee('Other Org');
+
+        Volt::actingAs($user)->test('reports.index')
+            ->set('disposition', 'reject')
+            ->assertDontSee('Matching Org')
+            ->assertDontSee('Other Org');
+    }
+
     public function test_reports_show_displays_report_details_and_records(): void
     {
         $user = User::factory()->create();
@@ -122,6 +164,41 @@ class ReportsTest extends TestCase
             ->assertSee('example.com')
             ->assertSee('203.0.113.9')
             ->assertSee('recipient.example.net');
+    }
+
+    public function test_reports_show_filters_records_by_spf_dkim_result_and_disposition(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::factory()->create();
+        $report = AggregateReport::factory()->create(['domain_id' => $domain->id]);
+
+        AggregateReportRecord::factory()->create([
+            'aggregate_report_id' => $report->id,
+            'source_ip' => '203.0.113.9',
+            'spf_result' => 'fail',
+            'dkim_result' => 'fail',
+            'disposition' => 'reject',
+        ]);
+        AggregateReportRecord::factory()->create([
+            'aggregate_report_id' => $report->id,
+            'source_ip' => '198.51.100.1',
+            'spf_result' => 'pass',
+            'dkim_result' => 'pass',
+            'disposition' => 'none',
+        ]);
+
+        $component = Volt::actingAs($user)->test('reports.show', ['report' => $report]);
+
+        $component->assertSee('203.0.113.9')->assertSee('198.51.100.1');
+
+        $component->set('spf_result', 'fail')
+            ->assertSee('203.0.113.9')
+            ->assertDontSee('198.51.100.1');
+
+        $component->set('spf_result', '')
+            ->set('disposition', 'reject')
+            ->assertSee('203.0.113.9')
+            ->assertDontSee('198.51.100.1');
     }
 
     public function test_raw_xml_can_be_downloaded(): void
