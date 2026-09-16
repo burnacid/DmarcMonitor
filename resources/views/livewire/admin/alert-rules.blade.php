@@ -34,6 +34,12 @@ new #[Layout('layouts.app')] class extends Component
         $this->lookback_window = '24h';
         $this->channels = ['email'];
         $this->is_active = true;
+
+        $scopedIds = auth()->user()->scopedOrganisationIds();
+        if ($scopedIds !== null && count($scopedIds) === 1) {
+            $this->organisation_id = $scopedIds[0];
+        }
+
         $this->dispatch('open-modal', 'alert-rule-form');
     }
 
@@ -55,6 +61,7 @@ new #[Layout('layouts.app')] class extends Component
     public function save(): void
     {
         $user = auth()->user();
+        $scopedToOrg = $user->hasOrganisationScope();
 
         if ($this->editingId !== null) {
             AlertRule::visibleTo($user)->findOrFail($this->editingId);
@@ -62,7 +69,7 @@ new #[Layout('layouts.app')] class extends Component
 
         $validated = $this->validate([
             'organisation_id' => [
-                'nullable',
+                ($scopedToOrg && $this->type !== 'new_domain_discovered') ? 'required' : 'nullable',
                 'exists:organisations,id',
                 function (string $attribute, mixed $value, \Closure $fail) use ($user): void {
                     if ($value !== null && ! Organisation::visibleTo($user)->whereKey($value)->exists()) {
@@ -70,7 +77,15 @@ new #[Layout('layouts.app')] class extends Component
                     }
                 },
             ],
-            'type' => 'required|in:'.implode(',', self::TYPES),
+            'type' => [
+                'required',
+                'in:'.implode(',', self::TYPES),
+                function (string $attribute, mixed $value, \Closure $fail) use ($scopedToOrg): void {
+                    if ($value === 'new_domain_discovered' && $scopedToOrg) {
+                        $fail(__('You do not have access to create this rule type.'));
+                    }
+                },
+            ],
             'threshold_percent' => 'nullable|numeric|min:0|max:100',
             'lookback_window' => ['required', 'regex:/^\d+[hd]$/'],
             'channels' => 'required|array|min:1',
@@ -135,6 +150,7 @@ new #[Layout('layouts.app')] class extends Component
         return [
             'rules' => AlertRule::visibleTo($user)->with('organisation')->orderBy('type')->paginate(15),
             'organisations' => Organisation::visibleTo($user)->orderBy('name')->get(),
+            'organisationScoped' => $user->hasOrganisationScope(),
         ];
     }
 }; ?>
@@ -212,7 +228,9 @@ new #[Layout('layouts.app')] class extends Component
                         <option value="spf_fail_spike">{{ __('SPF fail spike') }}</option>
                         <option value="dkim_fail_spike">{{ __('DKIM fail spike') }}</option>
                         <option value="new_source_detected">{{ __('New sending source detected') }}</option>
-                        <option value="new_domain_discovered">{{ __('New domain discovered') }}</option>
+                        @unless ($organisationScoped)
+                            <option value="new_domain_discovered">{{ __('New domain discovered') }}</option>
+                        @endunless
                     </select>
                     <x-input-error :messages="$errors->get('type')" class="mt-2" />
                 </div>
@@ -221,7 +239,11 @@ new #[Layout('layouts.app')] class extends Component
                     <div>
                         <x-input-label for="organisation_id" :value="__('Organisation')" />
                         <select wire:model="organisation_id" id="organisation_id" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
-                            <option value="">{{ __('— All organisations —') }}</option>
+                            @if ($organisationScoped)
+                                <option value="" disabled>{{ __('— Select organisation —') }}</option>
+                            @else
+                                <option value="">{{ __('— All organisations —') }}</option>
+                            @endif
                             @foreach ($organisations as $organisation)
                                 <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
                             @endforeach

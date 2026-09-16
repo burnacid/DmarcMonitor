@@ -30,6 +30,12 @@ new #[Layout('layouts.app')] class extends Component
     {
         $this->reset(['editingId', 'fqdn', 'organisation_id', 'notes']);
         $this->is_active = true;
+
+        $scopedIds = auth()->user()->scopedOrganisationIds();
+        if ($scopedIds !== null && count($scopedIds) === 1) {
+            $this->organisation_id = $scopedIds[0];
+        }
+
         $this->dispatch('open-modal', 'domain-form');
     }
 
@@ -52,13 +58,15 @@ new #[Layout('layouts.app')] class extends Component
             abort_unless(auth()->user()->canAccessOrganisation($existing->organisation_id), 404);
         }
 
+        $user = auth()->user();
+
         $validated = $this->validate([
             'fqdn' => 'required|string|max:255|unique:domains,fqdn,'.$this->editingId,
             'organisation_id' => [
-                'nullable',
+                $user->hasOrganisationScope() ? 'required' : 'nullable',
                 'exists:organisations,id',
-                function (string $attribute, mixed $value, \Closure $fail): void {
-                    if (! auth()->user()->canAccessOrganisation($value)) {
+                function (string $attribute, mixed $value, \Closure $fail) use ($user): void {
+                    if (! $user->canAccessOrganisation($value)) {
                         $fail(__('You do not have access to that organisation.'));
                     }
                 },
@@ -96,6 +104,7 @@ new #[Layout('layouts.app')] class extends Component
         return [
             'domains' => Domain::visibleTo($user)->with('organisation')->orderBy('fqdn')->paginate(15),
             'organisations' => Organisation::visibleTo($user)->orderBy('name')->get(),
+            'organisationScoped' => $user->hasOrganisationScope(),
         ];
     }
 
@@ -312,7 +321,11 @@ new #[Layout('layouts.app')] class extends Component
             <div class="mt-6">
                 <x-input-label for="organisation_id" :value="__('Organisation')" />
                 <select wire:model="organisation_id" id="organisation_id" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
-                    <option value="">{{ __('— Unassigned —') }}</option>
+                    @if ($organisationScoped)
+                        <option value="" disabled>{{ __('— Select organisation —') }}</option>
+                    @else
+                        <option value="">{{ __('— Unassigned —') }}</option>
+                    @endif
                     @foreach ($organisations as $organisation)
                         <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
                     @endforeach

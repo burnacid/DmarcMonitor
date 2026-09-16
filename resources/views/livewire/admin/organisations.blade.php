@@ -16,6 +16,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function create(): void
     {
+        abort_if(auth()->user()->hasOrganisationScope(), 403);
+
         $this->reset(['editingId', 'name', 'notes']);
         $this->dispatch('open-modal', 'organisation-form');
     }
@@ -33,7 +35,11 @@ new #[Layout('layouts.app')] class extends Component
 
     public function save(): void
     {
-        abort_unless(auth()->user()->canAccessOrganisation($this->editingId), 404);
+        if ($this->editingId === null) {
+            abort_if(auth()->user()->hasOrganisationScope(), 403);
+        } else {
+            abort_unless(auth()->user()->canAccessOrganisation($this->editingId), 404);
+        }
 
         $validated = $this->validate([
             'name' => 'required|string|max:255',
@@ -57,6 +63,7 @@ new #[Layout('layouts.app')] class extends Component
     {
         return [
             'organisations' => Organisation::visibleTo(auth()->user())->withCount('domains')->orderBy('name')->paginate(15),
+            'organisationScoped' => auth()->user()->hasOrganisationScope(),
         ];
     }
 }; ?>
@@ -68,9 +75,11 @@ new #[Layout('layouts.app')] class extends Component
 
     <div class="py-8">
         <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8">
-            <div class="flex justify-end mb-4">
-                <x-primary-button wire:click="create">{{ __('New Organisation') }}</x-primary-button>
-            </div>
+            @unless ($organisationScoped)
+                <div class="flex justify-end mb-4">
+                    <x-primary-button wire:click="create">{{ __('New Organisation') }}</x-primary-button>
+                </div>
+            @endunless
 
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 max-md:block">

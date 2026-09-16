@@ -24,11 +24,11 @@ new #[Layout('layouts.app')] class extends Component
                 <dl class="space-y-4">
                     <div>
                         <dt class="font-medium text-gray-900 dark:text-gray-100">{{ __('Admin') }}</dt>
-                        <dd class="mt-1">{{ __('Full access, including everything below plus Users management (this page group).') }}</dd>
+                        <dd class="mt-1">{{ __('Full access, including everything below plus Users management, IMAP Accounts, Microsoft 365 Mailboxes and the Microsoft 365 Sending Account.') }}</dd>
                     </div>
                     <div>
                         <dt class="font-medium text-gray-900 dark:text-gray-100">{{ __('Editor') }}</dt>
-                        <dd class="mt-1">{{ __('Can view everything a viewer can, plus manage Organisations, Domains, mail ingestion accounts, GeoIP settings and Alert Rules — everything short of user management.') }}</dd>
+                        <dd class="mt-1">{{ __('Can view everything a viewer can, plus manage Organisations, Domains, GeoIP settings and Alert Rules. Mail ingestion accounts and user management are admin-only.') }}</dd>
                     </div>
                     <div>
                         <dt class="font-medium text-gray-900 dark:text-gray-100">{{ __('Viewer') }}</dt>

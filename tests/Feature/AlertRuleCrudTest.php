@@ -121,6 +121,39 @@ class AlertRuleCrudTest extends TestCase
         $this->assertNull($rule->organisation_id);
     }
 
+    public function test_scoped_editor_cannot_leave_an_alert_rule_unassigned(): void
+    {
+        $org = Organisation::factory()->create();
+        $editor = User::factory()->editor()->create();
+        $editor->organisations()->attach($org->id);
+
+        Volt::actingAs($editor)->test('admin.alert-rules')
+            ->call('create')
+            ->set('organisation_id', null)
+            ->set('type', 'pass_rate_drop')
+            ->set('threshold_percent', 90)
+            ->set('channels', ['email'])
+            ->set('notify_emails', 'ops@example.com')
+            ->call('save')
+            ->assertHasErrors(['organisation_id']);
+    }
+
+    public function test_scoped_editor_cannot_create_a_new_domain_discovered_rule(): void
+    {
+        $org = Organisation::factory()->create();
+        $editor = User::factory()->editor()->create();
+        $editor->organisations()->attach($org->id);
+
+        Volt::actingAs($editor)->test('admin.alert-rules')
+            ->call('create')
+            ->set('organisation_id', $org->id)
+            ->set('type', 'new_domain_discovered')
+            ->set('channels', ['email'])
+            ->set('notify_emails', 'ops@example.com')
+            ->call('save')
+            ->assertHasErrors(['type']);
+    }
+
     public function test_authenticated_user_can_resolve_an_open_alert_event(): void
     {
         $user = User::factory()->create();
