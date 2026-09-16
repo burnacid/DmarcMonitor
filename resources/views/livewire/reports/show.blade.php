@@ -1,16 +1,42 @@
 <?php
 
 use App\Models\AggregateReport;
+use Illuminate\Support\Collection;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
     public AggregateReport $report;
 
+    #[Url]
+    public string $spf_result = '';
+
+    #[Url]
+    public string $dkim_result = '';
+
+    #[Url]
+    public string $disposition = '';
+
     public function mount(AggregateReport $report): void
     {
         $this->report = $report->load(['domain', 'records']);
+    }
+
+    public function clearFilters(): void
+    {
+        $this->reset(['spf_result', 'dkim_result', 'disposition']);
+    }
+
+    public function with(): array
+    {
+        return [
+            'filteredRecords' => $this->report->records
+                ->when($this->spf_result, fn (Collection $records) => $records->where('spf_result', $this->spf_result))
+                ->when($this->dkim_result, fn (Collection $records) => $records->where('dkim_result', $this->dkim_result))
+                ->when($this->disposition, fn (Collection $records) => $records->where('disposition', $this->disposition)),
+        ];
     }
 }; ?>
 
@@ -71,7 +97,43 @@ new #[Layout('layouts.app')] class extends Component
             </div>
 
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
-                <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 px-6 pt-4">{{ __('Records') }}</h3>
+                <div class="flex flex-wrap items-end justify-between gap-3 px-6 pt-4">
+                    <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Records') }}</h3>
+
+                    <div class="flex flex-wrap items-end gap-3">
+                        <div>
+                            <x-input-label for="spf_result" :value="__('SPF')" />
+                            <select wire:model.live="spf_result" id="spf_result" class="mt-1 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
+                                <option value="">{{ __('Any') }}</option>
+                                <option value="pass">{{ __('Pass') }}</option>
+                                <option value="fail">{{ __('Fail') }}</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <x-input-label for="dkim_result" :value="__('DKIM')" />
+                            <select wire:model.live="dkim_result" id="dkim_result" class="mt-1 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
+                                <option value="">{{ __('Any') }}</option>
+                                <option value="pass">{{ __('Pass') }}</option>
+                                <option value="fail">{{ __('Fail') }}</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <x-input-label for="disposition" :value="__('Disposition')" />
+                            <select wire:model.live="disposition" id="disposition" class="mt-1 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
+                                <option value="">{{ __('Any') }}</option>
+                                <option value="none">{{ __('None') }}</option>
+                                <option value="quarantine">{{ __('Quarantine') }}</option>
+                                <option value="reject">{{ __('Reject') }}</option>
+                            </select>
+                        </div>
+
+                        @if ($spf_result || $dkim_result || $disposition)
+                            <x-secondary-button wire:click="clearFilters">{{ __('Clear filters') }}</x-secondary-button>
+                        @endif
+                    </div>
+                </div>
                 <div class="md:overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 mt-2 max-md:block max-md:mt-4">
                         <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
@@ -87,7 +149,7 @@ new #[Layout('layouts.app')] class extends Component
                             </tr>
                         </thead>
                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:space-y-3 max-md:p-3">
-                            @forelse ($report->records as $record)
+                            @forelse ($filteredRecords as $record)
                                 <tr wire:key="record-{{ $record->id }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
                                     <td data-label="{{ __('Source IP') }}" class="px-6 py-3 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-start max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:font-sans max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400 max-md:before:shrink-0">
                                         <span class="max-md:text-right">
@@ -122,7 +184,9 @@ new #[Layout('layouts.app')] class extends Component
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="8" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No records in this report.') }}</td>
+                                    <td colspan="8" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">
+                                        {{ $spf_result || $dkim_result || $disposition ? __('No records match these filters.') : __('No records in this report.') }}
+                                    </td>
                                 </tr>
                             @endforelse
                         </tbody>
