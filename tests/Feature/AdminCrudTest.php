@@ -21,6 +21,24 @@ class AdminCrudTest extends TestCase
         $this->get('/admin/imap-accounts')->assertRedirect('/login');
     }
 
+    public function test_editors_cannot_reach_mail_ingestion_account_pages(): void
+    {
+        $editor = User::factory()->editor()->create();
+
+        $this->actingAs($editor)->get('/admin/imap-accounts')->assertForbidden();
+        $this->actingAs($editor)->get('/admin/microsoft365-mailboxes')->assertForbidden();
+        $this->actingAs($editor)->get('/admin/microsoft365-sending')->assertForbidden();
+    }
+
+    public function test_admins_can_reach_mail_ingestion_account_pages(): void
+    {
+        $admin = User::factory()->create();
+
+        $this->actingAs($admin)->get('/admin/imap-accounts')->assertOk();
+        $this->actingAs($admin)->get('/admin/microsoft365-mailboxes')->assertOk();
+        $this->actingAs($admin)->get('/admin/microsoft365-sending')->assertOk();
+    }
+
     public function test_authenticated_user_can_create_an_organisation(): void
     {
         $user = User::factory()->create();

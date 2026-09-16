@@ -123,15 +123,6 @@ new class extends Component
 
                                 <div class="my-1 border-t border-gray-200 dark:border-gray-600"></div>
 
-                                <x-dropdown-link :href="route('admin.imap-accounts')" wire:navigate>
-                                    {{ __('IMAP Accounts') }}
-                                </x-dropdown-link>
-                                <x-dropdown-link :href="route('admin.microsoft365-mail-accounts')" wire:navigate>
-                                    {{ __('Microsoft 365 Mailboxes') }}
-                                </x-dropdown-link>
-                                <x-dropdown-link :href="route('admin.microsoft365-send-account')" wire:navigate>
-                                    {{ __('Microsoft 365 Sending Account') }}
-                                </x-dropdown-link>
                                 <x-dropdown-link :href="route('admin.geoip')" wire:navigate>
                                     {{ __('GeoIP') }}
                                 </x-dropdown-link>
@@ -143,6 +134,18 @@ new class extends Component
                                 </x-dropdown-link>
                             @endif
                             @if (auth()->user()->isAdmin())
+                                <div class="my-1 border-t border-gray-200 dark:border-gray-600"></div>
+
+                                <x-dropdown-link :href="route('admin.imap-accounts')" wire:navigate>
+                                    {{ __('IMAP Accounts') }}
+                                </x-dropdown-link>
+                                <x-dropdown-link :href="route('admin.microsoft365-mail-accounts')" wire:navigate>
+                                    {{ __('Microsoft 365 Mailboxes') }}
+                                </x-dropdown-link>
+                                <x-dropdown-link :href="route('admin.microsoft365-send-account')" wire:navigate>
+                                    {{ __('Microsoft 365 Sending Account') }}
+                                </x-dropdown-link>
+
                                 <div class="my-1 border-t border-gray-200 dark:border-gray-600"></div>
 
                                 <x-dropdown-link :href="route('admin.users')" wire:navigate>
@@ -269,15 +272,6 @@ new class extends Component
 
                             <div class="my-1 border-t border-gray-200 dark:border-gray-700"></div>
 
-                            <x-responsive-nav-link :href="route('admin.imap-accounts')" :active="request()->routeIs('admin.imap-accounts')" wire:navigate class="ps-6">
-                                {{ __('IMAP Accounts') }}
-                            </x-responsive-nav-link>
-                            <x-responsive-nav-link :href="route('admin.microsoft365-mail-accounts')" :active="request()->routeIs('admin.microsoft365-mail-accounts')" wire:navigate class="ps-6">
-                                {{ __('Microsoft 365 Mailboxes') }}
-                            </x-responsive-nav-link>
-                            <x-responsive-nav-link :href="route('admin.microsoft365-send-account')" :active="request()->routeIs('admin.microsoft365-send-account')" wire:navigate class="ps-6">
-                                {{ __('Microsoft 365 Sending Account') }}
-                            </x-responsive-nav-link>
                             <x-responsive-nav-link :href="route('admin.geoip')" :active="request()->routeIs('admin.geoip')" wire:navigate class="ps-6">
                                 {{ __('GeoIP') }}
                             </x-responsive-nav-link>
@@ -289,6 +283,18 @@ new class extends Component
                             </x-responsive-nav-link>
                         @endif
                         @if (auth()->user()->isAdmin())
+                            <div class="my-1 border-t border-gray-200 dark:border-gray-700"></div>
+
+                            <x-responsive-nav-link :href="route('admin.imap-accounts')" :active="request()->routeIs('admin.imap-accounts')" wire:navigate class="ps-6">
+                                {{ __('IMAP Accounts') }}
+                            </x-responsive-nav-link>
+                            <x-responsive-nav-link :href="route('admin.microsoft365-mail-accounts')" :active="request()->routeIs('admin.microsoft365-mail-accounts')" wire:navigate class="ps-6">
+                                {{ __('Microsoft 365 Mailboxes') }}
+                            </x-responsive-nav-link>
+                            <x-responsive-nav-link :href="route('admin.microsoft365-send-account')" :active="request()->routeIs('admin.microsoft365-send-account')" wire:navigate class="ps-6">
+                                {{ __('Microsoft 365 Sending Account') }}
+                            </x-responsive-nav-link>
+
                             <div class="my-1 border-t border-gray-200 dark:border-gray-700"></div>
 
                             <x-responsive-nav-link :href="route('admin.users')" :active="request()->routeIs('admin.users')" wire:navigate class="ps-6">

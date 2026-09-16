@@ -84,6 +84,64 @@ class OrganisationScopingTest extends TestCase
         $this->assertNull(Domain::firstWhere('fqdn', 'new.example.com'));
     }
 
+    public function test_scoped_editor_cannot_leave_a_domain_unassigned(): void
+    {
+        $orgA = Organisation::factory()->create(['name' => 'Org A']);
+
+        $editor = User::factory()->editor()->create();
+        $editor->organisations()->attach($orgA->id);
+
+        Volt::actingAs($editor)->test('admin.domains')
+            ->call('create')
+            ->set('fqdn', 'new.example.com')
+            ->set('organisation_id', null)
+            ->call('save')
+            ->assertHasErrors(['organisation_id']);
+
+        $this->assertNull(Domain::firstWhere('fqdn', 'new.example.com'));
+    }
+
+    public function test_scoped_editor_can_create_a_domain_for_their_own_organisation(): void
+    {
+        $orgA = Organisation::factory()->create(['name' => 'Org A']);
+
+        $editor = User::factory()->editor()->create();
+        $editor->organisations()->attach($orgA->id);
+
+        Volt::actingAs($editor)->test('admin.domains')
+            ->call('create')
+            ->set('fqdn', 'new.example.com')
+            ->set('organisation_id', $orgA->id)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('domains', ['fqdn' => 'new.example.com', 'organisation_id' => $orgA->id]);
+    }
+
+    public function test_scoped_editor_cannot_create_an_organisation(): void
+    {
+        $orgA = Organisation::factory()->create(['name' => 'Org A']);
+
+        $editor = User::factory()->editor()->create();
+        $editor->organisations()->attach($orgA->id);
+
+        Volt::actingAs($editor)->test('admin.organisations')
+            ->call('create')
+            ->assertStatus(403);
+    }
+
+    public function test_unscoped_editor_can_create_an_organisation(): void
+    {
+        $editor = User::factory()->editor()->create();
+
+        Volt::actingAs($editor)->test('admin.organisations')
+            ->call('create')
+            ->set('name', 'New Org')
+            ->call('save');
+
+        $this->assertDatabaseHas('organisations', ['name' => 'New Org']);
+    }
+
     public function test_admin_can_assign_and_unassign_organisations_to_a_user(): void
     {
         $admin = User::factory()->create();
