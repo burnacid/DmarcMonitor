@@ -73,6 +73,23 @@ new class extends Component
 
             <!-- Settings Dropdown -->
             <div class="hidden sm:flex sm:items-center sm:ms-6 space-x-2">
+                <a
+                    href="{{ route('help.index') }}"
+                    wire:navigate
+                    title="{{ __('Help') }}"
+                    aria-label="{{ __('Help') }}"
+                    @class([
+                        'p-2 rounded-md focus:outline-none transition ease-in-out duration-150',
+                        'text-gray-700 dark:text-gray-100 bg-gray-100 dark:bg-gray-700' => request()->routeIs('help.*'),
+                        'text-gray-400 dark:text-gray-300 hover:text-gray-500 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700' => ! request()->routeIs('help.*'),
+                    ])
+                >
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M12 17.25h.008v.008H12v-.008z" />
+                        <circle cx="12" cy="12" r="9" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                </a>
+
                 @php
                     $settingsActive = request()->routeIs(['admin.organisations', 'admin.domains', 'admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.geoip', 'admin.alert-rules', 'admin.users']);
                 @endphp
@@ -221,6 +238,9 @@ new class extends Component
                     @endif
                 </x-responsive-nav-link>
             @endif
+            <x-responsive-nav-link :href="route('help.index')" :active="request()->routeIs('help.*')" wire:navigate>
+                {{ __('Help') }}
+            </x-responsive-nav-link>
             @php
                 $settingsActive = request()->routeIs(['admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.geoip', 'admin.alert-rules', 'admin.users']);
             @endphp
