@@ -100,20 +100,30 @@ new #[Layout('layouts.app')] class extends Component
         };
     }
 
-    public function dkimLastSeenAt(Domain $domain): ?Carbon
+    /**
+     * @return array<int, array{selector: string, pass_count: int, fail_count: int, last_seen: ?Carbon}>
+     */
+    public function dkimSelectorsSeen(Domain $domain): array
     {
-        if (! $domain->dkim_selector) {
-            return null;
-        }
-
-        $lastSeen = AggregateReportRecord::query()
+        $rows = AggregateReportRecord::query()
             ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
             ->where('aggregate_reports.domain_id', $domain->id)
             ->where('aggregate_report_records.dkim_domain', $domain->fqdn)
-            ->where('aggregate_report_records.dkim_selector', $domain->dkim_selector)
-            ->max('aggregate_reports.date_range_end');
+            ->whereNotNull('aggregate_report_records.dkim_selector')
+            ->selectRaw('aggregate_report_records.dkim_selector as selector')
+            ->selectRaw("SUM(CASE WHEN aggregate_report_records.dkim_auth_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as pass_count")
+            ->selectRaw("SUM(CASE WHEN aggregate_report_records.dkim_auth_result != 'pass' THEN aggregate_report_records.count ELSE 0 END) as fail_count")
+            ->selectRaw('MAX(aggregate_reports.date_range_end) as last_seen')
+            ->groupBy('aggregate_report_records.dkim_selector')
+            ->orderByDesc('last_seen')
+            ->get();
 
-        return $lastSeen ? Carbon::parse($lastSeen) : null;
+        return $rows->map(fn ($row) => [
+            'selector' => $row->selector,
+            'pass_count' => (int) $row->pass_count,
+            'fail_count' => (int) $row->fail_count,
+            'last_seen' => $row->last_seen ? Carbon::parse($row->last_seen) : null,
+        ])->all();
     }
 }; ?>
 
@@ -219,14 +229,29 @@ new #[Layout('layouts.app')] class extends Component
                                                 <h4 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('DKIM') }}</h4>
                                                 <span class="mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $this->authStatusBadgeClass($domain->dkim_status) }}">{{ $this->authStatusLabel($domain->dkim_status) }}</span>
                                                 @if ($domain->dkim_selector)
-                                                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ __('Selector: :selector', ['selector' => $domain->dkim_selector]) }}</p>
+                                                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ __('Configured selector: :selector', ['selector' => $domain->dkim_selector]) }}</p>
                                                 @endif
                                                 <p class="mt-1 text-xs font-mono break-all text-gray-600 dark:text-gray-300">{{ $domain->dkim_record ?: __('No record found.') }}</p>
-                                                @php $dkimLastSeen = $this->dkimLastSeenAt($domain); @endphp
-                                                <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                                                    {{ __('Last seen:') }}
-                                                    {{ $dkimLastSeen ? $dkimLastSeen->diffForHumans() : __('Never seen in aggregate reports') }}
-                                                </p>
+
+                                                @php $dkimSelectorsSeen = $this->dkimSelectorsSeen($domain); @endphp
+                                                <h5 class="mt-3 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('Selectors seen in reports') }}</h5>
+                                                @if (empty($dkimSelectorsSeen))
+                                                    <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ __('Never seen in aggregate reports') }}</p>
+                                                @else
+                                                    <ul class="mt-1 space-y-1">
+                                                        @foreach ($dkimSelectorsSeen as $seenSelector)
+                                                            <li class="text-xs text-gray-600 dark:text-gray-300 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                                                <span class="font-mono">{{ $seenSelector['selector'] }}</span>
+                                                                @if ($domain->dkim_selector && $seenSelector['selector'] === $domain->dkim_selector)
+                                                                    <span class="inline-flex items-center rounded-full bg-indigo-100 dark:bg-indigo-900 px-1.5 py-0.5 text-[10px] font-medium text-indigo-800 dark:text-indigo-200">{{ __('Configured') }}</span>
+                                                                @endif
+                                                                <span class="text-gray-400 dark:text-gray-500">{{ __(':pass pass / :fail fail', ['pass' => $seenSelector['pass_count'], 'fail' => $seenSelector['fail_count']]) }}</span>
+                                                                <span class="text-gray-400 dark:text-gray-500">·</span>
+                                                                <span class="text-gray-400 dark:text-gray-500">{{ $seenSelector['last_seen']?->diffForHumans() }}</span>
+                                                            </li>
+                                                        @endforeach
+                                                    </ul>
+                                                @endif
                                             </div>
                                         </div>
                                     </td>

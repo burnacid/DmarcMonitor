@@ -5,6 +5,7 @@ namespace App\Services\Imap;
 use App\Models\ImapAccount;
 use App\Services\Dmarc\AggregateReportParser;
 use App\Services\Dmarc\ForensicReportParser;
+use App\Support\DmarcAttachmentSniffer;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -15,11 +16,6 @@ use Webklex\PHPIMAP\Message;
 
 class ImapIngestionService
 {
-    /**
-     * Filename suffixes that identify a DMARC aggregate report attachment.
-     */
-    private const array AGGREGATE_REPORT_SUFFIXES = ['.xml', '.xml.gz', '.xml.zip', '.zip', '.gz'];
-
     /**
      * How many messages to pull (and hold in memory) from the mailbox per IMAP round-trip.
      */
@@ -203,7 +199,7 @@ class ImapIngestionService
 
     private function looksLikeAggregateReport(Attachment $attachment): bool
     {
-        return $this->isAggregateReportFilename((string) $attachment->name);
+        return DmarcAttachmentSniffer::isAggregateReportFilename((string) $attachment->name);
     }
 
     /**
@@ -226,19 +222,6 @@ class ImapIngestionService
         }
 
         return null;
-    }
-
-    private function isAggregateReportFilename(string $name): bool
-    {
-        $name = strtolower($name);
-
-        foreach (self::AGGREGATE_REPORT_SUFFIXES as $suffix) {
-            if (str_ends_with($name, $suffix)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private function processAttachment(Attachment $attachment, ImapAccount $account, Message $message): bool

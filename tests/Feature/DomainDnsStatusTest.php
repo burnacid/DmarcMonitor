@@ -92,4 +92,34 @@ class DomainDnsStatusTest extends TestCase
         $component->call('toggleExpand', $domain->id)
             ->assertDontSee('v=DKIM1; k=rsa; p=abc123');
     }
+
+    public function test_expanded_domain_lists_all_dkim_selectors_seen_in_aggregate_reports(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::factory()->create([
+            'fqdn' => 'multi-selector.example.com',
+            'dkim_status' => 'valid',
+            'dkim_selector' => 'current-selector',
+        ]);
+
+        $report = AggregateReport::factory()->create(['domain_id' => $domain->id]);
+        AggregateReportRecord::factory()->create([
+            'aggregate_report_id' => $report->id,
+            'dkim_domain' => $domain->fqdn,
+            'dkim_selector' => 'current-selector',
+            'dkim_auth_result' => 'pass',
+        ]);
+        AggregateReportRecord::factory()->create([
+            'aggregate_report_id' => $report->id,
+            'dkim_domain' => $domain->fqdn,
+            'dkim_selector' => 'old-selector',
+            'dkim_auth_result' => 'fail',
+        ]);
+
+        Volt::actingAs($user)->test('admin.domains')
+            ->call('toggleExpand', $domain->id)
+            ->assertSee('current-selector')
+            ->assertSee('old-selector')
+            ->assertSee('Configured');
+    }
 }

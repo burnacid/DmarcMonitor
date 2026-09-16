@@ -9,6 +9,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('imap:poll')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('graph-mail:poll')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('dmarc:evaluate-alerts')->everyFifteenMinutes()->withoutOverlapping();
 
 // MaxMind publishes new GeoLite2 builds roughly twice a week; checking weekly

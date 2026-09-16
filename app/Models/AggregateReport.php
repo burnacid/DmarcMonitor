@@ -2,16 +2,17 @@
 
 namespace App\Models;
 
+use Database\Factories\AggregateReportFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class AggregateReport extends Model
 {
-    /** @use HasFactory<\Database\Factories\AggregateReportFactory> */
+    /** @use HasFactory<AggregateReportFactory> */
     use HasFactory;
 
     protected $fillable = [
-        'domain_id', 'imap_account_id', 'report_id', 'org_name', 'email',
+        'domain_id', 'imap_account_id', 'microsoft365_mail_account_id', 'report_id', 'org_name', 'email',
         'date_range_begin', 'date_range_end', 'policy_domain', 'policy_adkim',
         'policy_aspf', 'policy_p', 'policy_sp', 'policy_pct', 'raw_xml_path',
         'message_uid', 'processed_at',
@@ -31,6 +32,11 @@ class AggregateReport extends Model
     public function imapAccount()
     {
         return $this->belongsTo(ImapAccount::class);
+    }
+
+    public function microsoft365MailAccount()
+    {
+        return $this->belongsTo(Microsoft365MailAccount::class);
     }
 
     public function records()

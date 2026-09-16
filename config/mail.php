@@ -79,6 +79,10 @@ return [
             'transport' => 'array',
         ],
 
+        'microsoft365' => [
+            'transport' => 'microsoft365',
+        ],
+
         'failover' => [
             'transport' => 'failover',
             'mailers' => [
