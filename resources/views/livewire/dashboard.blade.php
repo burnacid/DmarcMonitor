@@ -41,11 +41,18 @@ new #[Layout('layouts.app')] class extends Component
         return $this->window();
     }
 
+    private function allowedDomainIds(): ?array
+    {
+        $user = auth()->user();
+
+        return $user->hasOrganisationScope() ? Domain::visibleTo($user)->pluck('id')->all() : null;
+    }
+
     private function trendData(): array
     {
         [$from, $to] = $this->window();
 
-        return app(DmarcMetricsService::class)->trend($this->domainId, $from, $to, $this->organisationId)->all();
+        return app(DmarcMetricsService::class)->trend($this->domainId, $from, $to, $this->organisationId, $this->allowedDomainIds())->all();
     }
 
     public function updatedOrganisationId(): void
@@ -92,22 +99,37 @@ new #[Layout('layouts.app')] class extends Component
 
     public function with(): array
     {
+        $user = auth()->user();
+
+        if ($this->organisationId !== null && ! $user->canAccessOrganisation($this->organisationId)) {
+            $this->organisationId = null;
+        }
+
+        if ($this->domainId !== null) {
+            $domain = Domain::find($this->domainId);
+
+            if (! $domain || ! $user->canAccessOrganisation($domain->organisation_id)) {
+                $this->domainId = null;
+            }
+        }
+
         $service = app(DmarcMetricsService::class);
+        $allowedDomainIds = $this->allowedDomainIds();
         [$from, $to] = $this->effectiveWindow();
 
-        $domains = Domain::orderBy('fqdn');
+        $domains = Domain::visibleTo($user)->orderBy('fqdn');
 
         if ($this->organisationId !== null) {
             $domains->where('organisation_id', $this->organisationId);
         }
 
         return [
-            'organisations' => Organisation::orderBy('name')->get(),
+            'organisations' => Organisation::visibleTo($user)->orderBy('name')->get(),
             'domains' => $domains->get(),
-            'summary' => $service->summary($this->domainId, $from, $to, $this->organisationId),
+            'summary' => $service->summary($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
             'trend' => $this->trendData(),
-            'sourceGroups' => $service->groupedSourceBreakdown($this->domainId, $from, $to, $this->organisationId)->take(25),
-            'hasAnyReports' => \App\Models\AggregateReport::query()->exists(),
+            'sourceGroups' => $service->groupedSourceBreakdown($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds)->take(25),
+            'hasAnyReports' => \App\Models\AggregateReport::visibleTo($user)->exists(),
             'windowFrom' => $from->toDateString(),
             'windowTo' => $to->toDateString(),
         ];

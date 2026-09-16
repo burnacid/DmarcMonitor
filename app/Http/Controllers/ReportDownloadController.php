@@ -17,6 +17,8 @@ class ReportDownloadController extends Controller
      */
     public function __invoke(AggregateReport $report): StreamedResponse
     {
+        abort_unless(request()->user()->canAccessOrganisation($report->domain?->organisation_id), 404);
+
         if (! $report->raw_xml_path || ! Storage::disk('local')->exists($report->raw_xml_path)) {
             abort(404);
         }

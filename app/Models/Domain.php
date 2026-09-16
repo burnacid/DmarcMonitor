@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Database\Factories\DomainFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -45,5 +46,16 @@ class Domain extends Model
     public function alertRules()
     {
         return $this->hasMany(AlertRule::class);
+    }
+
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        $organisationIds = $user->scopedOrganisationIds();
+
+        if ($organisationIds === null) {
+            return $query;
+        }
+
+        return $query->whereIn('organisation_id', $organisationIds);
     }
 }

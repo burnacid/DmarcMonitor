@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use Database\Factories\OrganisationFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Organisation extends Model
 {
-    /** @use HasFactory<\Database\Factories\OrganisationFactory> */
+    /** @use HasFactory<OrganisationFactory> */
     use HasFactory;
 
     protected $fillable = ['name', 'notes'];
@@ -15,5 +17,16 @@ class Organisation extends Model
     public function domains()
     {
         return $this->hasMany(Domain::class);
+    }
+
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        $organisationIds = $user->scopedOrganisationIds();
+
+        if ($organisationIds === null) {
+            return $query;
+        }
+
+        return $query->whereIn('id', $organisationIds);
     }
 }

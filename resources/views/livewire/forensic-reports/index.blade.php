@@ -40,6 +40,7 @@ new #[Layout('layouts.app')] class extends Component
     public function with(): array
     {
         $reports = ForensicReport::query()
+            ->visibleTo(auth()->user())
             ->with('domain')
             ->when($this->domain_id, fn (Builder $query) => $query->where('domain_id', $this->domain_id))
             ->when($this->ip, fn (Builder $query) => $query->where('source_ip', $this->ip))
@@ -54,7 +55,7 @@ new #[Layout('layouts.app')] class extends Component
 
         return [
             'reports' => $reports,
-            'domains' => Domain::orderBy('fqdn')->get(),
+            'domains' => Domain::visibleTo(auth()->user())->orderBy('fqdn')->get(),
         ];
     }
 }; ?>

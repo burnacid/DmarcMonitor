@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use Database\Factories\ImapAccountFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class ImapAccount extends Model
 {
-    /** @use HasFactory<\Database\Factories\ImapAccountFactory> */
+    /** @use HasFactory<ImapAccountFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -31,5 +33,14 @@ class ImapAccount extends Model
     public function domains()
     {
         return $this->belongsToMany(Domain::class, 'imap_account_domain');
+    }
+
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if (! $user->hasOrganisationScope()) {
+            return $query;
+        }
+
+        return $query->whereHas('domains', fn (Builder $q) => $q->visibleTo($user));
     }
 }
