@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\ImapAccount;
 use App\Services\Imap\ImapIngestionService;
+use App\Support\AuditLogger;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -34,12 +35,31 @@ class PollImapAccounts extends Command
 
             $this->line("  fetched={$stats['fetched']} parsed={$stats['parsed']} failed={$stats['failed']}");
 
+            $lastError = $account->fresh()->last_error;
+
+            if ($stats['fetched'] > 0 || $stats['failed'] > 0) {
+                AuditLogger::record(
+                    action: 'ingestion.completed',
+                    description: "IMAP poll [{$account->label}]: {$stats['parsed']} parsed, {$stats['failed']} failed, out of {$stats['fetched']} fetched",
+                    subject: $account,
+                    userId: null,
+                    context: $stats,
+                );
+            } elseif ($lastError) {
+                AuditLogger::record(
+                    action: 'ingestion.failed',
+                    description: "IMAP poll [{$account->label}] failed: {$lastError}",
+                    subject: $account,
+                    userId: null,
+                );
+            }
+
             if ($stats['more_remaining']) {
                 $this->comment('  time budget reached, more messages remain — will continue on the next poll');
             }
 
-            if ($account->fresh()->last_error) {
-                $this->error("  error: {$account->fresh()->last_error}");
+            if ($lastError) {
+                $this->error("  error: {$lastError}");
             }
         }
 

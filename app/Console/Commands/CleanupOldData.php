@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\AggregateReport;
 use App\Models\AlertEvent;
+use App\Models\AuditLog;
 use App\Models\Domain;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -51,6 +52,12 @@ class CleanupOldData extends Command
 
         $emlCount = $this->pruneOldEmlFiles($cutoff);
         $this->info("Deleted {$emlCount} processed/failed .eml file(s) older than {$days} days.");
+
+        $auditLogs = AuditLog::where('created_at', '<', $cutoff);
+        $auditLogCount = $auditLogs->count();
+        $auditLogs->delete();
+
+        $this->info("Deleted {$auditLogCount} audit log entries older than {$days} days.");
 
         return self::SUCCESS;
     }

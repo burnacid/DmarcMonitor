@@ -4,6 +4,7 @@ use App\Models\Domain;
 use App\Models\ImapAccount;
 use App\Services\Imap\ImapConnectionTester;
 use App\Services\Imap\ImapIngestionService;
+use App\Support\AuditLogger;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -111,8 +112,16 @@ new #[Layout('layouts.app')] class extends Component
             unset($validated['password']);
         }
 
+        $wasNew = $this->editingId === null;
         $account = ImapAccount::updateOrCreate(['id' => $this->editingId], $validated);
         $account->domains()->sync($domainIds);
+
+        AuditLogger::record(
+            action: $wasNew ? 'imap_account.created' : 'imap_account.updated',
+            description: ($wasNew ? 'Created IMAP account ' : 'Updated IMAP account ').$account->label,
+            subject: $account,
+            context: $wasNew ? null : AuditLogger::describeChanges($account),
+        );
 
         $this->dispatch('close-modal', 'imap-account-form');
         $this->reset([
@@ -123,7 +132,15 @@ new #[Layout('layouts.app')] class extends Component
 
     public function delete(int $id): void
     {
-        ImapAccount::visibleTo(auth()->user())->findOrFail($id)->delete();
+        $account = ImapAccount::visibleTo(auth()->user())->findOrFail($id);
+
+        AuditLogger::record(
+            action: 'imap_account.deleted',
+            description: 'Deleted IMAP account '.$account->label,
+            context: ['label' => $account->label],
+        );
+
+        $account->delete();
     }
 
     public function testConnection(int $id): void
@@ -150,6 +167,15 @@ new #[Layout('layouts.app')] class extends Component
         $account = ImapAccount::visibleTo(auth()->user())->findOrFail($id);
 
         $stats = app(ImapIngestionService::class)->pollAccount($account);
+
+        if ($stats['fetched'] > 0 || $stats['failed'] > 0) {
+            AuditLogger::record(
+                action: 'ingestion.completed',
+                description: "IMAP poll [{$account->label}]: {$stats['parsed']} parsed, {$stats['failed']} failed, out of {$stats['fetched']} fetched",
+                subject: $account,
+                context: $stats,
+            );
+        }
 
         $this->testResultIsError = $stats['failed'] > 0;
         $this->testResult = __(':parsed report(s) parsed, :failed failed, out of :fetched message(s) fetched.', $stats);

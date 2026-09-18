@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\AlertEvent;
+use App\Support\AuditLogger;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -13,7 +14,15 @@ new #[Layout('layouts.app')] class extends Component
 
     public function resolve(int $id): void
     {
-        AlertEvent::visibleTo(auth()->user())->findOrFail($id)->update(['resolved_at' => now()]);
+        $event = AlertEvent::visibleTo(auth()->user())->findOrFail($id);
+        $event->update(['resolved_at' => now()]);
+
+        AuditLogger::record(
+            action: 'alert_event.resolved',
+            description: 'Resolved alert event #'.$event->id,
+            subject: $event,
+            organisationId: $event->domain?->organisation_id,
+        );
     }
 
     public function updatedStatus(): void

@@ -6,6 +6,7 @@ use App\Models\AggregateReport;
 use App\Models\AggregateReportRecord;
 use App\Models\AlertEvent;
 use App\Models\AlertRule;
+use App\Models\AuditLog;
 use App\Models\Domain;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -138,5 +139,21 @@ class CleanupOldDataTest extends TestCase
         $this->assertFileDoesNotExist($oldProcessed);
         $this->assertFileDoesNotExist($oldFailed);
         $this->assertFileExists($recentProcessed);
+    }
+
+    public function test_prunes_old_audit_log_entries_past_retention(): void
+    {
+        config(['dmarc.retention_days' => 400]);
+
+        $old = AuditLog::create(['action' => 'domain.created', 'description' => 'old entry']);
+        $old->forceFill(['created_at' => now()->subDays(401)])->saveQuietly();
+
+        $recent = AuditLog::create(['action' => 'domain.created', 'description' => 'recent entry']);
+        $recent->forceFill(['created_at' => now()->subDays(10)])->saveQuietly();
+
+        $this->artisan('dmarc:cleanup');
+
+        $this->assertDatabaseMissing('audit_logs', ['id' => $old->id]);
+        $this->assertDatabaseHas('audit_logs', ['id' => $recent->id]);
     }
 }

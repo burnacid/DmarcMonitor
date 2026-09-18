@@ -2,6 +2,7 @@
 
 use App\Models\Organisation;
 use App\Models\User;
+use App\Support\AuditLogger;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -79,12 +80,20 @@ new #[Layout('layouts.app')] class extends Component
             $validated['password'] = Hash::make($validated['password']);
         }
 
+        $wasNew = $this->editingId === null;
         $user = User::updateOrCreate(['id' => $this->editingId], $validated);
         $user->organisations()->sync($organisationIds);
 
         if (! $this->editingId) {
             $user->forceFill(['email_verified_at' => now()])->save();
         }
+
+        AuditLogger::record(
+            action: $wasNew ? 'user.created' : 'user.updated',
+            description: ($wasNew ? 'Created user ' : 'Updated user ').$user->email,
+            subject: $user,
+            context: $wasNew ? null : AuditLogger::describeChanges($user),
+        );
 
         $this->dispatch('close-modal', 'user-form');
         $this->reset(['editingId', 'name', 'email', 'password', 'organisation_ids']);
@@ -107,6 +116,12 @@ new #[Layout('layouts.app')] class extends Component
 
             return;
         }
+
+        AuditLogger::record(
+            action: 'user.deleted',
+            description: 'Deleted user '.$user->email,
+            context: ['email' => $user->email, 'role' => $user->role],
+        );
 
         $user->delete();
     }

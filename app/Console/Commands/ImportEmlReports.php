@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\Eml\EmlIngestionService;
+use App\Support\AuditLogger;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -38,6 +39,15 @@ class ImportEmlReports extends Command
             $stats = $service->importPath($path);
 
             $this->line("[{$path}] fetched={$stats['fetched']} parsed={$stats['parsed']} failed={$stats['failed']}");
+
+            if ($stats['fetched'] > 0) {
+                AuditLogger::record(
+                    action: 'ingestion.completed',
+                    description: "Local .eml import [{$path}]: {$stats['parsed']} parsed, {$stats['failed']} failed, out of {$stats['fetched']} fetched",
+                    userId: null,
+                    context: $stats,
+                );
+            }
         }
 
         return self::SUCCESS;

@@ -39,6 +39,8 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Volt::route('imap-accounts', 'admin.imap-accounts')->name('imap-accounts');
     Volt::route('microsoft365-mailboxes', 'admin.microsoft365-mail-accounts')->name('microsoft365-mail-accounts');
     Volt::route('microsoft365-sending', 'admin.microsoft365-send-account')->name('microsoft365-send-account');
+    Volt::route('scheduled-tasks', 'admin.scheduled-tasks')->name('scheduled-tasks');
+    Volt::route('audit-log', 'admin.audit-log')->name('audit-log');
 });
 
 Route::middleware(['auth', 'verified'])->prefix('help')->name('help.')->group(function () {

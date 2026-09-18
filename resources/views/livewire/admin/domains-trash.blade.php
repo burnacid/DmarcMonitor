@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Domain;
+use App\Support\AuditLogger;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -15,6 +16,13 @@ new #[Layout('layouts.app')] class extends Component
         abort_unless(auth()->user()->canAccessOrganisation($domain->organisation_id), 404);
 
         $domain->restore();
+
+        AuditLogger::record(
+            action: 'domain.restored',
+            description: 'Restored domain '.$domain->fqdn,
+            subject: $domain,
+            organisationId: $domain->organisation_id,
+        );
     }
 
     public function with(): array

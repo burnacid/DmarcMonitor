@@ -2,6 +2,7 @@
 
 use App\Models\AlertRule;
 use App\Models\Organisation;
+use App\Support\AuditLogger;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -132,7 +133,16 @@ new #[Layout('layouts.app')] class extends Component
         $validated['notify_emails'] = $emails->all();
         $validated['webhook_url'] = $validated['webhook_url'] ?: null;
 
-        AlertRule::updateOrCreate(['id' => $this->editingId], $validated);
+        $wasNew = $this->editingId === null;
+        $rule = AlertRule::updateOrCreate(['id' => $this->editingId], $validated);
+
+        AuditLogger::record(
+            action: $wasNew ? 'alert_rule.created' : 'alert_rule.updated',
+            description: ($wasNew ? 'Created alert rule ' : 'Updated alert rule ').$rule->type,
+            subject: $rule,
+            organisationId: $rule->organisation_id,
+            context: $wasNew ? null : AuditLogger::describeChanges($rule),
+        );
 
         $this->dispatch('close-modal', 'alert-rule-form');
         $this->reset(['editingId', 'organisation_id', 'webhook_url', 'notify_emails']);
@@ -140,7 +150,16 @@ new #[Layout('layouts.app')] class extends Component
 
     public function delete(int $id): void
     {
-        AlertRule::visibleTo(auth()->user())->findOrFail($id)->delete();
+        $rule = AlertRule::visibleTo(auth()->user())->findOrFail($id);
+
+        AuditLogger::record(
+            action: 'alert_rule.deleted',
+            description: 'Deleted alert rule '.$rule->type,
+            organisationId: $rule->organisation_id,
+            context: ['type' => $rule->type],
+        );
+
+        $rule->delete();
     }
 
     public function with(): array

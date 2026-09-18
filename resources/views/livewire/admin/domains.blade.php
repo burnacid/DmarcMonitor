@@ -4,6 +4,7 @@ use App\Models\AggregateReportRecord;
 use App\Models\Domain;
 use App\Models\Organisation;
 use App\Services\Dns\DomainAuthenticationChecker;
+use App\Support\AuditLogger;
 use Illuminate\Support\Carbon;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -75,7 +76,16 @@ new #[Layout('layouts.app')] class extends Component
             'notes' => 'nullable|string',
         ]);
 
-        Domain::updateOrCreate(['id' => $this->editingId], $validated);
+        $wasNew = $this->editingId === null;
+        $domain = Domain::updateOrCreate(['id' => $this->editingId], $validated);
+
+        AuditLogger::record(
+            action: $wasNew ? 'domain.created' : 'domain.updated',
+            description: ($wasNew ? 'Created domain ' : 'Updated domain ').$domain->fqdn,
+            subject: $domain,
+            organisationId: $domain->organisation_id,
+            context: $wasNew ? null : AuditLogger::describeChanges($domain),
+        );
 
         $this->dispatch('close-modal', 'domain-form');
         $this->reset(['editingId', 'fqdn', 'organisation_id', 'notes']);
@@ -85,6 +95,13 @@ new #[Layout('layouts.app')] class extends Component
     {
         $domain = Domain::findOrFail($id);
         abort_unless(auth()->user()->canAccessOrganisation($domain->organisation_id), 404);
+
+        AuditLogger::record(
+            action: 'domain.deleted',
+            description: 'Deleted domain '.$domain->fqdn,
+            organisationId: $domain->organisation_id,
+            context: ['fqdn' => $domain->fqdn],
+        );
 
         $domain->delete();
     }

@@ -91,7 +91,7 @@ new class extends Component
                 </a>
 
                 @php
-                    $settingsActive = request()->routeIs(['admin.organisations', 'admin.domains', 'admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.geoip', 'admin.alert-rules', 'admin.users']);
+                    $settingsActive = request()->routeIs(['admin.organisations', 'admin.domains', 'admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.geoip', 'admin.alert-rules', 'admin.users', 'admin.scheduled-tasks', 'admin.audit-log']);
                 @endphp
                 @if (auth()->user()->canManage() || auth()->user()->isAdmin())
                     <x-dropdown align="right" width="48">
@@ -148,6 +148,12 @@ new class extends Component
 
                                 <div class="my-1 border-t border-gray-200 dark:border-gray-600"></div>
 
+                                <x-dropdown-link :href="route('admin.scheduled-tasks')" wire:navigate>
+                                    {{ __('Scheduled Tasks') }}
+                                </x-dropdown-link>
+                                <x-dropdown-link :href="route('admin.audit-log')" wire:navigate>
+                                    {{ __('Audit Log') }}
+                                </x-dropdown-link>
                                 <x-dropdown-link :href="route('admin.users')" wire:navigate>
                                     {{ __('Users') }}
                                 </x-dropdown-link>

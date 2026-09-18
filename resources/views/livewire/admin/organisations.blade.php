@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Organisation;
+use App\Support\AuditLogger;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -46,7 +47,16 @@ new #[Layout('layouts.app')] class extends Component
             'notes' => 'nullable|string',
         ]);
 
-        Organisation::updateOrCreate(['id' => $this->editingId], $validated);
+        $wasNew = $this->editingId === null;
+        $organisation = Organisation::updateOrCreate(['id' => $this->editingId], $validated);
+
+        AuditLogger::record(
+            action: $wasNew ? 'organisation.created' : 'organisation.updated',
+            description: ($wasNew ? 'Created organisation ' : 'Updated organisation ').$organisation->name,
+            subject: $organisation,
+            organisationId: $organisation->id,
+            context: $wasNew ? null : AuditLogger::describeChanges($organisation),
+        );
 
         $this->dispatch('close-modal', 'organisation-form');
         $this->reset(['editingId', 'name', 'notes']);
@@ -56,7 +66,16 @@ new #[Layout('layouts.app')] class extends Component
     {
         abort_unless(auth()->user()->canAccessOrganisation($id), 404);
 
-        Organisation::findOrFail($id)->delete();
+        $organisation = Organisation::findOrFail($id);
+
+        AuditLogger::record(
+            action: 'organisation.deleted',
+            description: 'Deleted organisation '.$organisation->name,
+            organisationId: $organisation->id,
+            context: ['name' => $organisation->name],
+        );
+
+        $organisation->delete();
     }
 
     public function with(): array
