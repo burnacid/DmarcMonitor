@@ -1,0 +1,22 @@
+From: someone@example.com
+Date: Thu, 1 Jan 2026 00:00:00 -0600
+Subject: Not a DMARC report
+MIME-Version: 1.0
+To: recipient@example.com
+Content-Type: multipart/mixed;
+    boundary="PLAINBOUNDARY"
+
+--PLAINBOUNDARY
+Content-Type: text/plain; charset="us-ascii"
+
+This message has nothing to do with DMARC.
+
+--PLAINBOUNDARY
+Content-Type: application/pdf
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment;
+    filename="invoice.pdf"
+
+JVBERi0xLjQKJeLjz9MK
+
+--PLAINBOUNDARY--

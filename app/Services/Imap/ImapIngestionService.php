@@ -6,6 +6,7 @@ use App\Models\ImapAccount;
 use App\Services\Dmarc\AggregateReportParser;
 use App\Services\Dmarc\ForensicReportParser;
 use App\Support\DmarcAttachmentSniffer;
+use App\Support\ForensicReportDetector;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -202,26 +203,14 @@ class ImapIngestionService
         return DmarcAttachmentSniffer::isAggregateReportFilename((string) $attachment->name);
     }
 
-    /**
-     * An RFC 6591 forensic (ARF) report is its own multipart/report email
-     * carrying a machine-readable message/feedback-report MIME part —
-     * distinct from (and never mixed with) an aggregate report's XML
-     * attachment, so detection happens up front rather than per-attachment.
-     */
     private function looksLikeForensicReport(Message $message): bool
     {
-        return $this->feedbackReportAttachment($message) !== null;
+        return ForensicReportDetector::looksLikeForensicReport($message);
     }
 
     private function feedbackReportAttachment(Message $message): ?Attachment
     {
-        foreach ($message->getAttachments() as $attachment) {
-            if (str_starts_with(strtolower((string) $attachment->content_type), 'message/feedback-report')) {
-                return $attachment;
-            }
-        }
-
-        return null;
+        return ForensicReportDetector::feedbackReportAttachment($message);
     }
 
     private function processAttachment(Attachment $attachment, ImapAccount $account, Message $message): bool

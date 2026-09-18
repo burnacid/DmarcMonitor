@@ -13,4 +13,18 @@ return [
     |
     */
     'retention_days' => env('DATA_RETENTION_DAYS', 400),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Local .eml import
+    |--------------------------------------------------------------------------
+    |
+    | Base directory for importing DMARC reports from local .eml files via
+    | `dmarc:import-eml`. Expected to contain an `inbox/` subfolder that's
+    | scanned when the command is run with no path arguments; imported files
+    | are moved into `processed/` or `failed/` siblings, which `dmarc:cleanup`
+    | prunes using `retention_days` above.
+    |
+    */
+    'eml_import_path' => env('DMARC_EML_IMPORT_PATH', storage_path('app/dmarc-eml')),
 ];

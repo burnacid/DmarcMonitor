@@ -4,6 +4,7 @@ use App\Models\Domain;
 use App\Models\Microsoft365MailAccount;
 use App\Services\Graph\GraphConnectionTester;
 use App\Services\Graph\GraphIngestionService;
+use App\Support\AuditLogger;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -105,8 +106,16 @@ new #[Layout('layouts.app')] class extends Component
             unset($validated['client_secret']);
         }
 
+        $wasNew = $this->editingId === null;
         $account = Microsoft365MailAccount::updateOrCreate(['id' => $this->editingId], $validated);
         $account->domains()->sync($domainIds);
+
+        AuditLogger::record(
+            action: $wasNew ? 'microsoft365_mail_account.created' : 'microsoft365_mail_account.updated',
+            description: ($wasNew ? 'Created Microsoft 365 mailbox ' : 'Updated Microsoft 365 mailbox ').$account->label,
+            subject: $account,
+            context: $wasNew ? null : AuditLogger::describeChanges($account),
+        );
 
         $this->dispatch('close-modal', 'microsoft365-mail-account-form');
         $this->reset([
@@ -117,7 +126,15 @@ new #[Layout('layouts.app')] class extends Component
 
     public function delete(int $id): void
     {
-        Microsoft365MailAccount::visibleTo(auth()->user())->findOrFail($id)->delete();
+        $account = Microsoft365MailAccount::visibleTo(auth()->user())->findOrFail($id);
+
+        AuditLogger::record(
+            action: 'microsoft365_mail_account.deleted',
+            description: 'Deleted Microsoft 365 mailbox '.$account->label,
+            context: ['label' => $account->label],
+        );
+
+        $account->delete();
     }
 
     public function testConnection(int $id): void
@@ -141,6 +158,15 @@ new #[Layout('layouts.app')] class extends Component
         $account = Microsoft365MailAccount::visibleTo(auth()->user())->findOrFail($id);
 
         $stats = app(GraphIngestionService::class)->pollAccount($account);
+
+        if ($stats['fetched'] > 0 || $stats['failed'] > 0) {
+            AuditLogger::record(
+                action: 'ingestion.completed',
+                description: "Microsoft 365 poll [{$account->label}]: {$stats['parsed']} parsed, {$stats['failed']} failed, out of {$stats['fetched']} fetched",
+                subject: $account,
+                context: $stats,
+            );
+        }
 
         $this->testResultIsError = $stats['failed'] > 0;
         $this->testResult = __(':parsed report(s) parsed, :failed failed, out of :fetched message(s) fetched.', $stats);

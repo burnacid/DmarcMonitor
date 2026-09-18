@@ -2,6 +2,7 @@
 
 use App\Models\Microsoft365SendAccount;
 use App\Services\Graph\GraphTokenService;
+use App\Support\AuditLogger;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Attributes\Layout;
@@ -58,7 +59,15 @@ new #[Layout('layouts.app')] class extends Component
             unset($validated['client_secret']);
         }
 
-        Microsoft365SendAccount::updateOrCreate(['id' => $this->editingId], $validated);
+        $wasNew = $this->editingId === null;
+        $account = Microsoft365SendAccount::updateOrCreate(['id' => $this->editingId], $validated);
+
+        AuditLogger::record(
+            action: $wasNew ? 'microsoft365_send_account.created' : 'microsoft365_send_account.updated',
+            description: ($wasNew ? 'Created Microsoft 365 sending account ' : 'Updated Microsoft 365 sending account ').$account->label,
+            subject: $account,
+            context: $wasNew ? null : AuditLogger::describeChanges($account),
+        );
 
         $this->dispatch('close-modal', 'microsoft365-send-account-form');
         $this->reset(['editingId', 'label', 'tenant_id', 'client_id', 'client_secret', 'mailbox']);
@@ -66,7 +75,15 @@ new #[Layout('layouts.app')] class extends Component
 
     public function delete(int $id): void
     {
-        Microsoft365SendAccount::findOrFail($id)->delete();
+        $account = Microsoft365SendAccount::findOrFail($id);
+
+        AuditLogger::record(
+            action: 'microsoft365_send_account.deleted',
+            description: 'Deleted Microsoft 365 sending account '.$account->label,
+            context: ['label' => $account->label],
+        );
+
+        $account->delete();
     }
 
     public function testConnection(int $id): void
