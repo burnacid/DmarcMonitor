@@ -111,4 +111,32 @@ class CleanupOldDataTest extends TestCase
 
         $this->assertDatabaseHas('domains', ['id' => $recentlyTrashed->id]);
     }
+
+    public function test_prunes_old_processed_and_failed_eml_files_past_retention(): void
+    {
+        config(['dmarc.retention_days' => 400]);
+
+        $base = sys_get_temp_dir().DIRECTORY_SEPARATOR.'eml-cleanup-test-'.uniqid();
+        mkdir($base.'/processed', 0755, true);
+        mkdir($base.'/failed', 0755, true);
+        config(['dmarc.eml_import_path' => $base]);
+
+        $oldProcessed = $base.'/processed/old.eml';
+        $recentProcessed = $base.'/processed/recent.eml';
+        $oldFailed = $base.'/failed/old.eml';
+
+        file_put_contents($oldProcessed, 'x');
+        file_put_contents($recentProcessed, 'x');
+        file_put_contents($oldFailed, 'x');
+
+        touch($oldProcessed, now()->subDays(401)->timestamp);
+        touch($oldFailed, now()->subDays(401)->timestamp);
+        touch($recentProcessed, now()->subDays(10)->timestamp);
+
+        $this->artisan('dmarc:cleanup');
+
+        $this->assertFileDoesNotExist($oldProcessed);
+        $this->assertFileDoesNotExist($oldFailed);
+        $this->assertFileExists($recentProcessed);
+    }
 }
