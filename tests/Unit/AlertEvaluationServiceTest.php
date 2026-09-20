@@ -201,6 +201,7 @@ class AlertEvaluationServiceTest extends TestCase
         $baselineReport = AggregateReport::factory()->create([
             'domain_id' => $domain->id,
             'date_range_begin' => now()->subDays(10),
+            'created_at' => now()->subDays(10),
         ]);
         AggregateReportRecord::factory()->create([
             'aggregate_report_id' => $baselineReport->id,
@@ -265,6 +266,39 @@ class AlertEvaluationServiceTest extends TestCase
         $this->assertEquals('unexpected.example', $event->details['domain']);
 
         Mail::assertQueued(AlertTriggered::class);
+    }
+
+    public function test_pass_rate_drop_rule_counts_a_late_arriving_report_by_ingestion_time(): void
+    {
+        Mail::fake();
+
+        $org = Organisation::factory()->create();
+        $domain = Domain::factory()->create(['organisation_id' => $org->id]);
+
+        // The report describes traffic from 3 days ago (outside the 24h
+        // lookback window) but was only ingested just now — providers often
+        // send reports well after the period they cover.
+        $report = AggregateReport::factory()->create([
+            'domain_id' => $domain->id,
+            'date_range_begin' => now()->subDays(3),
+            'created_at' => now(),
+        ]);
+        AggregateReportRecord::factory()->create([
+            'aggregate_report_id' => $report->id,
+            'count' => 10,
+            'dkim_result' => 'fail',
+            'spf_result' => 'fail',
+        ]);
+
+        $rule = AlertRule::factory()->create([
+            'organisation_id' => $org->id,
+            'type' => 'pass_rate_drop',
+            'threshold_percent' => 95,
+        ]);
+
+        app(AlertEvaluationService::class)->evaluate($rule);
+
+        $this->assertDatabaseCount('alert_events', 1);
     }
 
     public function test_rule_is_skipped_when_there_is_no_volume_in_the_window(): void

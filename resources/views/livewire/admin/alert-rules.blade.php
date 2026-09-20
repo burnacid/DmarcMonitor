@@ -284,7 +284,7 @@ new #[Layout('layouts.app')] class extends Component
                 <div>
                     <x-input-label for="lookback_window" :value="__('Lookback window')" />
                     <x-text-input wire:model="lookback_window" id="lookback_window" type="text" placeholder="24h" class="mt-1 block w-full" />
-                    <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ __('A number followed by h (hours) or d (days), e.g. 24h or 7d.') }}</p>
+                    <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ __('A number followed by h (hours) or d (days), e.g. 24h or 7d. Counts reports by when they were received, not the traffic period they cover. Checked every 15 minutes.') }}</p>
                     <x-input-error :messages="$errors->get('lookback_window')" class="mt-2" />
                 </div>
 

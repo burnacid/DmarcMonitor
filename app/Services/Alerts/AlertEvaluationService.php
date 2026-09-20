@@ -52,7 +52,7 @@ class AlertEvaluationService
     private function checkPassRate(AlertRule $rule, Domain $domain): void
     {
         $from = $this->windowStart($rule->lookback_window);
-        $summary = $this->metrics->summary($domain->id, $from, now());
+        $summary = $this->metrics->summary($domain->id, $from, now(), dateColumn: 'created_at');
 
         if ($summary['total'] === 0) {
             return;
@@ -72,7 +72,7 @@ class AlertEvaluationService
     private function checkFailRate(AlertRule $rule, Domain $domain, string $passMetricKey): void
     {
         $from = $this->windowStart($rule->lookback_window);
-        $summary = $this->metrics->summary($domain->id, $from, now());
+        $summary = $this->metrics->summary($domain->id, $from, now(), dateColumn: 'created_at');
 
         if ($summary['total'] === 0) {
             return;
@@ -94,8 +94,8 @@ class AlertEvaluationService
     {
         $windowStart = $this->windowStart($rule->lookback_window);
 
-        $known = $this->metrics->sourceIpsBefore($domain->id, $windowStart);
-        $seen = $this->metrics->sourceIpsBetween($domain->id, $windowStart, now());
+        $known = $this->metrics->sourceIpsBefore($domain->id, $windowStart, 'created_at');
+        $seen = $this->metrics->sourceIpsBetween($domain->id, $windowStart, now(), 'created_at');
 
         foreach ($seen->diff($known) as $ip) {
             $dedupKey = hash('sha256', "{$rule->id}:{$domain->id}:new_source:{$ip}");
