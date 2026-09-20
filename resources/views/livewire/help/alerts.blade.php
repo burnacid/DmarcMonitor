@@ -24,6 +24,9 @@ new #[Layout('layouts.app')] class extends Component
                 <p>
                     {{ __('An Alert Rule watches one organisation (or every domain, if left unscoped) for a condition — for example, DMARC pass rate dropping below a threshold percentage over a lookback window — and fires per domain when it\'s met. Rules can notify by email and/or webhook, to the addresses/URL you configure.') }}
                 </p>
+                <p>
+                    {{ __('Rules are re-evaluated every 15 minutes. The lookback window counts reports by when we received them, not the period they cover — providers often send reports a day or more after the traffic they describe, so a window based on the covered period would permanently miss anything that arrives late.') }}
+                </p>
             </div>
 
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-4 text-sm text-gray-600 dark:text-gray-300">

@@ -205,11 +205,17 @@ class DmarcMetricsService
     /**
      * Overall summary totals for the given window, for stat tiles.
      *
+     * $dateColumn selects whether the window is matched against the period a
+     * report covers ('date_range_begin', the default) or against when it was
+     * ingested ('created_at') — alert evaluation uses ingestion time, since
+     * reports commonly arrive well after the period they cover and would
+     * otherwise scroll out of a period-based window before ever being seen.
+     *
      * @return array{total: int, dmarc_pass_pct: float, spf_pass_pct: float, dkim_pass_pct: float, distinct_sources: int}
      */
-    public function summary(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null): array
+    public function summary(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, string $dateColumn = 'date_range_begin'): array
     {
-        $row = $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds)
+        $row = $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds, $dateColumn)
             ->selectRaw('SUM(aggregate_report_records.count) as total')
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.dkim_result = 'pass' OR aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as dmarc_pass")
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as spf_pass")
@@ -229,42 +235,45 @@ class DmarcMetricsService
     /**
      * Distinct source IPs already seen for a domain before the given cutoff —
      * the baseline used by the "new sending source" alert to detect newly
-     * appearing IPs.
+     * appearing IPs. Matched against ingestion time (see summary()'s
+     * $dateColumn note) so late-arriving reports aren't missed.
      *
      * @return Collection<int, string>
      */
-    public function sourceIpsBefore(int $domainId, CarbonInterface $before): Collection
+    public function sourceIpsBefore(int $domainId, CarbonInterface $before, string $dateColumn = 'date_range_begin'): Collection
     {
         return AggregateReportRecord::query()
             ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
             ->where('aggregate_reports.domain_id', $domainId)
-            ->where('aggregate_reports.date_range_begin', '<', $before)
+            ->where("aggregate_reports.{$dateColumn}", '<', $before)
             ->distinct()
             ->pluck('aggregate_report_records.source_ip');
     }
 
     /**
-     * Distinct source IPs seen for a domain within the given window.
+     * Distinct source IPs seen for a domain within the given window. Matched
+     * against ingestion time (see summary()'s $dateColumn note) so
+     * late-arriving reports aren't missed.
      *
      * @return Collection<int, string>
      */
-    public function sourceIpsBetween(int $domainId, CarbonInterface $from, CarbonInterface $to): Collection
+    public function sourceIpsBetween(int $domainId, CarbonInterface $from, CarbonInterface $to, string $dateColumn = 'date_range_begin'): Collection
     {
         return AggregateReportRecord::query()
             ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
             ->where('aggregate_reports.domain_id', $domainId)
-            ->whereBetween('aggregate_reports.date_range_begin', [$from, $to])
+            ->whereBetween("aggregate_reports.{$dateColumn}", [$from, $to])
             ->distinct()
             ->pluck('aggregate_report_records.source_ip');
     }
 
-    private function baseQuery(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null)
+    private function baseQuery(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, string $dateColumn = 'date_range_begin')
     {
         $query = AggregateReportRecord::query()
             ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
             ->join('domains', 'domains.id', '=', 'aggregate_reports.domain_id')
             ->whereNull('domains.deleted_at')
-            ->whereBetween('aggregate_reports.date_range_begin', [$from, $to]);
+            ->whereBetween("aggregate_reports.{$dateColumn}", [$from, $to]);
 
         if ($domainId !== null) {
             $query->where('aggregate_reports.domain_id', $domainId);
