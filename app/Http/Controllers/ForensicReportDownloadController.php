@@ -19,10 +19,12 @@ class ForensicReportDownloadController extends Controller
             abort(404);
         }
 
+        $isMsg = strtolower(pathinfo($forensicReport->raw_message_path, PATHINFO_EXTENSION)) === 'msg';
+
         return response()->streamDownload(
             fn () => print (Storage::disk('local')->get($forensicReport->raw_message_path)),
-            "forensic-report-{$forensicReport->id}.eml",
-            ['Content-Type' => 'message/rfc822'],
+            "forensic-report-{$forensicReport->id}.".($isMsg ? 'msg' : 'eml'),
+            ['Content-Type' => $isMsg ? 'application/vnd.ms-outlook' : 'message/rfc822'],
         );
     }
 }

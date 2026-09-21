@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
-class ImportEmlReportsCommandTest extends TestCase
+class ImportMailFilesCommandTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -23,7 +23,7 @@ class ImportEmlReportsCommandTest extends TestCase
             $this->makeInbox($base).'/aggregate-report.eml',
         );
 
-        $this->artisan('dmarc:import-eml')
+        $this->artisan('dmarc:import-mail-files')
             ->expectsOutputToContain('fetched=1 parsed=1 failed=0')
             ->assertExitCode(0);
 
@@ -32,7 +32,7 @@ class ImportEmlReportsCommandTest extends TestCase
 
     public function test_it_reports_an_error_for_a_path_that_does_not_exist(): void
     {
-        $this->artisan('dmarc:import-eml', ['paths' => ['/no/such/path.eml']])
+        $this->artisan('dmarc:import-mail-files', ['paths' => ['/no/such/path.eml']])
             ->expectsOutputToContain('Path not found: /no/such/path.eml')
             ->assertExitCode(0);
     }

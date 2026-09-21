@@ -35,7 +35,7 @@ class ScheduledTasksPageTest extends TestCase
         Volt::actingAs($admin)->test('admin.scheduled-tasks')
             ->assertSee('IMAP mailbox poll')
             ->assertSee('Microsoft 365 mailbox poll')
-            ->assertSee('Import local .eml reports')
+            ->assertSee('Import local .eml/.msg reports')
             ->assertSee('Evaluate alert rules')
             ->assertSee('Update GeoIP databases')
             ->assertSee('Prune old data')

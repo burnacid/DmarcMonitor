@@ -1,0 +1,29 @@
+# Simplest setup: one container running the web app, the scheduler (polling,
+# imports, cleanup, queue) and optionally the SMTP listener, with SQLite.
+#
+#   cp .env.docker.example .env.docker      # then set APP_KEY and APP_URL
+#   docker compose up -d --build
+#
+# Every variable in .env.docker reaches the container as an environment variable.
+# (Not named .env on purpose: in a checkout that file is your local dev config.)
+
+name: dmarc-monitor
+
+services:
+  app:
+    image: burnacid/dmarc-monitor:latest
+    build: .
+    restart: unless-stopped
+    env_file: .env.docker
+    ports:
+      - "8080:8080"
+      # SMTP listener (needs DMARC_SMTP_ENABLED=true and DMARC_SMTP_ALLOWED_IPS in .env.docker)
+      # - "2525:2525"
+    volumes:
+      # SQLite database, stored reports, GeoIP data and the .eml/.msg inbox.
+      - storage:/app/storage
+      # Optional: feed the local import from a host folder.
+      # - ./inbox:/app/storage/app/dmarc-eml/inbox
+
+volumes:
+  storage:

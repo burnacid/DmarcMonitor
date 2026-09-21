@@ -18,8 +18,8 @@ ScheduledTaskTracker::attach(
     'graph-mail-poll',
 );
 ScheduledTaskTracker::attach(
-    Schedule::command('dmarc:import-eml')->everyFiveMinutes()->withoutOverlapping()->description('Import local .eml reports'),
-    'import-eml',
+    Schedule::command('dmarc:import-mail-files')->everyFiveMinutes()->withoutOverlapping()->description('Import local .eml/.msg reports'),
+    'import-mail-files',
 );
 ScheduledTaskTracker::attach(
     Schedule::command('dmarc:evaluate-alerts')->everyFifteenMinutes()->withoutOverlapping()->description('Evaluate alert rules'),

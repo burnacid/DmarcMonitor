@@ -241,7 +241,10 @@ new #[Layout('layouts.app')] class extends Component
                                     <span class="max-md:text-right">
                                         <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $this->authStatusBadgeClass($domain->dkim_status) }}">{{ $this->authStatusLabel($domain->dkim_status) }}</span>
                                         @if ($domain->dkim_status === 'valid')
-                                            <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-mono">{{ $domain->dkim_selector }}</div>
+                                            @php $configuredSelectorNames = collect($domain->configuredDkimSelectors())->pluck('selector'); @endphp
+                                            <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-mono" title="{{ $configuredSelectorNames->implode(', ') }}">
+                                                {{ $configuredSelectorNames->first() }}@if ($configuredSelectorNames->count() > 1) <span class="font-sans">{{ __('+:count more', ['count' => $configuredSelectorNames->count() - 1]) }}</span>@endif
+                                            </div>
                                         @elseif ($domain->dkim_status === 'unknown')
                                             <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{{ __('No selector seen yet') }}</div>
                                         @endif
@@ -279,10 +282,13 @@ new #[Layout('layouts.app')] class extends Component
                                             <div>
                                                 <h4 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('DKIM') }}</h4>
                                                 <span class="mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $this->authStatusBadgeClass($domain->dkim_status) }}">{{ $this->authStatusLabel($domain->dkim_status) }}</span>
-                                                @if ($domain->dkim_selector)
-                                                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ __('Configured selector: :selector', ['selector' => $domain->dkim_selector]) }}</p>
-                                                @endif
-                                                <p class="mt-1 text-xs font-mono break-all text-gray-600 dark:text-gray-300">{{ $domain->dkim_record ?: __('No record found.') }}</p>
+                                                @php $configuredSelectors = $domain->configuredDkimSelectors(); @endphp
+                                                @forelse ($configuredSelectors as $configuredSelector)
+                                                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ __('Configured selector: :selector', ['selector' => $configuredSelector['selector']]) }}</p>
+                                                    <p class="mt-1 text-xs font-mono break-all text-gray-600 dark:text-gray-300">{{ $configuredSelector['record'] ?: __('No record found.') }}</p>
+                                                @empty
+                                                    <p class="mt-2 text-xs font-mono break-all text-gray-600 dark:text-gray-300">{{ __('No record found.') }}</p>
+                                                @endforelse
 
                                                 @php $dkimSelectorsSeen = $this->dkimSelectorsSeen($domain); @endphp
                                                 <h5 class="mt-3 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('Selectors seen in reports') }}</h5>
@@ -293,7 +299,7 @@ new #[Layout('layouts.app')] class extends Component
                                                         @foreach ($dkimSelectorsSeen as $seenSelector)
                                                             <li class="text-xs text-gray-600 dark:text-gray-300 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                                                                 <span class="font-mono">{{ $seenSelector['selector'] }}</span>
-                                                                @if ($domain->dkim_selector && $seenSelector['selector'] === $domain->dkim_selector)
+                                                                @if (in_array($seenSelector['selector'], array_column($configuredSelectors, 'selector'), true))
                                                                     <span class="inline-flex items-center rounded-full bg-indigo-100 dark:bg-indigo-900 px-1.5 py-0.5 text-[10px] font-medium text-indigo-800 dark:text-indigo-200">{{ __('Configured') }}</span>
                                                                 @endif
                                                                 <span class="text-gray-400 dark:text-gray-500">{{ __(':pass pass / :fail fail', ['pass' => $seenSelector['pass_count'], 'fail' => $seenSelector['fail_count']]) }}</span>

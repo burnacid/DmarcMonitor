@@ -7,6 +7,7 @@ use App\Models\AggregateReportRecord;
 use App\Models\Domain;
 use App\Services\Dns\DomainAuthenticationChecker;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class DomainAuthenticationCheckerTest extends TestCase
@@ -98,6 +99,53 @@ class DomainAuthenticationCheckerTest extends TestCase
         $this->assertEquals('selector1', $result['dkim_selector']);
     }
 
+    public function test_every_seen_selector_that_resolves_is_configured(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+        $this->recordDkimSelector($domain, 'older', now()->subDays(10));
+        $this->recordDkimSelector($domain, 'newer', now()->subDay());
+        $this->recordDkimSelector($domain, 'gone', now()->subDays(3));
+
+        $result = $this->checker([
+            'older._domainkey.example.com' => ['v=DKIM1; k=rsa; p=old'],
+            'newer._domainkey.example.com' => ['v=DKIM1; k=rsa; p=new'],
+        ])->check($domain);
+
+        $this->assertEquals('valid', $result['dkim_status']);
+        $this->assertEquals('newer', $result['dkim_selector']);
+        $this->assertEquals('v=DKIM1; k=rsa; p=new', $result['dkim_record']);
+        $this->assertEquals([
+            ['selector' => 'newer', 'record' => 'v=DKIM1; k=rsa; p=new'],
+            ['selector' => 'older', 'record' => 'v=DKIM1; k=rsa; p=old'],
+        ], $result['dkim_selectors']);
+    }
+
+    public function test_a_selector_whose_record_was_removed_is_no_longer_configured_on_the_next_check(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+        $this->recordDkimSelector($domain, 'one');
+        $this->recordDkimSelector($domain, 'two');
+
+        $this->checker([
+            'one._domainkey.example.com' => ['v=DKIM1; p=1'],
+            'two._domainkey.example.com' => ['v=DKIM1; p=2'],
+        ])->checkAndStore($domain);
+
+        $this->assertCount(2, $domain->fresh()->configuredDkimSelectors());
+
+        $this->checker([
+            'one._domainkey.example.com' => ['v=DKIM1; p=1'],
+        ])->checkAndStore($domain);
+
+        $this->assertSame(['one'], array_column($domain->fresh()->configuredDkimSelectors(), 'selector'));
+
+        $this->checker([])->checkAndStore($domain);
+
+        $fresh = $domain->fresh();
+        $this->assertEquals('missing', $fresh->dkim_status);
+        $this->assertSame([], $fresh->configuredDkimSelectors());
+    }
+
     public function test_dkim_is_missing_when_the_seen_selector_does_not_resolve(): void
     {
         $domain = Domain::factory()->create(['fqdn' => 'example.com']);
@@ -143,9 +191,12 @@ class DomainAuthenticationCheckerTest extends TestCase
         $this->assertNotNull($domain->fresh()->dns_checked_at);
     }
 
-    private function recordDkimSelector(Domain $domain, string $selector): void
+    private function recordDkimSelector(Domain $domain, string $selector, ?Carbon $seenAt = null): void
     {
-        $report = AggregateReport::factory()->create(['domain_id' => $domain->id]);
+        $report = AggregateReport::factory()->create(array_filter([
+            'domain_id' => $domain->id,
+            'date_range_end' => $seenAt,
+        ]));
         AggregateReportRecord::factory()->create([
             'aggregate_report_id' => $report->id,
             'dkim_domain' => $domain->fqdn,

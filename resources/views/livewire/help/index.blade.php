@@ -46,13 +46,19 @@ new #[Layout('layouts.app')] class extends Component
                     'topic' => __('Mail Ingestion'),
                     'heading' => __('How reports get in'),
                     'url' => route('help.mail-ingestion').'#how-reports-get-in',
-                    'excerpt' => __('IMAP Accounts and Microsoft 365 Mailboxes — how this app fetches DMARC report emails.'),
+                    'excerpt' => __('IMAP Accounts, Microsoft 365 Mailboxes, local .eml/.msg files and the SMTP listener — how this app gets DMARC report emails.'),
                 ],
                 [
                     'topic' => __('Mail Ingestion'),
                     'heading' => __('Common settings'),
                     'url' => route('help.mail-ingestion').'#common-settings',
                     'excerpt' => __('Inbox/Processed/Failed folders, mark as read, include read messages, delete after processing, last polled, last error.'),
+                ],
+                [
+                    'topic' => __('Mail Ingestion'),
+                    'heading' => __('Local files and SMTP listener'),
+                    'url' => route('help.mail-ingestion').'#local-files-and-smtp',
+                    'excerpt' => __('Importing .eml/.msg files, running the SMTP listener, and controlling which relays may connect (including Exchange Online).'),
                 ],
                 [
                     'topic' => __('Mail Ingestion'),
@@ -178,7 +184,7 @@ new #[Layout('layouts.app')] class extends Component
 
                 <a href="{{ route('help.mail-ingestion') }}" wire:navigate class="block bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 hover:ring-2 hover:ring-indigo-500 transition">
                     <h3 class="font-medium text-gray-900 dark:text-gray-100">{{ __('Mail Ingestion') }}</h3>
-                    <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{{ __('How report emails are fetched from IMAP or Microsoft 365 mailboxes.') }}</p>
+                    <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{{ __('How report emails arrive: IMAP or Microsoft 365 mailboxes, local .eml/.msg files, or the SMTP listener.') }}</p>
                 </a>
 
                 <a href="{{ route('help.reports') }}" wire:navigate class="block bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 hover:ring-2 hover:ring-indigo-500 transition">

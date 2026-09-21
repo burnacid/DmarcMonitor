@@ -122,4 +122,36 @@ class DomainDnsStatusTest extends TestCase
             ->assertSee('old-selector')
             ->assertSee('Configured');
     }
+
+    public function test_every_configured_dkim_selector_is_badged_and_shows_its_record(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::factory()->create([
+            'fqdn' => 'several.example.com',
+            'dkim_status' => 'valid',
+            'dkim_selector' => 'selector1',
+            'dkim_record' => 'v=DKIM1; p=first',
+            'dkim_selectors' => [
+                ['selector' => 'selector1', 'record' => 'v=DKIM1; p=first'],
+                ['selector' => 'selector2', 'record' => 'v=DKIM1; p=second'],
+            ],
+        ]);
+
+        $report = AggregateReport::factory()->create(['domain_id' => $domain->id]);
+
+        foreach (['selector1', 'selector2', 'unpublished'] as $selector) {
+            AggregateReportRecord::factory()->create([
+                'aggregate_report_id' => $report->id,
+                'dkim_domain' => $domain->fqdn,
+                'dkim_selector' => $selector,
+            ]);
+        }
+
+        $component = Volt::actingAs($user)->test('admin.domains')
+            ->call('toggleExpand', $domain->id)
+            ->assertSee('v=DKIM1; p=first')
+            ->assertSee('v=DKIM1; p=second');
+
+        $this->assertSame(2, substr_count($component->html(), '>Configured<'));
+    }
 }
