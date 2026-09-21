@@ -27,4 +27,37 @@ return [
     |
     */
     'eml_import_path' => env('DMARC_EML_IMPORT_PATH', storage_path('app/dmarc-eml')),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Built-in SMTP listener
+    |--------------------------------------------------------------------------
+    |
+    | Settings for `dmarc:smtp-serve`, which accepts mail from an internal
+    | relay/forwarder and imports it directly. `allowed_ips` is a comma-separated
+    | list of IPs/CIDR ranges allowed to connect; when empty only loopback is.
+    | An entry `spf:<domain>` (e.g. `spf:spf.protection.outlook.com` for
+    | Exchange Online) is expanded from that domain's SPF record and refreshed
+    | hourly.
+    |
+    */
+    'smtp' => [
+        'host' => env('DMARC_SMTP_HOST', '127.0.0.1'),
+        'port' => (int) env('DMARC_SMTP_PORT', 2525),
+        'max_message_bytes' => (int) env('DMARC_SMTP_MAX_MESSAGE_BYTES', 25 * 1024 * 1024),
+        'allowed_ips' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('DMARC_SMTP_ALLOWED_IPS', '')),
+        ))) ?: ['127.0.0.1', '::1'],
+        'idle_timeout' => (int) env('DMARC_SMTP_IDLE_TIMEOUT', 60),
+        'max_connections' => (int) env('DMARC_SMTP_MAX_CONNECTIONS', 20),
+        // Optional STARTTLS: enabled when a certificate is set (PEM file; the key
+        // may be in the same file). `required` refuses mail sent without TLS.
+        'tls' => [
+            'certificate' => env('DMARC_SMTP_TLS_CERT'),
+            'key' => env('DMARC_SMTP_TLS_KEY'),
+            'passphrase' => env('DMARC_SMTP_TLS_PASSPHRASE'),
+            'required' => (bool) env('DMARC_SMTP_TLS_REQUIRED', false),
+        ],
+    ],
 ];
