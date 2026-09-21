@@ -74,7 +74,7 @@ new #[Layout('layouts.app')] class extends Component
                     {{ __('Because a DKIM key lives at selector._domainkey.yourdomain.com, you first need to know which selector name to look up. Expand a domain on the Domains page to see a "Selectors seen in reports" list — every selector name that has actually shown up in aggregate reports for that domain, with pass/fail counts and when it was last seen.') }}
                 </p>
                 <p>
-                    {{ __('The selector marked "Configured" is the one currently stored on the domain and used for the DNS status check above — normally the selector your own mail platform (e.g. Microsoft 365, Google Workspace) publishes and rotates automatically.') }}
+                    {{ __('Every selector marked "Configured" has a DKIM record published in your DNS. On each DNS check, every selector seen in reports is looked up again: those whose record exists are marked Configured, and a selector whose record has been removed loses the badge. A domain can have several, for example when it sends through more than one mail platform, or while a key is being rotated.') }}
                 </p>
                 <p>
                     {{ __('It is completely normal to see other, unfamiliar selectors in that list with 0 passes and every message failing. Spammers who forge your domain in the From header often invent a random-looking selector name (or reuse one from elsewhere); since it was never published in your DNS, DKIM fails for that mail. That is expected and does not indicate a problem with your own setup — it is exactly the kind of abuse DMARC reporting is meant to surface.') }}

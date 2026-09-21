@@ -92,7 +92,12 @@ class DomainAuthenticationChecker
     }
 
     /**
-     * @return array{dkim_status: string, dkim_selector: ?string, dkim_record: ?string}
+     * Every selector seen in aggregate reports is looked up again on each check:
+     * the ones whose record exists are the configured selectors, so a selector
+     * that has since been removed from DNS stops being reported as configured.
+     * The most recently seen configured selector is kept as the primary one.
+     *
+     * @return array{dkim_status: string, dkim_selector: ?string, dkim_record: ?string, dkim_selectors: list<array{selector: string, record: string}>}
      */
     private function checkDkim(Domain $domain): array
     {
@@ -101,12 +106,15 @@ class DomainAuthenticationChecker
             ->where('aggregate_reports.domain_id', $domain->id)
             ->where('aggregate_report_records.dkim_domain', $domain->fqdn)
             ->whereNotNull('aggregate_report_records.dkim_selector')
-            ->distinct()
+            ->groupBy('aggregate_report_records.dkim_selector')
+            ->orderByRaw('MAX(aggregate_reports.date_range_end) DESC')
             ->pluck('aggregate_report_records.dkim_selector');
 
         if ($selectors->isEmpty()) {
-            return ['dkim_status' => 'unknown', 'dkim_selector' => null, 'dkim_record' => null];
+            return ['dkim_status' => 'unknown', 'dkim_selector' => null, 'dkim_record' => null, 'dkim_selectors' => []];
         }
+
+        $configured = [];
 
         foreach ($selectors as $selector) {
             $record = $this->firstMatching(
@@ -115,11 +123,20 @@ class DomainAuthenticationChecker
             );
 
             if ($record !== null) {
-                return ['dkim_status' => 'valid', 'dkim_selector' => $selector, 'dkim_record' => $record];
+                $configured[] = ['selector' => $selector, 'record' => $record];
             }
         }
 
-        return ['dkim_status' => 'missing', 'dkim_selector' => $selectors->first(), 'dkim_record' => null];
+        if ($configured === []) {
+            return ['dkim_status' => 'missing', 'dkim_selector' => $selectors->first(), 'dkim_record' => null, 'dkim_selectors' => []];
+        }
+
+        return [
+            'dkim_status' => 'valid',
+            'dkim_selector' => $configured[0]['selector'],
+            'dkim_record' => $configured[0]['record'],
+            'dkim_selectors' => $configured,
+        ];
     }
 
     /**
