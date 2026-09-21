@@ -1,46 +1,29 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# DMARC Monitor
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Collects and analyses DMARC reports for your domains. Aggregate (RUA) and forensic (RUF) reports are fetched from IMAP or Microsoft 365 mailboxes, imported from local `.eml`/`.msg` files, or received over a built-in SMTP listener. The app shows them per organisation and domain, enriches source IPs with reverse DNS and GeoIP/ASN data, checks your DMARC/SPF/DKIM DNS records, and sends alerts. Built with Laravel, Livewire and Volt.
 
 ## Running with Docker
 
-The app ships as a single container image (FrankenPHP, PHP 8.4) that runs the web app, the scheduler (mailbox polling, local file import, cleanup, queue) and, optionally, a built-in SMTP listener.
+The app ships as a single container image, [`burnacid/dmarc-monitor`](https://hub.docker.com/r/burnacid/dmarc-monitor) on Docker Hub (FrankenPHP, PHP 8.4, `linux/amd64`), that runs the web app, the scheduler (mailbox polling, local file import, cleanup, queue) and, optionally, the SMTP listener. Tags: `latest` and version tags such as `1.0.0`.
 
 ### Quick start
 
 ```bash
-docker compose build
-docker run --rm dmarc-monitor:latest php artisan key:generate --show   # prints a value for APP_KEY
-cp .env.docker.example .env.docker                                     # set APP_KEY and APP_URL
+docker run --rm burnacid/dmarc-monitor:latest php artisan key:generate --show   # prints a value for APP_KEY
+cp .env.docker.example .env.docker                                              # set APP_KEY and APP_URL
+docker compose pull
 docker compose up -d
 ```
 
 The app is then available on <http://localhost:8080>. [compose.yaml](compose.yaml) runs one container with SQLite and a single volume; [compose.split.yaml](compose.split.yaml) runs web, scheduler and SMTP as separate services on MariaDB:
 
 ```bash
-docker compose --env-file .env.docker -f compose.split.yaml up -d --build
+docker compose --env-file .env.docker -f compose.split.yaml up -d
 ```
 
+To build the image from this repository instead of pulling it, add `--build` to `docker compose up`.
+
 Migrations run automatically when the container starts (set `RUN_MIGRATIONS=false` on additional replicas).
-
-### Configuration
-
-There is no `.env` file in the image: every setting is a container environment variable, and every variable from [.env.example](.env.example) works. The compose files pass `.env.docker` to the container as its environment. [.env.docker.example](.env.docker.example) lists the useful ones with production defaults (`APP_KEY` is required).
-
-Variables specific to the container:
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `RUN_MIGRATIONS` | `true` | Run `migrate --force` on start (web and all-in-one roles). |
-| `TRUSTED_PROXIES` | unset | Comma-separated proxy addresses, or `*`, whose `X-Forwarded-*` headers are trusted. Set it when a reverse proxy terminates HTTPS, otherwise generated links use `http://`. |
-| `DMARC_SMTP_ENABLED` | `false` | Start the SMTP listener (see below). |
-
-Logs go to the container's standard error (`LOG_CHANNEL=stderr`), so use `docker compose logs`.
 
 ### Roles
 
@@ -60,6 +43,8 @@ Use a database other than SQLite (MySQL/MariaDB or PostgreSQL) when running seve
 
 Persist `/app/storage`: it holds the SQLite database (when used), stored report files, the GeoIP databases and the local import folder. To feed the local `.eml`/`.msg` import from a host folder, mount it at `/app/storage/app/dmarc-eml/inbox` (or set `DMARC_EML_IMPORT_PATH`). The container runs as uid 1000, so a bind-mounted folder must be writable by that user.
 
+Logs go to the container's standard error, so use `docker compose logs`.
+
 ### SMTP listener
 
 Set `DMARC_SMTP_ENABLED=true` to accept report mail over SMTP from a relay or forwarder you control. Only clients listed in `DMARC_SMTP_ALLOWED_IPS` (IPs, CIDR ranges, or `spf:<domain>` such as `spf:spf.protection.outlook.com`) may connect, and while it is empty nobody outside the container can, so it must be set. Inside Docker the sender's address is usually the Docker network gateway or your proxy. Publish port 2525 only to the network the relay is on. Optional STARTTLS is enabled with `DMARC_SMTP_TLS_CERT` and `DMARC_SMTP_TLS_KEY` (mount the certificate into the container). See the in-app Help > Mail Ingestion page for details.
@@ -67,58 +52,130 @@ Set `DMARC_SMTP_ENABLED=true` to accept report mail over SMTP from a relay or fo
 ### Publishing the image
 
 ```bash
-docker build -t ghcr.io/<owner>/dmarc-monitor:<version> .
-docker push ghcr.io/<owner>/dmarc-monitor:<version>
+docker buildx build --platform linux/amd64 \
+  -t burnacid/dmarc-monitor:<version> -t burnacid/dmarc-monitor:latest --push .
 ```
 
-Then point the `image:` line of the compose files at that name.
+## Environment variables
 
-## About Laravel
+There is no `.env` file in the image: every setting is a container environment variable. The compose files pass `.env.docker` (created from [.env.docker.example](.env.docker.example)) to the container as its environment. Any other Laravel variable read by the files in [config/](config) works as well. "Image default" is what the image sets when you don't.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+### Required
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+| Variable | Default | Description |
+| --- | --- | --- |
+| `APP_KEY` | none | Encryption key; the container refuses to start without it. Generate with `php artisan key:generate --show`. |
+| `APP_URL` | `http://localhost` | Public URL of the app, used in links and emails. |
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+### Application
 
-## Learning Laravel
+| Variable | Default | Description |
+| --- | --- | --- |
+| `APP_NAME` | `Laravel` | Application name (page titles, email sender name). |
+| `APP_ENV` | `production` (image) | Environment name. |
+| `APP_DEBUG` | `false` (image) | Show detailed errors. Keep `false` in production. |
+| `APP_LOCALE` | `en` | Interface language. |
+| `APP_FALLBACK_LOCALE` | `en` | Fallback language. |
+| `APP_PREVIOUS_KEYS` | empty | Comma-separated old `APP_KEY` values, for key rotation. |
+| `APP_MAINTENANCE_DRIVER` | `file` | Maintenance mode driver (`file` or `cache`). |
+| `BCRYPT_ROUNDS` | `12` | Password hashing cost. |
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+### Container
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+| Variable | Default | Description |
+| --- | --- | --- |
+| `RUN_MIGRATIONS` | `true` | Run `migrate --force` on start (web and all-in-one roles). Set `false` on additional replicas. |
+| `TRUSTED_PROXIES` | unset | Comma-separated proxy addresses, or `*`, whose `X-Forwarded-*` headers are trusted. Set it when a reverse proxy terminates HTTPS, otherwise generated links use `http://`. |
+| `DMARC_SMTP_ENABLED` | `false` | Start the SMTP listener. |
+| `DMARC_SMTP_PUBLISHED_PORT` | `2525` | Host port for the `smtp` service in `compose.split.yaml` only (a compose variable, not read by the app). |
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+### Database
 
-## Agentic Development
+| Variable | Default | Description |
+| --- | --- | --- |
+| `DB_CONNECTION` | `sqlite` | `sqlite`, `mysql`, `mariadb` or `pgsql`. |
+| `DB_DATABASE` | `/app/storage/database/database.sqlite` (image) | SQLite file path, or the database name for the other drivers (`laravel` if unset). |
+| `DB_HOST` | `127.0.0.1` | Database host. |
+| `DB_PORT` | `3306` / `5432` | Database port. |
+| `DB_USERNAME` | `root` | Database user. |
+| `DB_PASSWORD` | empty | Database password. |
+| `DB_URL` | unset | Full connection URL, overriding the individual `DB_*` settings. |
+| `DB_SOCKET` | empty | Unix socket (MySQL/MariaDB). |
+| `DB_SSLMODE` | `prefer` | PostgreSQL SSL mode. |
+| `MYSQL_ATTR_SSL_CA` | unset | CA file for TLS connections to MySQL/MariaDB. |
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+### Session, cache and queue
 
-```bash
-composer require laravel/boost --dev
+| Variable | Default | Description |
+| --- | --- | --- |
+| `SESSION_DRIVER` | `database` | Session store. |
+| `SESSION_LIFETIME` | `10080` | Session lifetime in minutes. |
+| `SESSION_ENCRYPT` | `false` | Encrypt session data. |
+| `SESSION_SECURE_COOKIE` | unset | Set `true` to send the session cookie over HTTPS only (recommended behind HTTPS). |
+| `SESSION_DOMAIN` | unset | Cookie domain. |
+| `CACHE_STORE` | `database` | Cache store. |
+| `CACHE_PREFIX` | app name | Cache key prefix. |
+| `QUEUE_CONNECTION` | `database` | Queue backend. The scheduler drains the queue every five minutes; no separate queue worker is needed. |
 
-php artisan boost:install
-```
+### Redis (only when used for cache, session or queue)
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+| Variable | Default | Description |
+| --- | --- | --- |
+| `REDIS_CLIENT` | `phpredis` | Redis client; `phpredis` is the one included in the image. |
+| `REDIS_URL` | unset | Full connection URL. |
+| `REDIS_HOST` | `127.0.0.1` | Redis host. |
+| `REDIS_PORT` | `6379` | Redis port. |
+| `REDIS_USERNAME` | unset | Redis user. |
+| `REDIS_PASSWORD` | unset | Redis password. |
+| `REDIS_DB` | `0` | Database number. |
+| `REDIS_CACHE_DB` | `1` | Database number for the cache. |
 
-## Contributing
+### Logging
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+| Variable | Default | Description |
+| --- | --- | --- |
+| `LOG_CHANNEL` | `stderr` (image) | Log channel; `stderr` shows up in `docker logs`. |
+| `LOG_LEVEL` | `debug` | Minimum level (`debug`, `info`, `warning`, `error`, ...). |
+| `LOG_STACK` | `single` | Channels used by the `stack` channel. |
+| `LOG_DAILY_DAYS` | `14` | Days of logs kept by the `daily` channel. |
 
-## Code of Conduct
+### Outgoing mail (alert emails)
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MAIL_MAILER` | `log` | `log`, `smtp`, `sendmail`, ... or `microsoft365` to send via Microsoft Graph using the account set under Settings > Microsoft 365 Sending Account. |
+| `MAIL_HOST` | `127.0.0.1` | SMTP server (for `smtp`). |
+| `MAIL_PORT` | `2525` | SMTP port. |
+| `MAIL_USERNAME` | unset | SMTP user. |
+| `MAIL_PASSWORD` | unset | SMTP password. |
+| `MAIL_SCHEME` | unset | `smtp` or `smtps` (implicit TLS). |
+| `MAIL_FROM_ADDRESS` | `hello@example.com` | Sender address. |
+| `MAIL_FROM_NAME` | app name | Sender name. |
+| `MAIL_EHLO_DOMAIN` | host of `APP_URL` | Domain announced to the SMTP server. |
 
-## Security Vulnerabilities
+### Report data
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+| Variable | Default | Description |
+| --- | --- | --- |
+| `DATA_RETENTION_DAYS` | `400` | Days of report data, resolved alert events, trashed domains and audit logs to keep. |
+| `DMARC_EML_IMPORT_PATH` | `/app/storage/app/dmarc-eml` | Base folder of the local `.eml`/`.msg` import: files are read from `inbox/` and moved to `processed/` or `failed/` inside it. |
+| `MAXMIND_LICENSE_KEY` | unset | MaxMind licence key; enables the weekly GeoLite2 download. Without it reverse DNS still works. |
+| `MAXMIND_ASN_DB_PATH` | `/app/storage/app/geoip/GeoLite2-ASN.mmdb` | Path of the GeoLite2 ASN database. |
+| `MAXMIND_COUNTRY_DB_PATH` | `/app/storage/app/geoip/GeoLite2-Country.mmdb` | Path of the GeoLite2 Country database. |
+| `GEOIP_CACHE_DAYS` | `30` | Days an IP's enrichment result is cached. |
 
-## License
+### SMTP listener
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+| Variable | Default | Description |
+| --- | --- | --- |
+| `DMARC_SMTP_ENABLED` | `false` | Start the listener (see Container above). |
+| `DMARC_SMTP_HOST` | `0.0.0.0` (image) | Address to listen on. |
+| `DMARC_SMTP_PORT` | `2525` | Port to listen on. |
+| `DMARC_SMTP_ALLOWED_IPS` | empty | Clients allowed to connect: IPs, CIDR ranges or `spf:<domain>`, comma-separated. Empty means only loopback, i.e. nobody from outside the container. |
+| `DMARC_SMTP_MAX_MESSAGE_BYTES` | `26214400` | Largest message accepted (25 MB). |
+| `DMARC_SMTP_IDLE_TIMEOUT` | `60` | Seconds before an idle connection is closed. |
+| `DMARC_SMTP_MAX_CONNECTIONS` | `20` | Maximum simultaneous connections. |
+| `DMARC_SMTP_TLS_CERT` | unset | PEM certificate file; setting it enables STARTTLS. |
+| `DMARC_SMTP_TLS_KEY` | unset | Private key file, if not in the certificate file. |
+| `DMARC_SMTP_TLS_PASSPHRASE` | unset | Passphrase of the private key. |
+| `DMARC_SMTP_TLS_REQUIRED` | `false` | Refuse mail that is not sent over TLS. |

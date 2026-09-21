@@ -11,7 +11,7 @@ name: dmarc-monitor
 
 services:
   app:
-    image: dmarc-monitor:latest
+    image: burnacid/dmarc-monitor:latest
     build: .
     restart: unless-stopped
     env_file: .env.docker
