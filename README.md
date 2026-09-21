@@ -7,6 +7,72 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## Running with Docker
+
+The app ships as a single container image (FrankenPHP, PHP 8.4) that runs the web app, the scheduler (mailbox polling, local file import, cleanup, queue) and, optionally, a built-in SMTP listener.
+
+### Quick start
+
+```bash
+docker compose build
+docker run --rm dmarc-monitor:latest php artisan key:generate --show   # prints a value for APP_KEY
+cp .env.docker.example .env.docker                                     # set APP_KEY and APP_URL
+docker compose up -d
+```
+
+The app is then available on <http://localhost:8080>. [compose.yaml](compose.yaml) runs one container with SQLite and a single volume; [compose.split.yaml](compose.split.yaml) runs web, scheduler and SMTP as separate services on MariaDB:
+
+```bash
+docker compose --env-file .env.docker -f compose.split.yaml up -d --build
+```
+
+Migrations run automatically when the container starts (set `RUN_MIGRATIONS=false` on additional replicas).
+
+### Configuration
+
+There is no `.env` file in the image: every setting is a container environment variable, and every variable from [.env.example](.env.example) works. The compose files pass `.env.docker` to the container as its environment. [.env.docker.example](.env.docker.example) lists the useful ones with production defaults (`APP_KEY` is required).
+
+Variables specific to the container:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `RUN_MIGRATIONS` | `true` | Run `migrate --force` on start (web and all-in-one roles). |
+| `TRUSTED_PROXIES` | unset | Comma-separated proxy addresses, or `*`, whose `X-Forwarded-*` headers are trusted. Set it when a reverse proxy terminates HTTPS, otherwise generated links use `http://`. |
+| `DMARC_SMTP_ENABLED` | `false` | Start the SMTP listener (see below). |
+
+Logs go to the container's standard error (`LOG_CHANNEL=stderr`), so use `docker compose logs`.
+
+### Roles
+
+The container's command selects what it runs:
+
+| Command | Runs |
+| --- | --- |
+| `all` (default) | Web app + scheduler, plus the SMTP listener when `DMARC_SMTP_ENABLED=true`. |
+| `web` | Web app only (port 8080). |
+| `scheduler` | `php artisan schedule:work` only. |
+| `smtp` | The SMTP listener only (port 2525); exits immediately unless `DMARC_SMTP_ENABLED=true`. |
+| anything else | Run as given, e.g. `docker compose exec app php artisan tinker`. |
+
+Use a database other than SQLite (MySQL/MariaDB or PostgreSQL) when running several containers, as in `compose.split.yaml`.
+
+### Data
+
+Persist `/app/storage`: it holds the SQLite database (when used), stored report files, the GeoIP databases and the local import folder. To feed the local `.eml`/`.msg` import from a host folder, mount it at `/app/storage/app/dmarc-eml/inbox` (or set `DMARC_EML_IMPORT_PATH`). The container runs as uid 1000, so a bind-mounted folder must be writable by that user.
+
+### SMTP listener
+
+Set `DMARC_SMTP_ENABLED=true` to accept report mail over SMTP from a relay or forwarder you control. Only clients listed in `DMARC_SMTP_ALLOWED_IPS` (IPs, CIDR ranges, or `spf:<domain>` such as `spf:spf.protection.outlook.com`) may connect, and while it is empty nobody outside the container can, so it must be set. Inside Docker the sender's address is usually the Docker network gateway or your proxy. Publish port 2525 only to the network the relay is on. Optional STARTTLS is enabled with `DMARC_SMTP_TLS_CERT` and `DMARC_SMTP_TLS_KEY` (mount the certificate into the container). See the in-app Help > Mail Ingestion page for details.
+
+### Publishing the image
+
+```bash
+docker build -t ghcr.io/<owner>/dmarc-monitor:<version> .
+docker push ghcr.io/<owner>/dmarc-monitor:<version>
+```
+
+Then point the `image:` line of the compose files at that name.
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
