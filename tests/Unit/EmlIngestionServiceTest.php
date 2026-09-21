@@ -9,6 +9,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Tests\Support\MsgBuilder;
 use Tests\TestCase;
 
 class EmlIngestionServiceTest extends TestCase
@@ -115,6 +116,74 @@ class EmlIngestionServiceTest extends TestCase
         $stats = (new EmlIngestionService)->importPath($this->workDir);
 
         $this->assertEquals(['fetched' => 2, 'parsed' => 1, 'failed' => 1], $stats);
+    }
+
+    private function writeMsg(string $name, string $subject, array $attachments): string
+    {
+        $path = $this->workDir.DIRECTORY_SEPARATOR.$name;
+        file_put_contents($path, MsgBuilder::build($subject, $attachments));
+
+        return $path;
+    }
+
+    public function test_it_imports_an_aggregate_report_from_a_msg_file(): void
+    {
+        $xml = file_get_contents(base_path('tests/Fixtures/dmarc/aggregate/google-single-record.xml'));
+        $path = $this->writeMsg('report.msg', 'Report domain: example.com', [
+            ['name' => 'google.com!example.com!1735689600!1735776000.xml', 'mimeType' => 'application/xml', 'content' => $xml],
+        ]);
+
+        $stats = (new EmlIngestionService)->importPath($path);
+
+        $this->assertEquals(['fetched' => 1, 'parsed' => 1, 'failed' => 0], $stats);
+        $this->assertDatabaseCount('aggregate_reports', 1);
+        $this->assertFileExists($this->workDir.'/processed/report.msg');
+    }
+
+    public function test_it_reads_msg_attachments_stored_outside_the_mini_stream(): void
+    {
+        $xml = file_get_contents(base_path('tests/Fixtures/dmarc/aggregate/google-single-record.xml'));
+        $padded = str_replace('</feedback>', str_repeat('<!-- padding -->', 400).'</feedback>', $xml);
+        $this->assertGreaterThan(4096, strlen($padded));
+
+        $path = $this->writeMsg('big.msg', 'Big report', [
+            ['name' => 'big.xml', 'mimeType' => 'application/xml', 'content' => $padded],
+        ]);
+
+        $stats = (new EmlIngestionService)->importPath($path);
+
+        $this->assertEquals(['fetched' => 1, 'parsed' => 1, 'failed' => 0], $stats);
+        $this->assertDatabaseCount('aggregate_reports', 1);
+    }
+
+    public function test_it_imports_a_forensic_report_from_a_msg_file(): void
+    {
+        $eml = file_get_contents(base_path('tests/Fixtures/dmarc/forensic/complete-auth-failure.eml'));
+        preg_match('/Content-Type: message\/feedback-report\R\R(.*?)\R--RFC6591BOUNDARY/s', $eml, $matches);
+
+        $path = $this->writeMsg('forensic.msg', 'DMARC failure report for example.com', [
+            ['name' => 'Feedback report', 'mimeType' => 'message/feedback-report', 'content' => $matches[1]],
+        ]);
+
+        $stats = (new EmlIngestionService)->importPath($path);
+
+        $this->assertEquals(['fetched' => 1, 'parsed' => 1, 'failed' => 0], $stats);
+        $report = ForensicReport::first();
+        $this->assertEquals('example.com', $report->header_from);
+        $this->assertStringEndsWith('.msg', $report->raw_message_path);
+    }
+
+    public function test_a_msg_file_without_reports_or_an_invalid_msg_file_is_moved_to_failed(): void
+    {
+        $empty = $this->writeMsg('empty.msg', 'Hello', []);
+        $garbage = $this->workDir.DIRECTORY_SEPARATOR.'garbage.msg';
+        file_put_contents($garbage, 'not an ole file');
+
+        $stats = (new EmlIngestionService)->importPath($this->workDir);
+
+        $this->assertEquals(['fetched' => 2, 'parsed' => 0, 'failed' => 2], $stats);
+        $this->assertFileExists($this->workDir.'/failed/empty.msg');
+        $this->assertFileExists($this->workDir.'/failed/garbage.msg');
     }
 
     public function test_reimporting_the_same_aggregate_report_is_idempotent(): void

@@ -16,11 +16,11 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Local .eml import
+    | Local .eml/.msg import
     |--------------------------------------------------------------------------
     |
-    | Base directory for importing DMARC reports from local .eml files via
-    | `dmarc:import-eml`. Expected to contain an `inbox/` subfolder that's
+    | Base directory for importing DMARC reports from local .eml/.msg files via
+    | `dmarc:import-mail-files`. Expected to contain an `inbox/` subfolder that's
     | scanned when the command is run with no path arguments; imported files
     | are moved into `processed/` or `failed/` siblings, which `dmarc:cleanup`
     | prunes using `retention_days` above.

@@ -8,9 +8,9 @@ use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
-#[Signature('dmarc:import-eml {paths?* : .eml file(s) or directory(ies) to import; defaults to the configured inbox}')]
-#[Description('Import DMARC aggregate/forensic reports from local .eml files')]
-class ImportEmlReports extends Command
+#[Signature('dmarc:import-mail-files {paths?* : .eml/.msg file(s) or directory(ies) to import; defaults to the configured inbox}')]
+#[Description('Import DMARC aggregate/forensic reports from local .eml and .msg files')]
+class ImportMailFiles extends Command
 {
     /**
      * Execute the console command.
@@ -43,7 +43,7 @@ class ImportEmlReports extends Command
             if ($stats['fetched'] > 0) {
                 AuditLogger::record(
                     action: 'ingestion.completed',
-                    description: "Local .eml import [{$path}]: {$stats['parsed']} parsed, {$stats['failed']} failed, out of {$stats['fetched']} fetched",
+                    description: "Local .eml/.msg import [{$path}]: {$stats['parsed']} parsed, {$stats['failed']} failed, out of {$stats['fetched']} fetched",
                     userId: null,
                     context: $stats,
                 );
