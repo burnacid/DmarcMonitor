@@ -111,20 +111,55 @@ if (Confirm-Step "Push commit and tag $newVersion to origin/$currentBranch now?"
     Write-Host 'Skipped push; remember to push the commit and tag manually.' -ForegroundColor Yellow
 }
 
+# --- Merge to main ------------------------------------------------------------
+
+$buildBranch = $currentBranch
+
+if ($currentBranch -ne 'main') {
+    if (Confirm-Step "Merge $currentBranch into main and push main?") {
+        Invoke-Native -Exe 'git' -Arguments @('fetch', 'origin', 'main')
+        Invoke-Native -Exe 'git' -Arguments @('checkout', 'main')
+
+        try {
+            Invoke-Native -Exe 'git' -Arguments @('pull', 'origin', 'main', '--ff-only')
+            Invoke-Native -Exe 'git' -Arguments @('merge', '--no-ff', $currentBranch, '-m', "Merge $currentBranch into main for $newVersion")
+        } catch {
+            Write-Host 'Merge into main failed; aborting merge and returning to your branch. Resolve manually.' -ForegroundColor Red
+            git merge --abort 2>$null
+            git checkout $currentBranch 2>$null
+            throw
+        }
+
+        Invoke-Native -Exe 'git' -Arguments @('push', 'origin', 'main')
+        Write-Host 'Merged and pushed main.' -ForegroundColor Green
+        $buildBranch = 'main'
+    } else {
+        Write-Host 'Skipped merge to main.' -ForegroundColor Yellow
+    }
+}
+
 # --- Build and push the Docker image -----------------------------------------
 
-if (-not (Confirm-Step "Build and push ${imageName}:${newVersion} and ${imageName}:latest to Docker Hub?")) {
+if (-not (Confirm-Step "Build and push ${imageName}:${newVersion} and ${imageName}:latest from '$buildBranch' to Docker Hub?")) {
     Write-Host 'Skipped Docker build/push. Version bump is already committed and tagged.' -ForegroundColor Yellow
+    if ($buildBranch -ne $currentBranch) {
+        git checkout $currentBranch 2>$null
+    }
     exit 0
 }
 
-Invoke-Native -Exe 'docker' -Arguments @(
-    'buildx', 'build',
-    '--platform', 'linux/amd64',
-    '-t', "${imageName}:${newVersion}",
-    '-t', "${imageName}:latest",
-    '--push',
-    '.'
-)
-
-Write-Host "Published ${imageName}:${newVersion} (and :latest)." -ForegroundColor Green
+try {
+    Invoke-Native -Exe 'docker' -Arguments @(
+        'buildx', 'build',
+        '--platform', 'linux/amd64',
+        '-t', "${imageName}:${newVersion}",
+        '-t', "${imageName}:latest",
+        '--push',
+        '.'
+    )
+    Write-Host "Published ${imageName}:${newVersion} (and :latest)." -ForegroundColor Green
+} finally {
+    if ($buildBranch -ne $currentBranch) {
+        git checkout $currentBranch 2>$null
+    }
+}
