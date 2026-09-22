@@ -44,6 +44,15 @@ ScheduledTaskTracker::attach(
 // admin would trigger by hand.
 Schedule::command('queue:work --stop-when-empty --max-time=50 --tries=3')->everyFiveMinutes()->withoutOverlapping();
 
+// Catch-up sweep: dispatch enrichment jobs for any report records that are
+// still missing enrichment data (e.g. because the queue job failed or the
+// enrichment job was not dispatched). Runs every 15 minutes so new ingestion
+// is enriched quickly without hammering DNS resolvers.
+ScheduledTaskTracker::attach(
+    Schedule::command('dmarc:enrich-pending')->everyFifteenMinutes()->withoutOverlapping()->description('Enrich pending report records'),
+    'enrich-pending',
+);
+
 ScheduledTaskTracker::attach(
     Schedule::command('dmarc:cleanup')->daily()->withoutOverlapping()->description('Prune old data'),
     'cleanup',

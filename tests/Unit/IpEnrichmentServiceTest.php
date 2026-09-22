@@ -57,6 +57,40 @@ class IpEnrichmentServiceTest extends TestCase
         $this->assertEquals(1, $calls);
     }
 
+    public function test_warm_cache_prevents_per_ip_db_queries(): void
+    {
+        IpEnrichmentCache::create([
+            'ip' => '203.0.113.70',
+            'ptr_hostname' => 'cached.example.com',
+            'looked_up_at' => now(),
+            'lookup_failed' => false,
+        ]);
+
+        $calls = 0;
+        $service = new IpEnrichmentService(function (string $ip) use (&$calls) {
+            $calls++;
+
+            return 'dns.example.com';
+        });
+
+        $service->warmCache(['203.0.113.70']);
+        $result = $service->enrich('203.0.113.70');
+
+        // DNS resolver must not have been called — the warmed cache was used.
+        $this->assertEquals(0, $calls);
+        $this->assertEquals('cached.example.com', $result['ptr_hostname']);
+    }
+
+    public function test_warm_cache_is_a_no_op_for_empty_array(): void
+    {
+        $service = new IpEnrichmentService(fn (string $ip) => 'mail.example.com');
+
+        // Should not throw.
+        $service->warmCache([]);
+
+        $this->assertTrue(true);
+    }
+
     public function test_it_refreshes_a_stale_cache_entry(): void
     {
         IpEnrichmentCache::create([

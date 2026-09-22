@@ -36,7 +36,12 @@ class BackfillIpEnrichment extends Command
 
         $query->select('id', 'source_ip')
             ->orderBy('id')
-            ->chunkById(200, function ($records) use ($service, $bar) {
+            ->chunkById(200, function ($records) use ($service, $bar): void {
+                // Pre-load all cache entries for this chunk's IPs in one query,
+                // so enrich() hits the in-memory cache instead of issuing a
+                // separate SELECT per IP.
+                $service->warmCache($records->pluck('source_ip')->unique()->values()->all());
+
                 foreach ($records->groupBy('source_ip') as $sourceIp => $group) {
                     $enrichment = $service->enrich($sourceIp);
 
