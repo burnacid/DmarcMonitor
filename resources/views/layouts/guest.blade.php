@@ -12,7 +12,7 @@
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
 
         <!-- Dark mode (applied before paint to avoid a flash, and reapplied after each wire:navigate swap) -->
-        <script>
+        <script nonce="{{ app('csp-nonce') }}">
             function applyStoredTheme() {
                 const isDark = localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
                 document.documentElement.classList.toggle('dark', isDark);

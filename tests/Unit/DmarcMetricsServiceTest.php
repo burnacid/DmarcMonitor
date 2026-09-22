@@ -122,6 +122,44 @@ class DmarcMetricsServiceTest extends TestCase
         $this->assertEquals(0, $summary['distinct_sources']);
     }
 
+    public function test_failure_breakdown_splits_volume_by_which_mechanism_failed(): void
+    {
+        // google-single-record.xml: count=2, dkim=pass, spf=pass -> both_pass
+        (new AggregateReportParser)->parseFile($this->fixture('google-single-record.xml'));
+        // multi-record-multi-auth.xml: count=5 (dkim pass/spf fail) -> spf_fail_only
+        //                              count=1 (dkim fail/spf fail) -> both_fail
+        (new AggregateReportParser)->parseFile($this->fixture('multi-record-multi-auth.xml'));
+
+        $service = new DmarcMetricsService;
+        $from = Carbon::createFromTimestamp(1735689600)->subDay();
+        $to = Carbon::createFromTimestamp(1735689600)->addDay();
+
+        $breakdown = $service->failureBreakdown(null, $from, $to);
+
+        $this->assertEquals(8, $breakdown['total']);
+        $this->assertEquals(2, $breakdown['both_pass']);
+        $this->assertEquals(5, $breakdown['spf_fail_only']);
+        $this->assertEquals(0, $breakdown['dkim_fail_only']);
+        $this->assertEquals(1, $breakdown['both_fail']);
+    }
+
+    public function test_failure_breakdown_returns_zeroes_when_no_data_in_window(): void
+    {
+        (new AggregateReportParser)->parseFile($this->fixture('google-single-record.xml'));
+
+        $service = new DmarcMetricsService;
+        $from = Carbon::now()->addYear();
+        $to = Carbon::now()->addYear()->addDay();
+
+        $breakdown = $service->failureBreakdown(null, $from, $to);
+
+        $this->assertEquals(0, $breakdown['total']);
+        $this->assertEquals(0, $breakdown['both_pass']);
+        $this->assertEquals(0, $breakdown['spf_fail_only']);
+        $this->assertEquals(0, $breakdown['dkim_fail_only']);
+        $this->assertEquals(0, $breakdown['both_fail']);
+    }
+
     public function test_trend_groups_by_day(): void
     {
         (new AggregateReportParser)->parseFile($this->fixture('google-single-record.xml'));

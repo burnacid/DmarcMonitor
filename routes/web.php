@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\DashboardSourcesExportController;
 use App\Http\Controllers\ForensicReportDownloadController;
 use App\Http\Controllers\ReportDownloadController;
+use App\Http\Controllers\ReportsExportController;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 
@@ -11,12 +13,17 @@ Volt::route('dashboard', 'dashboard')
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
 
+Route::get('dashboard/export-sources', DashboardSourcesExportController::class)
+    ->middleware(['auth', 'verified'])
+    ->name('dashboard.export-sources');
+
 Route::view('profile', 'profile')
     ->middleware(['auth'])
     ->name('profile');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Volt::route('reports', 'reports.index')->name('reports.index');
+    Route::get('reports/export', ReportsExportController::class)->name('reports.export');
     Route::get('reports/{report}/download', ReportDownloadController::class)->name('reports.download');
     Volt::route('reports/{report}', 'reports.show')->name('reports.show');
 

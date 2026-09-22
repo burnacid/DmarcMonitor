@@ -2,6 +2,8 @@
 
 namespace App\Livewire\Forms;
 
+use App\Models\User;
+use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
@@ -22,16 +24,25 @@ class LoginForm extends Form
     public bool $remember = false;
 
     /**
-     * Attempt to authenticate the request's credentials.
+     * Validate the request's credentials without logging the user in —
+     * whether to establish the session immediately or first send them to
+     * the two-factor challenge is the caller's call (see login.blade.php),
+     * since that depends on whether the matched user has 2FA enabled.
      *
      * @throws ValidationException
      */
-    public function authenticate(): void
+    public function authenticate(): User
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt($this->only(['email', 'password']), $this->remember)) {
+        $credentials = $this->only(['email', 'password']);
+
+        if (! Auth::validate($credentials)) {
             RateLimiter::hit($this->throttleKey());
+
+            // Auth::validate() doesn't dispatch this itself (unlike Auth::attempt()),
+            // so audit logging of failed attempts stays wired the same as before.
+            event(new Failed(Auth::getDefaultDriver(), Auth::getLastAttempted(), $credentials));
 
             throw ValidationException::withMessages([
                 'form.email' => trans('auth.failed'),
@@ -39,6 +50,8 @@ class LoginForm extends Form
         }
 
         RateLimiter::clear($this->throttleKey());
+
+        return Auth::getLastAttempted();
     }
 
     /**
