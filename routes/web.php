@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\DashboardSourcesExportController;
 use App\Http\Controllers\ForensicReportDownloadController;
+use App\Http\Controllers\OrganisationReportPdfController;
 use App\Http\Controllers\ReportDownloadController;
 use App\Http\Controllers\ReportsExportController;
 use Illuminate\Support\Facades\Route;
@@ -30,6 +31,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Volt::route('forensic-reports', 'forensic-reports.index')->name('forensic-reports.index');
     Route::get('forensic-reports/{forensicReport}/download', ForensicReportDownloadController::class)->name('forensic-reports.download');
     Volt::route('forensic-reports/{forensicReport}', 'forensic-reports.show')->name('forensic-reports.show');
+
+    Route::get('organisations/{organisation}/report.pdf', OrganisationReportPdfController::class)->name('organisations.report-pdf');
 });
 
 Route::middleware(['auth', 'verified', 'role:admin,editor'])->prefix('admin')->name('admin.')->group(function () {
