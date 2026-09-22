@@ -4,10 +4,11 @@
     Docker image for that version to Docker Hub.
 
 .DESCRIPTION
-    Reads the current version from the VERSION file, asks which part to
-    increase (Major / Minor / Revision), writes the new version back,
-    commits it, tags the commit, and (after confirmation) pushes the image
-    as burnacid/dmarc-monitor:<version> and :latest.
+    Reads the current version from the VERSION file and asks whether to bump
+    it (Major / Minor / Revision — writes the new version back, commits and
+    tags it) or rebuild the existing version as-is. Either way, after
+    confirmation it can merge to main and builds & pushes the image as
+    burnacid/dmarc-monitor:<version> and :latest.
 
 .EXAMPLE
     ./build.ps1
@@ -72,43 +73,62 @@ $revision = [int]$Matches[3]
 
 Write-Host "Current version: $currentVersion (branch: $currentBranch)" -ForegroundColor Cyan
 
-# --- Ask which part to bump --------------------------------------------------
+# --- Ask whether to bump the version at all ----------------------------------
 
 do {
-    $choice = Read-Host 'Bump which part? [M]ajor / [N]Minor / [R]evision'
-    $choice = $choice.Trim().ToUpperInvariant()
-} while ($choice -notin @('M', 'MAJOR', 'N', 'MINOR', 'R', 'REVISION'))
+    $doBump = Read-Host "Bump the version, or rebuild existing $currentVersion as-is? [B]ump / [R]ebuild"
+    $doBump = $doBump.Trim().ToUpperInvariant()
+} while ($doBump -notin @('B', 'BUMP', 'R', 'REBUILD'))
 
-switch -Regex ($choice) {
-    '^M' { $major++; $minor = 0; $revision = 0 }
-    '^N' { $minor++; $revision = 0 }
-    '^R' { $revision++ }
-}
+if ($doBump.StartsWith('B')) {
 
-$newVersion = "$major.$minor.$revision"
+    # --- Ask which part to bump ----------------------------------------------
 
-if (-not (Confirm-Step "Bump version $currentVersion -> $newVersion, commit, tag, then build & push docker image?")) {
-    Write-Host 'Aborted.' -ForegroundColor Yellow
-    exit 1
-}
+    do {
+        $choice = Read-Host 'Bump which part? [M]ajor / [N]Minor / [R]evision'
+        $choice = $choice.Trim().ToUpperInvariant()
+    } while ($choice -notin @('M', 'MAJOR', 'N', 'MINOR', 'R', 'REVISION'))
 
-# --- Write, commit, tag ------------------------------------------------------
+    switch -Regex ($choice) {
+        '^M' { $major++; $minor = 0; $revision = 0 }
+        '^N' { $minor++; $revision = 0 }
+        '^R' { $revision++ }
+    }
 
-Set-Content -Path $versionFile -Value $newVersion -NoNewline
-Add-Content -Path $versionFile -Value ''
+    $newVersion = "$major.$minor.$revision"
 
-Invoke-Native -Exe 'git' -Arguments @('add', 'VERSION')
-Invoke-Native -Exe 'git' -Arguments @('commit', '-m', "Bump version to $newVersion")
-Invoke-Native -Exe 'git' -Arguments @('tag', $newVersion)
+    if (-not (Confirm-Step "Bump version $currentVersion -> $newVersion, commit, tag, then build & push docker image?")) {
+        Write-Host 'Aborted.' -ForegroundColor Yellow
+        exit 1
+    }
 
-Write-Host "Committed and tagged $newVersion." -ForegroundColor Green
+    # --- Write, commit, tag ---------------------------------------------------
 
-if (Confirm-Step "Push commit and tag $newVersion to origin/$currentBranch now?") {
-    Invoke-Native -Exe 'git' -Arguments @('push', 'origin', $currentBranch)
-    Invoke-Native -Exe 'git' -Arguments @('push', 'origin', $newVersion)
-    Write-Host 'Pushed.' -ForegroundColor Green
+    Set-Content -Path $versionFile -Value $newVersion -NoNewline
+    Add-Content -Path $versionFile -Value ''
+
+    Invoke-Native -Exe 'git' -Arguments @('add', 'VERSION')
+    Invoke-Native -Exe 'git' -Arguments @('commit', '-m', "Bump version to $newVersion")
+    Invoke-Native -Exe 'git' -Arguments @('tag', $newVersion)
+
+    Write-Host "Committed and tagged $newVersion." -ForegroundColor Green
+
+    if (Confirm-Step "Push commit and tag $newVersion to origin/$currentBranch now?") {
+        Invoke-Native -Exe 'git' -Arguments @('push', 'origin', $currentBranch)
+        Invoke-Native -Exe 'git' -Arguments @('push', 'origin', $newVersion)
+        Write-Host 'Pushed.' -ForegroundColor Green
+    } else {
+        Write-Host 'Skipped push; remember to push the commit and tag manually.' -ForegroundColor Yellow
+    }
 } else {
-    Write-Host 'Skipped push; remember to push the commit and tag manually.' -ForegroundColor Yellow
+    $newVersion = $currentVersion
+
+    if (-not (Confirm-Step "Rebuild existing version $newVersion without bumping?")) {
+        Write-Host 'Aborted.' -ForegroundColor Yellow
+        exit 1
+    }
+
+    Write-Host "Rebuilding $newVersion; no version bump, commit or tag." -ForegroundColor Cyan
 }
 
 # --- Merge to main ------------------------------------------------------------
