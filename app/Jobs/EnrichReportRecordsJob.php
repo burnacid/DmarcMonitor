@@ -19,6 +19,8 @@ class EnrichReportRecordsJob implements ShouldQueue
     {
         $records = AggregateReportRecord::where('aggregate_report_id', $this->aggregateReportId)->get();
 
+        $service->warmCache($records->pluck('source_ip')->unique()->values()->all());
+
         foreach ($records->groupBy('source_ip') as $sourceIp => $group) {
             $enrichment = $service->enrich($sourceIp);
 

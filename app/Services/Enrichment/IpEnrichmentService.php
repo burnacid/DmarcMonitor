@@ -16,6 +16,13 @@ class IpEnrichmentService
     private $ptrResolver;
 
     /**
+     * In-memory cache keyed by IP, pre-loaded by warmCache() to avoid per-IP DB round-trips.
+     *
+     * @var array<string, IpEnrichmentCache>
+     */
+    private array $memoryCache = [];
+
+    /**
      * @param  (callable(string): (string|false))|null  $ptrResolver  Defaults to the real gethostbyaddr();
      *                                                                injectable so tests never hit real DNS.
      */
@@ -25,13 +32,32 @@ class IpEnrichmentService
     }
 
     /**
+     * Pre-load the DB cache for a set of IPs in a single query.
+     * Call this before looping over many IPs to avoid N+1 cache lookups.
+     *
+     * @param  string[]  $ips
+     */
+    public function warmCache(array $ips): void
+    {
+        if (empty($ips)) {
+            return;
+        }
+
+        IpEnrichmentCache::whereIn('ip', $ips)
+            ->get()
+            ->each(function (IpEnrichmentCache $row): void {
+                $this->memoryCache[$row->ip] = $row;
+            });
+    }
+
+    /**
      * Resolve PTR hostname, ASN/org, and country for an IP, using and refreshing the cache.
      *
      * @return array{ptr_hostname: ?string, asn: ?int, asn_org: ?string, country: ?string}
      */
     public function enrich(string $ip): array
     {
-        $cached = IpEnrichmentCache::where('ip', $ip)->first();
+        $cached = $this->memoryCache[$ip] ?? IpEnrichmentCache::where('ip', $ip)->first();
 
         if ($cached && ! $this->isStale($cached)) {
             return [
@@ -48,7 +74,7 @@ class IpEnrichmentService
 
         $failed = $ptrHostname === null && $asn['asn'] === null && $country === null;
 
-        IpEnrichmentCache::updateOrCreate(
+        $row = IpEnrichmentCache::updateOrCreate(
             ['ip' => $ip],
             [
                 'ptr_hostname' => $ptrHostname,
@@ -59,6 +85,8 @@ class IpEnrichmentService
                 'lookup_failed' => $failed,
             ]
         );
+
+        $this->memoryCache[$ip] = $row;
 
         return [
             'ptr_hostname' => $ptrHostname,
