@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\Forms\LoginForm;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -16,7 +17,22 @@ new #[Layout('layouts.guest')] class extends Component
     {
         $this->validate();
 
-        $this->form->authenticate();
+        $user = $this->form->authenticate();
+
+        if ($user->hasEnabledTwoFactorAuthentication()) {
+            // Not logged in yet — the challenge page completes the login
+            // once the TOTP/recovery code is verified.
+            session([
+                'login.id' => $user->id,
+                'login.remember' => $this->form->remember,
+            ]);
+
+            $this->redirect(route('two-factor.challenge'), navigate: true);
+
+            return;
+        }
+
+        Auth::login($user, $this->form->remember);
 
         Session::regenerate();
 

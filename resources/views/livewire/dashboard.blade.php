@@ -55,6 +55,28 @@ new #[Layout('layouts.app')] class extends Component
         return app(DmarcMetricsService::class)->trend($this->domainId, $from, $to, $this->organisationId, $this->allowedDomainIds())->all();
     }
 
+    private function failureBreakdownData(): array
+    {
+        [$from, $to] = $this->effectiveWindow();
+
+        return app(DmarcMetricsService::class)->failureBreakdown($this->domainId, $from, $to, $this->organisationId, $this->allowedDomainIds());
+    }
+
+    /**
+     * The trend chart is keyed off the rolling window and only needs
+     * refreshing when that window changes; the failure-breakdown chart is
+     * keyed off the drill-down-aware effective window, so it also needs
+     * refreshing when a day is selected/cleared.
+     */
+    private function dispatchChartUpdates(bool $trendChanged): void
+    {
+        if ($trendChanged) {
+            $this->dispatch('trend-updated', trend: $this->trendData());
+        }
+
+        $this->dispatch('failure-breakdown-updated', breakdown: $this->failureBreakdownData());
+    }
+
     public function updatedOrganisationId(): void
     {
         // Drop a domain selection that no longer belongs to the chosen organisation.
@@ -67,19 +89,19 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         $this->selectedDay = null;
-        $this->dispatch('trend-updated', trend: $this->trendData());
+        $this->dispatchChartUpdates(trendChanged: true);
     }
 
     public function updatedDomainId(): void
     {
         $this->selectedDay = null;
-        $this->dispatch('trend-updated', trend: $this->trendData());
+        $this->dispatchChartUpdates(trendChanged: true);
     }
 
     public function updatedDays(): void
     {
         $this->selectedDay = null;
-        $this->dispatch('trend-updated', trend: $this->trendData());
+        $this->dispatchChartUpdates(trendChanged: true);
     }
 
     /**
@@ -90,11 +112,13 @@ new #[Layout('layouts.app')] class extends Component
     public function selectDay(string $date): void
     {
         $this->selectedDay = $this->selectedDay === $date ? null : $date;
+        $this->dispatchChartUpdates(trendChanged: false);
     }
 
     public function clearSelectedDay(): void
     {
         $this->selectedDay = null;
+        $this->dispatchChartUpdates(trendChanged: false);
     }
 
     public function with(): array
@@ -123,16 +147,37 @@ new #[Layout('layouts.app')] class extends Component
             $domains->where('organisation_id', $this->organisationId);
         }
 
+        $sourceGroups = $service->groupedSourceBreakdown($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds);
+
         return [
             'organisations' => Organisation::visibleTo($user)->orderBy('name')->get(),
             'domains' => $domains->get(),
             'summary' => $service->summary($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
             'trend' => $this->trendData(),
-            'sourceGroups' => $service->groupedSourceBreakdown($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds)->take(25),
+            'failureBreakdown' => $service->failureBreakdown($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
+            'sourceGroups' => $sourceGroups->take(25),
+            'topFailingSources' => $this->topFailingSources($sourceGroups),
             'hasAnyReports' => \App\Models\AggregateReport::visibleTo($user)->exists(),
             'windowFrom' => $from->toDateString(),
             'windowTo' => $to->toDateString(),
         ];
+    }
+
+    /**
+     * The worst-performing sending sources in the window, ignoring sources
+     * with too little volume to be meaningful (a single message at 0% pass
+     * is noise, not a signal).
+     *
+     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $sourceGroups
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function topFailingSources($sourceGroups, int $minVolume = 5, int $limit = 5)
+    {
+        return $sourceGroups
+            ->filter(fn ($group) => $group['total'] >= $minVolume && $group['dmarc_pass_pct'] < 100)
+            ->sortBy('dmarc_pass_pct')
+            ->take($limit)
+            ->values();
     }
 
     public function statusFor(float $pct): string
@@ -245,9 +290,75 @@ new #[Layout('layouts.app')] class extends Component
                     </div>
                 </div>
 
+                {{-- Why DMARC fails + top failing sources --}}
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div
+                        wire:ignore
+                        x-data="dmarcFailureChart(@js($failureBreakdown))"
+                        x-init="init($el.querySelector('canvas'))"
+                        class="bg-white dark:bg-gray-800 shadow-sm rounded-lg p-4"
+                    >
+                        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{{ __('Why DMARC fails') }}</h3>
+                        <div class="relative" style="height: 200px">
+                            <canvas></canvas>
+                            <p x-show="isEmpty" x-cloak class="absolute inset-0 flex items-center justify-center text-sm text-gray-400 dark:text-gray-500">{{ __('No messages in this window.') }}</p>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2 bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
+                        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 px-6 pt-4">{{ __('Top failing sources') }}</h3>
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 mt-2 max-md:block max-md:mt-4">
+                            <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Source') }}</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Domain') }}</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Volume') }}</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('DMARC Pass') }}</th>
+                                    <th class="px-6 py-3"></th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:space-y-3 max-md:p-3">
+                                @forelse ($topFailingSources as $group)
+                                    @php($status = $this->statusFor($group['dmarc_pass_pct']))
+                                    <tr wire:key="failing-{{ $group['label'] }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
+                                        <td data-label="{{ __('Source') }}" class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $group['label'] }}</td>
+                                        <td data-label="{{ __('Domain') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $group['domain'] }}</td>
+                                        <td data-label="{{ __('Volume') }}" class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ number_format($group['total']) }}</td>
+                                        <td data-label="{{ __('DMARC Pass') }}" class="px-6 py-3 whitespace-nowrap text-right text-sm tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
+                                            <span @class([
+                                                'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                                                'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $status === 'good',
+                                                'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200' => $status === 'warning',
+                                                'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' => $status === 'critical',
+                                            ])>{{ $group['dmarc_pass_pct'] }}%</span>
+                                        </td>
+                                        <td class="px-6 py-3 whitespace-nowrap text-right text-sm max-md:px-0 max-md:py-0 max-md:pt-1">
+                                            <a
+                                                href="{{ route('reports.index', ['domain_id' => $group['domain_id'], 'ip' => $group['ips']->pluck('source_ip')->implode(','), 'from' => $windowFrom, 'to' => $windowTo]) }}"
+                                                wire:navigate
+                                                class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"
+                                            >{{ __('Reports') }}</a>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="5" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No failing sources in this window.') }}</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 {{-- Source breakdown --}}
                 <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
-                    <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 px-6 pt-4">{{ __('Sending sources') }}</h3>
+                    <div class="flex items-center justify-between px-6 pt-4">
+                        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Sending sources') }}</h3>
+                        <a
+                            href="{{ route('dashboard.export-sources', ['domain_id' => $domainId, 'organisation_id' => $organisationId, 'from' => $windowFrom, 'to' => $windowTo]) }}"
+                            class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 uppercase tracking-widest"
+                        >{{ __('Export CSV') }}</a>
+                    </div>
                     <div class="md:overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 mt-2 max-md:block max-md:mt-4">
                             <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
@@ -541,6 +652,95 @@ new #[Layout('layouts.app')] class extends Component
                 chart.data.datasets[1].backgroundColor = c.spf;
                 chart.data.datasets[2].borderColor = c.dkim;
                 chart.data.datasets[2].backgroundColor = c.dkim;
+                chart.update();
+            },
+        };
+    });
+
+    Alpine.data('dmarcFailureChart', (initialBreakdown) => {
+        // See dmarcTrendChart above for why this is a plain closure variable.
+        let chart = null;
+
+        return {
+            isEmpty: initialBreakdown.total === 0,
+
+            colors() {
+                const dark = document.documentElement.classList.contains('dark');
+                return {
+                    bothPass: dark ? '#199e70' : '#1baf7a',
+                    spfFailOnly: dark ? '#d9a526' : '#eba834',
+                    dkimFailOnly: dark ? '#d97726' : '#eb8a34',
+                    bothFail: dark ? '#d94526' : '#eb5834',
+                    ink: dark ? '#c3c2b7' : '#52514e',
+                    border: dark ? '#1f2937' : '#ffffff',
+                };
+            },
+
+            init(canvas) {
+                if (!canvas) return;
+
+                const existing = Chart.getChart(canvas);
+                if (existing) existing.destroy();
+
+                const c = this.colors();
+
+                chart = new Chart(canvas, {
+                    type: 'doughnut',
+                    data: this.buildData(initialBreakdown, c),
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { color: c.ink, usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 12 },
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: (ctx) => {
+                                        const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                        const pct = total ? Math.round((ctx.parsed / total) * 1000) / 10 : 0;
+
+                                        return `${ctx.label}: ${ctx.parsed.toLocaleString()} (${pct}%)`;
+                                    },
+                                },
+                            },
+                        },
+                    },
+                });
+
+                window.addEventListener('theme-changed', () => this.restyle());
+
+                window.Livewire.on('failure-breakdown-updated', (event) => this.update(event.breakdown));
+            },
+
+            buildData(breakdown, c) {
+                return {
+                    labels: ['Both pass', 'SPF fail only', 'DKIM fail only', 'Both fail'],
+                    datasets: [{
+                        data: [breakdown.both_pass, breakdown.spf_fail_only, breakdown.dkim_fail_only, breakdown.both_fail],
+                        backgroundColor: [c.bothPass, c.spfFailOnly, c.dkimFailOnly, c.bothFail],
+                        borderColor: c.border,
+                        borderWidth: 2,
+                    }],
+                };
+            },
+
+            update(breakdown) {
+                this.isEmpty = breakdown.total === 0;
+                if (!chart) return;
+                const c = this.colors();
+                const fresh = this.buildData(breakdown, c);
+                chart.data.datasets[0].data = fresh.datasets[0].data;
+                chart.update();
+            },
+
+            restyle() {
+                if (!chart) return;
+                const c = this.colors();
+                chart.options.plugins.legend.labels.color = c.ink;
+                chart.data.datasets[0].backgroundColor = [c.bothPass, c.spfFailOnly, c.dkimFailOnly, c.bothFail];
+                chart.data.datasets[0].borderColor = c.border;
                 chart.update();
             },
         };

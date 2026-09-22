@@ -49,4 +49,38 @@ class AggregateReport extends Model
     {
         return $query->whereHas('domain', fn (Builder $q) => $q->visibleTo($user));
     }
+
+    /**
+     * The reports list's filter set, shared with its CSV export so both stay
+     * in lockstep instead of drifting apart. Recognised keys: domain_id, ip
+     * (comma-separated), envelope, from, to, search, spf_result, dkim_result,
+     * disposition — every key is optional.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    public function scopeFilter(Builder $query, array $filters): Builder
+    {
+        return $query
+            ->when($filters['domain_id'] ?? null, fn (Builder $q, $v) => $q->where('domain_id', $v))
+            ->when($filters['from'] ?? null, fn (Builder $q, $v) => $q->whereDate('date_range_begin', '>=', $v))
+            ->when($filters['to'] ?? null, fn (Builder $q, $v) => $q->whereDate('date_range_begin', '<=', $v))
+            ->when($filters['search'] ?? null, fn (Builder $q, $v) => $q->where(
+                fn (Builder $q2) => $q2->where('org_name', 'like', "%{$v}%")
+                    ->orWhere('report_id', 'like', "%{$v}%")
+            ))
+            ->when($filters['ip'] ?? null, function (Builder $q, $v) {
+                $ips = collect(explode(',', $v))->map(fn ($ip) => trim($ip))->filter()->all();
+
+                $q->whereHas('records', fn (Builder $q2) => $q2->whereIn('source_ip', $ips));
+            })
+            ->when($filters['envelope'] ?? null, fn (Builder $q, $v) => $q->whereHas('records', fn (Builder $q2) => $q2
+                ->where('envelope_from', 'like', "%{$v}%")
+                ->orWhere('envelope_to', 'like', "%{$v}%")
+            ))
+            ->when(($filters['spf_result'] ?? null) || ($filters['dkim_result'] ?? null) || ($filters['disposition'] ?? null), fn (Builder $q) => $q->whereHas('records', fn (Builder $q2) => $q2
+                ->when($filters['spf_result'] ?? null, fn (Builder $q3, $v) => $q3->where('spf_result', $v))
+                ->when($filters['dkim_result'] ?? null, fn (Builder $q3, $v) => $q3->where('dkim_result', $v))
+                ->when($filters['disposition'] ?? null, fn (Builder $q3, $v) => $q3->where('disposition', $v))
+            ));
+    }
 }

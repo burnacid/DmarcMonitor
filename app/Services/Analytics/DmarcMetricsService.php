@@ -203,6 +203,34 @@ class DmarcMetricsService
     }
 
     /**
+     * Splits message volume by *why* DMARC does or doesn't pass — both
+     * mechanisms aligned, only SPF broken, only DKIM broken, or both failed
+     * (the only case that actually fails DMARC, since it's an OR of the two).
+     * Surfaces a source that's silently relying on just one mechanism before
+     * that mechanism breaks and takes DMARC down with it.
+     *
+     * @return array{total: int, both_pass: int, spf_fail_only: int, dkim_fail_only: int, both_fail: int}
+     */
+    public function failureBreakdown(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null): array
+    {
+        $row = $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds)
+            ->selectRaw('SUM(aggregate_report_records.count) as total')
+            ->selectRaw("SUM(CASE WHEN aggregate_report_records.spf_result = 'pass' AND aggregate_report_records.dkim_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as both_pass")
+            ->selectRaw("SUM(CASE WHEN aggregate_report_records.spf_result != 'pass' AND aggregate_report_records.dkim_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as spf_fail_only")
+            ->selectRaw("SUM(CASE WHEN aggregate_report_records.spf_result = 'pass' AND aggregate_report_records.dkim_result != 'pass' THEN aggregate_report_records.count ELSE 0 END) as dkim_fail_only")
+            ->selectRaw("SUM(CASE WHEN aggregate_report_records.spf_result != 'pass' AND aggregate_report_records.dkim_result != 'pass' THEN aggregate_report_records.count ELSE 0 END) as both_fail")
+            ->first();
+
+        return [
+            'total' => (int) ($row->total ?? 0),
+            'both_pass' => (int) ($row->both_pass ?? 0),
+            'spf_fail_only' => (int) ($row->spf_fail_only ?? 0),
+            'dkim_fail_only' => (int) ($row->dkim_fail_only ?? 0),
+            'both_fail' => (int) ($row->both_fail ?? 0),
+        ];
+    }
+
+    /**
      * Overall summary totals for the given window, for stat tiles.
      *
      * $dateColumn selects whether the window is matched against the period a

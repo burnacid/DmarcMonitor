@@ -2,7 +2,6 @@
 
 use App\Models\AggregateReport;
 use App\Models\Domain;
-use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
@@ -49,34 +48,32 @@ new #[Layout('layouts.app')] class extends Component
         $this->reset(['domain_id', 'ip', 'envelope', 'from', 'to', 'search', 'spf_result', 'dkim_result', 'disposition']);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    public function filters(): array
+    {
+        return [
+            'domain_id' => $this->domain_id,
+            'ip' => $this->ip,
+            'envelope' => $this->envelope,
+            'from' => $this->from,
+            'to' => $this->to,
+            'search' => $this->search,
+            'spf_result' => $this->spf_result,
+            'dkim_result' => $this->dkim_result,
+            'disposition' => $this->disposition,
+        ];
+    }
+
     public function with(): array
     {
         $reports = AggregateReport::query()
             ->visibleTo(auth()->user())
+            ->filter($this->filters())
             ->with('domain')
             ->withCount('records')
             ->withSum('records as message_count', 'count')
-            ->when($this->domain_id, fn (Builder $query) => $query->where('domain_id', $this->domain_id))
-            ->when($this->from, fn (Builder $query) => $query->whereDate('date_range_begin', '>=', $this->from))
-            ->when($this->to, fn (Builder $query) => $query->whereDate('date_range_begin', '<=', $this->to))
-            ->when($this->search, fn (Builder $query) => $query->where(
-                fn (Builder $q) => $q->where('org_name', 'like', "%{$this->search}%")
-                    ->orWhere('report_id', 'like', "%{$this->search}%")
-            ))
-            ->when($this->ip, function (Builder $query) {
-                $ips = collect(explode(',', $this->ip))->map(fn ($ip) => trim($ip))->filter()->all();
-
-                $query->whereHas('records', fn (Builder $q) => $q->whereIn('source_ip', $ips));
-            })
-            ->when($this->envelope, fn (Builder $query) => $query->whereHas('records', fn (Builder $q) => $q
-                ->where('envelope_from', 'like', "%{$this->envelope}%")
-                ->orWhere('envelope_to', 'like', "%{$this->envelope}%")
-            ))
-            ->when($this->spf_result || $this->dkim_result || $this->disposition, fn (Builder $query) => $query->whereHas('records', fn (Builder $q) => $q
-                ->when($this->spf_result, fn (Builder $q) => $q->where('spf_result', $this->spf_result))
-                ->when($this->dkim_result, fn (Builder $q) => $q->where('dkim_result', $this->dkim_result))
-                ->when($this->disposition, fn (Builder $q) => $q->where('disposition', $this->disposition))
-            ))
             ->orderByDesc('date_range_begin')
             ->paginate(15);
 
@@ -163,6 +160,10 @@ new #[Layout('layouts.app')] class extends Component
                 @if ($domain_id || $ip || $envelope || $from || $to || $search || $spf_result || $dkim_result || $disposition)
                     <x-secondary-button wire:click="clearFilters">{{ __('Clear filters') }}</x-secondary-button>
                 @endif
+
+                <a href="{{ route('reports.export', $this->filters()) }}" class="inline-flex items-center px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md font-semibold text-xs text-gray-700 dark:text-gray-200 uppercase tracking-widest shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700">
+                    {{ __('Export CSV') }}
+                </a>
             </div>
 
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
