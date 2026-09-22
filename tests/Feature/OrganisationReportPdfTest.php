@@ -8,6 +8,8 @@ use App\Models\Domain;
 use App\Models\Organisation;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
+use Livewire\Volt\Volt;
 use Tests\TestCase;
 
 class OrganisationReportPdfTest extends TestCase
@@ -75,5 +77,63 @@ class OrganisationReportPdfTest extends TestCase
         $response->assertOk();
         // No assertion on rendered PDF content (dompdf output isn't practical
         // to parse); the underlying data path is covered by DmarcMetricsServiceTest.
+    }
+
+    public function test_opening_the_report_modal_defaults_to_the_last_30_days(): void
+    {
+        $admin = User::factory()->create();
+        $organisation = Organisation::factory()->create();
+
+        Volt::actingAs($admin)->test('admin.organisations')
+            ->call('openReportModal', $organisation->id)
+            ->assertSet('reportOrganisationId', $organisation->id)
+            ->assertSet('reportFrom', now()->subDays(29)->toDateString())
+            ->assertSet('reportTo', now()->toDateString());
+    }
+
+    public function test_presets_set_the_expected_date_range(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-03-15'));
+
+        $admin = User::factory()->create();
+        $organisation = Organisation::factory()->create();
+
+        $component = Volt::actingAs($admin)->test('admin.organisations')
+            ->call('openReportModal', $organisation->id);
+
+        $component->call('applyReportPreset', 'this_month')
+            ->assertSet('reportFrom', '2026-03-01')
+            ->assertSet('reportTo', '2026-03-31');
+
+        $component->call('applyReportPreset', 'last_month')
+            ->assertSet('reportFrom', '2026-02-01')
+            ->assertSet('reportTo', '2026-02-28');
+
+        Carbon::setTestNow();
+    }
+
+    public function test_picking_a_month_overrides_the_date_range(): void
+    {
+        $admin = User::factory()->create();
+        $organisation = Organisation::factory()->create();
+
+        Volt::actingAs($admin)->test('admin.organisations')
+            ->call('openReportModal', $organisation->id)
+            ->set('reportMonthInput', '2026-06')
+            ->assertSet('reportFrom', '2026-06-01')
+            ->assertSet('reportTo', '2026-06-30');
+    }
+
+    public function test_a_scoped_user_cannot_open_the_report_modal_for_another_organisation(): void
+    {
+        $orgA = Organisation::factory()->create();
+        $orgB = Organisation::factory()->create();
+
+        $user = User::factory()->create(['role' => 'editor']);
+        $user->organisations()->attach($orgA->id);
+
+        Volt::actingAs($user)->test('admin.organisations')
+            ->call('openReportModal', $orgB->id)
+            ->assertStatus(404);
     }
 }

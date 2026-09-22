@@ -2,6 +2,7 @@
 
 use App\Models\Organisation;
 use App\Support\AuditLogger;
+use Carbon\Carbon;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -14,6 +15,16 @@ new #[Layout('layouts.app')] class extends Component
 
     public string $name = '';
     public string $notes = '';
+
+    public ?int $reportOrganisationId = null;
+
+    public string $reportOrganisationName = '';
+
+    public string $reportFrom = '';
+
+    public string $reportTo = '';
+
+    public string $reportMonthInput = '';
 
     public function create(): void
     {
@@ -78,6 +89,51 @@ new #[Layout('layouts.app')] class extends Component
         $organisation->delete();
     }
 
+    public function openReportModal(int $id): void
+    {
+        abort_unless(auth()->user()->canAccessOrganisation($id), 404);
+
+        $this->reportOrganisationId = $id;
+        $this->reportOrganisationName = Organisation::findOrFail($id)->name;
+        $this->reportMonthInput = '';
+        $this->applyReportPreset('last_30');
+        $this->dispatch('open-modal', 'organisation-report');
+    }
+
+    /**
+     * Fills reportFrom/reportTo from a named preset — the buttons in the
+     * modal all just call this, and the custom date inputs below them stay
+     * free to override whatever it lands on.
+     */
+    public function applyReportPreset(string $preset): void
+    {
+        $now = Carbon::now();
+
+        [$this->reportFrom, $this->reportTo] = match ($preset) {
+            'this_month' => [$now->copy()->startOfMonth()->toDateString(), $now->copy()->endOfMonth()->toDateString()],
+            'last_month' => [$now->copy()->subMonthNoOverflow()->startOfMonth()->toDateString(), $now->copy()->subMonthNoOverflow()->endOfMonth()->toDateString()],
+            'last_90' => [$now->copy()->subDays(89)->toDateString(), $now->toDateString()],
+            default => [$now->copy()->subDays(29)->toDateString(), $now->toDateString()],
+        };
+
+        $this->reportMonthInput = '';
+    }
+
+    /**
+     * Picking a month overrides the from/to range to exactly that calendar
+     * month, so the two controls never disagree with each other.
+     */
+    public function updatedReportMonthInput(string $value): void
+    {
+        if (! $value) {
+            return;
+        }
+
+        $month = Carbon::createFromFormat('Y-m', $value);
+        $this->reportFrom = $month->copy()->startOfMonth()->toDateString();
+        $this->reportTo = $month->copy()->endOfMonth()->toDateString();
+    }
+
     public function with(): array
     {
         return [
@@ -119,7 +175,7 @@ new #[Layout('layouts.app')] class extends Component
                                     <span class="max-md:text-right">{{ \Illuminate\Support\Str::limit($organisation->notes, 60) }}</span>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm space-x-3 max-md:px-0 max-md:py-0 max-md:pt-1 max-md:space-x-0 max-md:flex max-md:flex-wrap max-md:gap-3">
-                                    <a href="{{ route('organisations.report-pdf', $organisation) }}" target="_blank" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('PDF Report') }}</a>
+                                    <button wire:click="openReportModal({{ $organisation->id }})" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('PDF Report') }}</button>
                                     <button wire:click="edit({{ $organisation->id }})" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Edit') }}</button>
                                     <button wire:click="delete({{ $organisation->id }})" wire:confirm="{{ __('Delete this organisation?') }}" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">{{ __('Delete') }}</button>
                                 </td>
@@ -162,5 +218,51 @@ new #[Layout('layouts.app')] class extends Component
                 <x-primary-button type="submit">{{ __('Save') }}</x-primary-button>
             </div>
         </form>
+    </x-modal>
+
+    <x-modal name="organisation-report" focusable>
+        <div class="p-6">
+            <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">
+                {{ __('PDF report for :name', ['name' => $reportOrganisationName]) }}
+            </h2>
+
+            <div class="mt-4 flex flex-wrap gap-2">
+                @foreach ([
+                    'this_month' => 'This month',
+                    'last_month' => 'Last month',
+                    'last_30' => 'Last 30 days',
+                    'last_90' => 'Last 90 days',
+                ] as $preset => $label)
+                    <x-secondary-button type="button" wire:click="applyReportPreset('{{ $preset }}')" class="text-xs">
+                        {{ __($label) }}
+                    </x-secondary-button>
+                @endforeach
+            </div>
+
+            <div class="mt-4">
+                <x-input-label for="report_month" :value="__('Or pick a month')" />
+                <input wire:model.live="reportMonthInput" id="report_month" type="month" class="mt-1 block border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm" />
+            </div>
+
+            <div class="mt-4 flex gap-3">
+                <div>
+                    <x-input-label for="report_from" :value="__('From')" />
+                    <x-text-input wire:model.live="reportFrom" id="report_from" type="date" class="mt-1 block text-sm" />
+                </div>
+                <div>
+                    <x-input-label for="report_to" :value="__('To')" />
+                    <x-text-input wire:model.live="reportTo" id="report_to" type="date" class="mt-1 block text-sm" />
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end space-x-3">
+                <x-secondary-button type="button" x-on:click="show = false">{{ __('Cancel') }}</x-secondary-button>
+                <a
+                    href="{{ $reportOrganisationId ? route('organisations.report-pdf', ['organisation' => $reportOrganisationId, 'from' => $reportFrom, 'to' => $reportTo]) : '#' }}"
+                    target="_blank"
+                    class="inline-flex items-center px-4 py-2 bg-gray-800 dark:bg-gray-200 border border-transparent rounded-md font-semibold text-xs text-white dark:text-gray-800 uppercase tracking-widest hover:bg-gray-700 dark:hover:bg-white"
+                >{{ __('Download PDF') }}</a>
+            </div>
+        </div>
     </x-modal>
 </div>
