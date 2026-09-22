@@ -283,16 +283,14 @@ class ImapIngestionService
                 return;
             }
 
+            if ($account->mark_as_read) {
+                $message->setFlag('Seen');
+            }
+
             $targetFolder = $success ? $account->folder_processed : $account->folder_failed;
 
             if ($targetFolder) {
                 $message->move($targetFolder);
-
-                return;
-            }
-
-            if ($account->mark_as_read) {
-                $message->setFlag('Seen');
             }
         } catch (Throwable $e) {
             Log::warning("Failed to post-process message for account [{$account->label}]: {$e->getMessage()}");

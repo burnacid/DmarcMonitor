@@ -93,6 +93,47 @@ class GraphIngestionServiceTest extends TestCase
         $this->assertSame('example.com', $report->header_from);
     }
 
+    public function test_it_marks_a_message_as_read_even_when_moving_it_to_a_processed_folder(): void
+    {
+        Storage::fake('local');
+
+        $xml = file_get_contents(base_path('tests/Fixtures/dmarc/aggregate/google-single-record.xml'));
+
+        Http::fake([
+            'login.microsoftonline.com/*' => Http::response(['access_token' => 'test-token', 'expires_in' => 3600]),
+            'graph.microsoft.com/v1.0/users/*/mailFolders?*' => Http::response(['value' => [
+                ['id' => 'inbox-id', 'displayName' => 'Inbox'],
+                ['id' => 'processed-id', 'displayName' => 'Processed'],
+            ]]),
+            'graph.microsoft.com/v1.0/users/*/mailFolders/*/messages*' => Http::response([
+                'value' => [
+                    ['id' => 'msg-1', 'subject' => 'DMARC report', 'hasAttachments' => true, 'isRead' => false],
+                ],
+            ]),
+            'graph.microsoft.com/v1.0/users/*/messages/*/attachments*' => Http::response([
+                'value' => [
+                    ['name' => 'google.com!example.com!1735689600!1735776000.xml', 'contentType' => 'application/octet-stream', 'contentBytes' => base64_encode($xml)],
+                ],
+            ]),
+            'graph.microsoft.com/v1.0/users/*/messages/*/move' => Http::response([]),
+            'graph.microsoft.com/v1.0/users/*/messages/*' => Http::response([]),
+        ]);
+
+        $account = Microsoft365MailAccount::factory()->create([
+            'folder_processed' => 'Processed',
+            'mark_as_read' => true,
+        ]);
+
+        (new GraphIngestionService)->pollAccount($account);
+
+        Http::assertSent(fn ($request) => str_ends_with($request->url(), '/messages/msg-1')
+            && $request->method() === 'PATCH'
+            && ($request->data()['isRead'] ?? null) === true);
+
+        Http::assertSent(fn ($request) => str_ends_with($request->url(), '/messages/msg-1/move')
+            && $request->method() === 'POST');
+    }
+
     public function test_it_records_a_graph_error_without_crashing(): void
     {
         Http::fake([

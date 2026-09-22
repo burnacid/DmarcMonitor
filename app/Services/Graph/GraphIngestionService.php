@@ -285,6 +285,13 @@ class GraphIngestionService
                 return;
             }
 
+            if ($account->mark_as_read) {
+                Http::withToken($token)->patch(
+                    "https://graph.microsoft.com/v1.0/users/{$mailbox}/messages/{$messageId}",
+                    ['isRead' => true],
+                );
+            }
+
             $targetFolderName = $success ? $account->folder_processed : $account->folder_failed;
 
             if ($targetFolderName) {
@@ -296,15 +303,6 @@ class GraphIngestionService
                         ['destinationId' => $targetFolderId],
                     );
                 }
-
-                return;
-            }
-
-            if ($account->mark_as_read) {
-                Http::withToken($token)->patch(
-                    "https://graph.microsoft.com/v1.0/users/{$mailbox}/messages/{$messageId}",
-                    ['isRead' => true],
-                );
             }
         } catch (Throwable $e) {
             Log::warning("Failed to post-process message for account [{$account->label}]: {$e->getMessage()}");
