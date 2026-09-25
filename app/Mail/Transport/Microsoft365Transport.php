@@ -38,7 +38,7 @@ class Microsoft365Transport extends AbstractTransport
         }
 
         try {
-            $token = $this->tokenService->getAccessToken($account->tenant_id, $account->client_id, $account->client_secret);
+            $token = $this->tokenService->getAccessTokenFor($account);
             $mailbox = rawurlencode($account->mailbox);
 
             $draft = Http::withToken($token)

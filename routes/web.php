@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\DashboardSourcesExportController;
 use App\Http\Controllers\ForensicReportDownloadController;
+use App\Http\Controllers\Microsoft365ConnectController;
 use App\Http\Controllers\OrganisationReportPdfController;
 use App\Http\Controllers\ReportDownloadController;
 use App\Http\Controllers\ReportsExportController;
@@ -49,6 +50,8 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Volt::route('imap-accounts', 'admin.imap-accounts')->name('imap-accounts');
     Volt::route('microsoft365-mailboxes', 'admin.microsoft365-mail-accounts')->name('microsoft365-mail-accounts');
     Volt::route('microsoft365-sending', 'admin.microsoft365-send-account')->name('microsoft365-send-account');
+    Route::get('microsoft365/connect/{target}', [Microsoft365ConnectController::class, 'redirect'])->name('microsoft365.connect');
+    Route::get('microsoft365/callback', [Microsoft365ConnectController::class, 'callback'])->name('microsoft365.callback');
     Volt::route('scheduled-tasks', 'admin.scheduled-tasks')->name('scheduled-tasks');
     Volt::route('audit-log', 'admin.audit-log')->name('audit-log');
 });

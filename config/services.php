@@ -28,6 +28,15 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    /*
+     * Shared multi-tenant app registration for "Connect with Microsoft".
+     * Optional: accounts can still use their own app registration.
+     */
+    'microsoft365' => [
+        'client_id' => env('MICROSOFT365_CLIENT_ID'),
+        'client_secret' => env('MICROSOFT365_CLIENT_SECRET'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
