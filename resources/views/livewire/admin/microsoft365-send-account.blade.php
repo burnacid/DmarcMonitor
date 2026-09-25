@@ -1,9 +1,8 @@
 <?php
 
 use App\Models\Microsoft365SendAccount;
-use App\Services\Graph\GraphTokenService;
+use App\Services\Graph\GraphConnectionTester;
 use App\Support\AuditLogger;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -90,14 +89,7 @@ new #[Layout('layouts.app')] class extends Component
     {
         $account = Microsoft365SendAccount::findOrFail($id);
 
-        try {
-            $token = app(GraphTokenService::class)->getAccessToken($account->tenant_id, $account->client_id, $account->client_secret);
-            $response = Http::withToken($token)->get('https://graph.microsoft.com/v1.0/users/'.rawurlencode($account->mailbox));
-
-            $result = $response->successful() ? 'ok' : ($response->json('error.message') ?? $response->body());
-        } catch (\Throwable $e) {
-            $result = $e->getMessage();
-        }
+        $result = app(GraphConnectionTester::class)->testSendAccount($account);
 
         $account->update(['last_error' => $result === 'ok' ? null : $result]);
 
