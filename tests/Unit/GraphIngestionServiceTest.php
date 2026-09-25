@@ -29,9 +29,10 @@ class GraphIngestionServiceTest extends TestCase
                     ['id' => 'msg-1', 'subject' => 'DMARC report', 'hasAttachments' => true, 'isRead' => false],
                 ],
             ]),
+            'graph.microsoft.com/v1.0/users/*/messages/*/attachments/att-1/$value' => Http::response($xml),
             'graph.microsoft.com/v1.0/users/*/messages/*/attachments*' => Http::response([
                 'value' => [
-                    ['name' => 'google.com!example.com!1735689600!1735776000.xml', 'contentType' => 'application/octet-stream', 'contentBytes' => base64_encode($xml)],
+                    ['id' => 'att-1', 'name' => 'google.com!example.com!1735689600!1735776000.xml', 'contentType' => 'application/octet-stream', 'size' => strlen($xml)],
                 ],
             ]),
             'graph.microsoft.com/v1.0/users/*/messages/*' => Http::response([]),
@@ -53,6 +54,39 @@ class GraphIngestionServiceTest extends TestCase
         $account->refresh();
         $this->assertNull($account->last_error);
         $this->assertNotNull($account->last_polled_at);
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/messages/msg-1/attachments?')
+            && ! str_contains(urldecode($request->url()), 'contentBytes'));
+    }
+
+    public function test_it_counts_a_failed_attachment_download_as_failed(): void
+    {
+        Storage::fake('local');
+
+        Http::fake([
+            'login.microsoftonline.com/*' => Http::response(['access_token' => 'test-token', 'expires_in' => 3600]),
+            'graph.microsoft.com/v1.0/users/*/mailFolders?*' => Http::response(['value' => [['id' => 'inbox-id']]]),
+            'graph.microsoft.com/v1.0/users/*/mailFolders/*/messages*' => Http::response([
+                'value' => [
+                    ['id' => 'msg-1', 'subject' => 'DMARC report', 'hasAttachments' => true, 'isRead' => false],
+                ],
+            ]),
+            'graph.microsoft.com/v1.0/users/*/messages/*/attachments/att-1/$value' => Http::response(['error' => ['message' => 'Not found']], 404),
+            'graph.microsoft.com/v1.0/users/*/messages/*/attachments*' => Http::response([
+                'value' => [
+                    ['id' => 'att-1', 'name' => 'google.com!example.com!1735689600!1735776000.xml', 'contentType' => 'application/octet-stream', 'size' => 100],
+                ],
+            ]),
+            'graph.microsoft.com/v1.0/users/*/messages/*' => Http::response([]),
+        ]);
+
+        $account = Microsoft365MailAccount::factory()->create();
+
+        $stats = (new GraphIngestionService)->pollAccount($account);
+
+        $this->assertSame(0, $stats['parsed']);
+        $this->assertSame(1, $stats['failed']);
+        $this->assertSame(0, AggregateReport::count());
     }
 
     public function test_it_parses_a_forensic_report_from_a_feedback_report_attachment(): void
@@ -71,9 +105,10 @@ class GraphIngestionServiceTest extends TestCase
                     ['id' => 'msg-2', 'subject' => 'DMARC failure report for example.com', 'hasAttachments' => true, 'isRead' => false],
                 ],
             ]),
+            'graph.microsoft.com/v1.0/users/*/messages/*/attachments/att-2/$value' => Http::response($feedbackText),
             'graph.microsoft.com/v1.0/users/*/messages/*/attachments*' => Http::response([
                 'value' => [
-                    ['name' => 'report.txt', 'contentType' => 'message/feedback-report', 'contentBytes' => base64_encode($feedbackText)],
+                    ['id' => 'att-2', 'name' => 'report.txt', 'contentType' => 'message/feedback-report', 'size' => strlen($feedbackText)],
                 ],
             ]),
             'graph.microsoft.com/v1.0/users/*/messages/*/$value' => Http::response($eml),
@@ -110,9 +145,10 @@ class GraphIngestionServiceTest extends TestCase
                     ['id' => 'msg-1', 'subject' => 'DMARC report', 'hasAttachments' => true, 'isRead' => false],
                 ],
             ]),
+            'graph.microsoft.com/v1.0/users/*/messages/*/attachments/att-1/$value' => Http::response($xml),
             'graph.microsoft.com/v1.0/users/*/messages/*/attachments*' => Http::response([
                 'value' => [
-                    ['name' => 'google.com!example.com!1735689600!1735776000.xml', 'contentType' => 'application/octet-stream', 'contentBytes' => base64_encode($xml)],
+                    ['id' => 'att-1', 'name' => 'google.com!example.com!1735689600!1735776000.xml', 'contentType' => 'application/octet-stream', 'size' => strlen($xml)],
                 ],
             ]),
             'graph.microsoft.com/v1.0/users/*/messages/*/move' => Http::response([]),

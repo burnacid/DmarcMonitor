@@ -135,9 +135,12 @@ class GraphIngestionService
             return true;
         }
 
+        // Only base microsoft.graph.attachment properties may be selected on the
+        // collection: contentBytes exists solely on fileAttachment, so Graph
+        // rejects it here. Content is downloaded per attachment instead.
         $attachmentsResponse = Http::withToken($token)->get(
             "https://graph.microsoft.com/v1.0/users/{$mailbox}/messages/{$message['id']}/attachments",
-            ['$select' => 'name,contentType,contentBytes'],
+            ['$select' => 'id,name,contentType,size'],
         );
 
         if ($attachmentsResponse->failed()) {
@@ -173,7 +176,7 @@ class GraphIngestionService
 
             $anyAttachmentFound = true;
 
-            if ($this->processAttachment($attachment, $account, $message)) {
+            if ($this->processAttachment($attachment, $account, $message, $token, $mailbox)) {
                 $stats['parsed']++;
             } else {
                 $stats['failed']++;
@@ -203,20 +206,16 @@ class GraphIngestionService
      * @param  array<string, mixed>  $attachment
      * @param  array<string, mixed>  $message
      */
-    private function processAttachment(array $attachment, Microsoft365MailAccount $account, array $message): bool
+    private function processAttachment(array $attachment, Microsoft365MailAccount $account, array $message, string $token, string $mailbox): bool
     {
         $storedPath = null;
         $name = (string) ($attachment['name'] ?? 'report');
 
         try {
+            $content = $this->downloadAttachment($attachment, $message, $token, $mailbox);
+
             $filename = Str::uuid().'-'.Str::slug(pathinfo($name, PATHINFO_FILENAME)).'.'.pathinfo($name, PATHINFO_EXTENSION);
             $storedPath = "dmarc-attachments/graph-{$account->id}/{$filename}";
-
-            $content = base64_decode((string) ($attachment['contentBytes'] ?? ''), true);
-
-            if ($content === false) {
-                throw new RuntimeException("Attachment [{$name}] is not valid base64.");
-            }
 
             Storage::disk('local')->put($storedPath, $content);
 
@@ -248,7 +247,7 @@ class GraphIngestionService
         $storedPath = null;
 
         try {
-            $feedbackText = base64_decode((string) ($feedbackAttachment['contentBytes'] ?? ''), true) ?: '';
+            $feedbackText = $this->downloadAttachment($feedbackAttachment, $message, $token, $mailbox);
 
             $rawResponse = Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$mailbox}/messages/{$message['id']}/\$value");
             $rawMessage = $rawResponse->successful() ? $rawResponse->body() : $feedbackText;
@@ -274,6 +273,33 @@ class GraphIngestionService
 
             return false;
         }
+    }
+
+    /**
+     * Downloads an attachment's raw bytes via its /$value endpoint, which works
+     * for every attachment type and avoids base64-inflated JSON payloads.
+     *
+     * @param  array<string, mixed>  $attachment
+     * @param  array<string, mixed>  $message
+     */
+    private function downloadAttachment(array $attachment, array $message, string $token, string $mailbox): string
+    {
+        $name = (string) ($attachment['name'] ?? 'report');
+        $attachmentId = (string) ($attachment['id'] ?? '');
+
+        if ($attachmentId === '') {
+            throw new RuntimeException("Attachment [{$name}] has no id.");
+        }
+
+        $response = Http::withToken($token)->get(
+            "https://graph.microsoft.com/v1.0/users/{$mailbox}/messages/{$message['id']}/attachments/".rawurlencode($attachmentId).'/$value',
+        );
+
+        if ($response->failed()) {
+            throw new RuntimeException("Failed to download attachment [{$name}]: ".($response->json('error.message') ?? $response->body()));
+        }
+
+        return $response->body();
     }
 
     private function applyPostProcessing(string $messageId, Microsoft365MailAccount $account, string $token, string $mailbox, bool $success): void
