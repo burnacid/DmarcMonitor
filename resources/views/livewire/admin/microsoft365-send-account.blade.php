@@ -1,8 +1,10 @@
 <?php
 
+use App\Models\Microsoft365MailAccount;
 use App\Models\Microsoft365SendAccount;
 use App\Services\Graph\GraphConnectionTester;
 use App\Support\AuditLogger;
+use App\Support\Microsoft365App;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -12,6 +14,7 @@ new #[Layout('layouts.app')] class extends Component
     public ?int $editingId = null;
 
     public string $label = '';
+    public bool $use_shared_app = false;
     public string $tenant_id = '';
     public string $client_id = '';
     public string $client_secret = '';
@@ -23,9 +26,30 @@ new #[Layout('layouts.app')] class extends Component
 
     public string $testRecipient = '';
 
+    /**
+     * Picks up the result of "Connect with Microsoft": on success, opens the
+     * new-account form with the consented tenant already filled in.
+     */
+    public function mount(): void
+    {
+        if ($error = session('microsoft365_connect_error')) {
+            $this->testResult = __('Connect with Microsoft failed: :error', ['error' => $error]);
+            $this->testResultIsError = true;
+        }
+
+        if ($tenantId = session('microsoft365_connected_tenant')) {
+            $this->create();
+            $this->use_shared_app = true;
+            $this->tenant_id = $tenantId;
+            $this->testResult = __('Tenant connected. Enter the mailbox to send as (a shared mailbox works) to finish.');
+            $this->testResultIsError = false;
+        }
+    }
+
     public function create(): void
     {
         $this->reset(['editingId', 'label', 'tenant_id', 'client_id', 'client_secret', 'mailbox']);
+        $this->use_shared_app = Microsoft365App::isConfigured();
         $this->is_active = true;
         $this->dispatch('open-modal', 'microsoft365-send-account-form');
     }
@@ -35,8 +59,9 @@ new #[Layout('layouts.app')] class extends Component
         $account = Microsoft365SendAccount::findOrFail($id);
         $this->editingId = $account->id;
         $this->label = $account->label;
+        $this->use_shared_app = $account->usesSharedApp();
         $this->tenant_id = $account->tenant_id;
-        $this->client_id = $account->client_id;
+        $this->client_id = (string) $account->client_id;
         $this->client_secret = '';
         $this->mailbox = $account->mailbox;
         $this->is_active = $account->is_active;
@@ -45,18 +70,34 @@ new #[Layout('layouts.app')] class extends Component
 
     public function save(): void
     {
+        $existing = $this->editingId !== null ? Microsoft365SendAccount::findOrFail($this->editingId) : null;
+        $needsNewSecret = $existing === null || $existing->usesSharedApp();
+
         $validated = $this->validate([
             'label' => 'required|string|max:255',
+            'use_shared_app' => [
+                'boolean',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value && ! Microsoft365App::isConfigured()) {
+                        $fail(__('Connect with Microsoft is not configured on this installation.'));
+                    }
+                },
+            ],
             'tenant_id' => 'required|string|max:255',
-            'client_id' => 'required|string|max:255',
-            'client_secret' => ($this->editingId ? 'nullable' : 'required').'|string',
+            'client_id' => $this->use_shared_app ? 'nullable' : 'required|string|max:255',
+            'client_secret' => $this->use_shared_app ? 'nullable' : ($needsNewSecret ? 'required' : 'nullable').'|string',
             'mailbox' => 'required|email|max:255',
             'is_active' => 'boolean',
         ]);
 
-        if (empty($validated['client_secret'])) {
+        if ($validated['use_shared_app']) {
+            $validated['client_id'] = null;
+            $validated['client_secret'] = null;
+        } elseif (empty($validated['client_secret'])) {
             unset($validated['client_secret']);
         }
+
+        unset($validated['use_shared_app']);
 
         $wasNew = $this->editingId === null;
         $account = Microsoft365SendAccount::updateOrCreate(['id' => $this->editingId], $validated);
@@ -123,6 +164,11 @@ new #[Layout('layouts.app')] class extends Component
     {
         return [
             'accounts' => Microsoft365SendAccount::orderBy('label')->get(),
+            'sharedAppConfigured' => Microsoft365App::isConfigured(),
+            'connectedTenants' => Microsoft365SendAccount::whereNull('client_id')->distinct()->orderBy('tenant_id')->pluck('tenant_id')
+                ->merge(Microsoft365MailAccount::whereNull('client_id')->distinct()->pluck('tenant_id'))
+                ->unique()->values(),
+            'redirectUri' => Microsoft365App::redirectUri(),
         ];
     }
 }; ?>
@@ -134,22 +180,20 @@ new #[Layout('layouts.app')] class extends Component
 
     <div class="py-8">
         <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8">
-            <details class="mb-6 bg-white dark:bg-gray-800 shadow-sm rounded-lg p-4 text-sm text-gray-700 dark:text-gray-300">
-                <summary class="cursor-pointer font-medium text-gray-900 dark:text-gray-100">{{ __('How to set up an Azure app registration for sending mail') }}</summary>
-                <ol class="mt-3 list-decimal list-inside space-y-2">
-                    <li>{{ __('In the Microsoft Entra admin center, go to App registrations → New registration. No redirect URI is needed — this is an app-only, non-interactive app.') }}</li>
-                    <li>{{ __('Go to API permissions → Add a permission → Microsoft Graph → Application permissions, add Mail.Send, then Grant admin consent.') }}</li>
-                    <li>{{ __('Go to Certificates & secrets → New client secret, and copy the value immediately — it is only shown once.') }}</li>
-                    <li>{{ __('From the Overview page, copy the Application (client) ID and Directory (tenant) ID into the form below, along with the mailbox address to send as.') }}</li>
-                    <li>{{ __('Only one active account is used to send mail at a time — activate the one you want in use and set MAIL_MAILER=microsoft365 in the environment configuration.') }}</li>
-                </ol>
-                <p class="mt-3 text-xs text-gray-400 dark:text-gray-500">
-                    {{ __('Recommended: scope the app to only this mailbox using an Exchange Online application access policy, so the app-only grant is not tenant-wide mail access:') }}
-                    <code class="block mt-1 p-2 rounded bg-gray-100 dark:bg-gray-900 overflow-x-auto">New-ApplicationAccessPolicy -AppId "&lt;client-id&gt;" -PolicyScopeGroupId "sender@example.com" -AccessRight RestrictAccess -Description "DMARC monitor"</code>
-                </p>
-            </details>
+            <x-microsoft365.setup-guide
+                :purpose="__('sending mail')"
+                permission="Mail.Send"
+                :redirect-uri="$redirectUri"
+                :shared-app-configured="$sharedAppConfigured"
+                example-policy-mailbox="sender@example.com"
+            >
+                <p class="mt-3">{{ __('Only one active account is used to send mail at a time — activate the one you want in use and set MAIL_MAILER=microsoft365 in the environment configuration.') }}</p>
+            </x-microsoft365.setup-guide>
 
-            <div class="flex justify-end mb-4">
+            <div class="flex flex-wrap justify-end gap-3 mb-4">
+                @if ($sharedAppConfigured)
+                    <a href="{{ route('admin.microsoft365.connect', 'sending') }}" class="inline-flex items-center px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md font-semibold text-xs text-gray-700 dark:text-gray-300 uppercase tracking-widest shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition ease-in-out duration-150">{{ __('Connect with Microsoft') }}</a>
+                @endif
                 <x-primary-button wire:click="create">{{ __('New Sending Account') }}</x-primary-button>
             </div>
 
@@ -247,23 +291,13 @@ new #[Layout('layouts.app')] class extends Component
                     <x-input-error :messages="$errors->get('mailbox')" class="mt-2" />
                 </div>
 
-                <div>
-                    <x-input-label for="send_tenant_id" :value="__('Directory (tenant) ID')" />
-                    <x-text-input wire:model="tenant_id" id="send_tenant_id" type="text" class="mt-1 block w-full" />
-                    <x-input-error :messages="$errors->get('tenant_id')" class="mt-2" />
-                </div>
-
-                <div>
-                    <x-input-label for="send_client_id" :value="__('Application (client) ID')" />
-                    <x-text-input wire:model="client_id" id="send_client_id" type="text" class="mt-1 block w-full" />
-                    <x-input-error :messages="$errors->get('client_id')" class="mt-2" />
-                </div>
-
-                <div class="sm:col-span-2">
-                    <x-input-label for="send_client_secret" :value="__('Client secret')" />
-                    <x-text-input wire:model="client_secret" id="send_client_secret" type="password" :placeholder="$editingId ? __('Leave blank to keep current') : ''" class="mt-1 block w-full" />
-                    <x-input-error :messages="$errors->get('client_secret')" class="mt-2" />
-                </div>
+                <x-microsoft365.credential-fields
+                    id-prefix="send_"
+                    :editing-id="$editingId"
+                    :use-shared-app="$use_shared_app"
+                    :shared-app-configured="$sharedAppConfigured"
+                    :connected-tenants="$connectedTenants"
+                />
 
                 <div class="flex items-center">
                     <input wire:model="is_active" id="send_is_active" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">

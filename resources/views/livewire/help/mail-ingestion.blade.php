@@ -27,7 +27,7 @@ new #[Layout('layouts.app')] class extends Component
                 <p>{{ __('Two kinds of mailbox connection are supported, configured separately (see Local files and SMTP listener below for the other two):') }}</p>
                 <ul class="list-disc list-inside space-y-1">
                     <li>{{ __('IMAP Accounts — a plain IMAP mailbox (host, port, encryption, username/password).') }}</li>
-                    <li>{{ __('Microsoft 365 Mailboxes — connects via the Microsoft Graph API using an app registration (tenant ID, client ID/secret) rather than a mailbox password.') }}</li>
+                    <li>{{ __('Microsoft 365 Mailboxes — connects via the Microsoft Graph API rather than a mailbox password, either with "Connect with Microsoft" or with your own app registration (tenant ID, client ID/secret).') }}</li>
                 </ul>
             </div>
 
@@ -43,6 +43,19 @@ new #[Layout('layouts.app')] class extends Component
                 <p>
                     {{ __('Each account shows Last polled and, if something went wrong, Last error, so you can see at a glance whether ingestion for a mailbox is healthy.') }}
                 </p>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-4 text-sm text-gray-600 dark:text-gray-300">
+                <h3 id="connect-with-microsoft" class="text-base font-medium text-gray-900 dark:text-gray-100">{{ __('Connect with Microsoft') }}</h3>
+                <p>
+                    {{ __('The quickest way to add a Microsoft 365 mailbox or sending account. A tenant admin clicks "Connect with Microsoft", signs in and accepts the permissions; the tenant ID is then filled in and only the mailbox address is left to enter. Shared mailboxes work, and the admin who signs in does not need a mailbox of their own.') }}
+                </p>
+                <ul class="list-disc list-inside space-y-1">
+                    <li>{{ __('One-time setup per installation — whoever runs the installation registers one multi-tenant app in Microsoft Entra with the Mail.ReadWrite and Mail.Send application permissions, adds this installation\'s callback address (shown on the Microsoft 365 pages) as a Web redirect URI, and sets MICROSOFT365_CLIENT_ID and MICROSOFT365_CLIENT_SECRET. Until then the button is hidden.') }}</li>
+                    <li>{{ __('Once per tenant — the sign-in needs a Global Administrator or Privileged Role Administrator. Further mailboxes in the same tenant only need the tenant ID; no second sign-in.') }}</li>
+                    <li>{{ __('Scope — like any app-only permission, the consent covers every mailbox in the tenant. To limit it to the DMARC mailbox, add an Exchange Online application access policy for the app (the command is shown on the Microsoft 365 pages).') }}</li>
+                    <li>{{ __('Own app registration — still supported, for tenants that prefer to manage their own app and secret.') }}</li>
+                </ul>
             </div>
 
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-4 text-sm text-gray-600 dark:text-gray-300">
@@ -65,7 +78,7 @@ new #[Layout('layouts.app')] class extends Component
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-4 text-sm text-gray-600 dark:text-gray-300">
                 <h3 id="sending-account" class="text-base font-medium text-gray-900 dark:text-gray-100">{{ __('Microsoft 365 Sending Account') }}</h3>
                 <p>
-                    {{ __('This is a separate, unrelated setting: an app registration used only to send outbound mail from this application itself — currently alert notification emails (see Alert Rules & Events). It does not read or ingest anything; it is the opposite direction of the Microsoft 365 Mailboxes above.') }}
+                    {{ __('This is a separate, unrelated setting: a Microsoft 365 account used only to send outbound mail from this application itself — currently alert notification emails (see Alert Rules & Events). It does not read or ingest anything; it is the opposite direction of the Microsoft 365 Mailboxes above.') }}
                 </p>
             </div>
 

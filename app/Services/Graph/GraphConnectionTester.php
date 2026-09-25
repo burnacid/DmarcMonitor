@@ -20,7 +20,7 @@ class GraphConnectionTester
     public function test(Microsoft365MailAccount $account): string
     {
         try {
-            $token = $this->tokenService->getAccessToken($account->tenant_id, $account->client_id, $account->client_secret);
+            $token = $this->tokenService->getAccessTokenFor($account);
             $mailbox = rawurlencode($account->mailbox);
 
             $response = Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$mailbox}/mailFolders", [
@@ -29,6 +29,8 @@ class GraphConnectionTester
             ]);
 
             if ($response->failed()) {
+                $this->tokenService->forgetAccessTokenFor($account);
+
                 return $response->json('error.message') ?? $response->body();
             }
 
@@ -51,9 +53,11 @@ class GraphConnectionTester
     public function testSendAccount(Microsoft365SendAccount $account): string
     {
         try {
-            $token = $this->tokenService->getAccessToken($account->tenant_id, $account->client_id, $account->client_secret);
+            $token = $this->tokenService->getAccessTokenFor($account);
 
             if (! in_array('Mail.Send', $this->tokenRoles($token), true)) {
+                $this->tokenService->forgetAccessTokenFor($account);
+
                 return 'The app registration has no admin-consented Mail.Send application permission.';
             }
 

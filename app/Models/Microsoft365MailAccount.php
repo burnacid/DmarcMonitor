@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasMicrosoft365Credentials;
 use Database\Factories\Microsoft365MailAccountFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,6 +12,8 @@ class Microsoft365MailAccount extends Model
 {
     /** @use HasFactory<Microsoft365MailAccountFactory> */
     use HasFactory;
+
+    use HasMicrosoft365Credentials;
 
     protected $fillable = [
         'label', 'tenant_id', 'client_id', 'client_secret', 'mailbox',
