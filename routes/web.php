@@ -24,6 +24,8 @@ Route::view('profile', 'profile')
     ->name('profile');
 
 Route::middleware(['auth', 'verified'])->group(function () {
+    Volt::route('overview', 'overview')->name('overview');
+
     Volt::route('reports', 'reports.index')->name('reports.index');
     Route::get('reports/export', ReportsExportController::class)->name('reports.export');
     Route::get('reports/{report}/download', ReportDownloadController::class)->name('reports.download');

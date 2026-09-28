@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\DmarcRecord;
 use Database\Factories\DomainFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -43,6 +44,40 @@ class Domain extends Model
         }
 
         return [];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function dmarcTags(): array
+    {
+        return DmarcRecord::parse($this->dmarc_record);
+    }
+
+    /**
+     * The published DMARC policy (none, quarantine or reject), or null
+     * without a usable DMARC record.
+     */
+    public function dmarcPolicy(): ?string
+    {
+        $policy = $this->dmarcTags()['p'] ?? null;
+
+        return in_array($policy, ['none', 'quarantine', 'reject'], true) ? $policy : null;
+    }
+
+    /**
+     * Whether the DMARC record sends aggregate reports to this tool's
+     * mailbox; null when that address isn't configured.
+     */
+    public function reportsToThisTool(): ?bool
+    {
+        $ruaAddress = config('dmarc.rua_address');
+
+        if (! $ruaAddress) {
+            return null;
+        }
+
+        return in_array(strtolower($ruaAddress), DmarcRecord::addresses($this->dmarcTags()['rua'] ?? null), true);
     }
 
     public function organisation()

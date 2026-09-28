@@ -3,16 +3,21 @@
 use App\Models\Domain;
 use App\Models\Organisation;
 use App\Services\Analytics\DmarcMetricsService;
+use App\Services\Analytics\DomainHealthService;
 use Carbon\Carbon;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    #[Url(as: 'organisation')]
     public ?int $organisationId = null;
 
+    #[Url(as: 'domain')]
     public ?int $domainId = null;
 
+    #[Url]
     public int $days = 30;
 
     public ?string $selectedDay = null;
@@ -125,6 +130,10 @@ new #[Layout('layouts.app')] class extends Component
     {
         $user = auth()->user();
 
+        if (! in_array($this->days, [7, 30, 90], true)) {
+            $this->days = 30;
+        }
+
         if ($this->organisationId !== null && ! $user->canAccessOrganisation($this->organisationId)) {
             $this->organisationId = null;
         }
@@ -182,11 +191,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function statusFor(float $pct): string
     {
-        return match (true) {
-            $pct >= 95 => 'good',
-            $pct >= 80 => 'warning',
-            default => 'critical',
-        };
+        return DomainHealthService::passStatus($pct);
     }
 }; ?>
 

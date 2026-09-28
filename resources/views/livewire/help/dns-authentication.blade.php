@@ -81,6 +81,27 @@ new #[Layout('layouts.app')] class extends Component
                 </p>
             </div>
 
+            <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-4 text-sm text-gray-600 dark:text-gray-300">
+                <h3 id="moving-to-enforcement" class="text-base font-medium text-gray-900 dark:text-gray-100">{{ __('Moving to enforcement') }}</h3>
+                <p>
+                    {{ __('A DMARC policy of p=none only monitors: spoofed mail is still delivered. The goal is p=reject, reached in steps (none → quarantine → reject, optionally raising pct along the way) so legitimate senders that aren\'t set up yet are found before their mail is blocked.') }}
+                </p>
+                <p>
+                    {{ __('The Policy column on the Domains page shows each domain\'s published policy and whether it is ready for the next step. Expand a domain to see the checklist, judged on the last :window days:', ['window' => \App\Services\Analytics\DomainHealthService::READINESS_WINDOW_DAYS]) }}
+                </p>
+                <ul class="list-disc pl-5 space-y-1">
+                    <li>{{ __('at least :days days of reports, and at least :messages messages;', ['days' => \App\Services\Analytics\DomainHealthService::READINESS_MIN_HISTORY_DAYS, 'messages' => \App\Services\Analytics\DomainHealthService::READINESS_MIN_MESSAGES]) }}</li>
+                    <li>{{ __('a DMARC pass rate of at least :quarantine% before quarantine, and :reject% before reject;', ['quarantine' => \App\Services\Analytics\DomainHealthService::READINESS_PASS_FOR_QUARANTINE, 'reject' => \App\Services\Analytics\DomainHealthService::READINESS_PASS_FOR_REJECT]) }}</li>
+                    <li>{{ __('a published SPF record and a DKIM key found for a selector seen in reports.') }}</li>
+                </ul>
+                <p>
+                    {{ __('Forwarded mail and mailing lists often fail DMARC through no fault of your own, so check the failing sources on the Dashboard before tightening the policy even when the checklist is green.') }}
+                </p>
+                <p>
+                    {{ __('The "Generate record" button builds the DMARC TXT record to publish, keeping any report addresses already in it and adding this app\'s (DMARC_RUA_ADDRESS). When reports go to an address on a different domain than the one being monitored, mailbox providers only send them if that other domain authorises it with a TXT record "v=DMARC1" at <monitored domain>._report._dmarc.<report domain>. The generator shows that record too; without it, reports silently never arrive.') }}
+                </p>
+            </div>
+
             <x-help.topic-nav current="dns-authentication" />
         </div>
     </div>
