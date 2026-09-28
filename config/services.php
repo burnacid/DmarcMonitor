@@ -28,6 +28,16 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    /*
+     * Legacy: the shared "Connect with Microsoft" app is now managed under
+     * Settings > Microsoft 365 App. These values are only read once, by the
+     * migration that imports them into the database.
+     */
+    'microsoft365' => [
+        'client_id' => env('MICROSOFT365_CLIENT_ID'),
+        'client_secret' => env('MICROSOFT365_CLIENT_SECRET'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

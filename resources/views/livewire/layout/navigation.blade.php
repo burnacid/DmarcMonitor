@@ -91,7 +91,7 @@ new class extends Component
                 </a>
 
                 @php
-                    $settingsActive = request()->routeIs(['admin.organisations', 'admin.domains', 'admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.geoip', 'admin.alert-rules', 'admin.users', 'admin.scheduled-tasks', 'admin.audit-log']);
+                    $settingsActive = request()->routeIs(['admin.organisations', 'admin.domains', 'admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.microsoft365-app', 'admin.geoip', 'admin.alert-rules', 'admin.users', 'admin.scheduled-tasks', 'admin.audit-log']);
                 @endphp
                 @if (auth()->user()->canManage() || auth()->user()->isAdmin())
                     <x-dropdown align="right" width="48">
@@ -144,6 +144,9 @@ new class extends Component
                                 </x-dropdown-link>
                                 <x-dropdown-link :href="route('admin.microsoft365-send-account')" wire:navigate>
                                     {{ __('Microsoft 365 Sending Account') }}
+                                </x-dropdown-link>
+                                <x-dropdown-link :href="route('admin.microsoft365-app')" wire:navigate>
+                                    {{ __('Microsoft 365 App') }}
                                 </x-dropdown-link>
 
                                 <div class="my-1 border-t border-gray-200 dark:border-gray-600"></div>
@@ -251,7 +254,7 @@ new class extends Component
                 {{ __('Help') }}
             </x-responsive-nav-link>
             @php
-                $settingsActive = request()->routeIs(['admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.geoip', 'admin.alert-rules', 'admin.users']);
+                $settingsActive = request()->routeIs(['admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.microsoft365-app', 'admin.geoip', 'admin.alert-rules', 'admin.users']);
             @endphp
             @if (auth()->user()->canManage() || auth()->user()->isAdmin())
                 <div x-data="{ settingsOpen: {{ $settingsActive ? 'true' : 'false' }} }">
@@ -299,6 +302,9 @@ new class extends Component
                             </x-responsive-nav-link>
                             <x-responsive-nav-link :href="route('admin.microsoft365-send-account')" :active="request()->routeIs('admin.microsoft365-send-account')" wire:navigate class="ps-6">
                                 {{ __('Microsoft 365 Sending Account') }}
+                            </x-responsive-nav-link>
+                            <x-responsive-nav-link :href="route('admin.microsoft365-app')" :active="request()->routeIs('admin.microsoft365-app')" wire:navigate class="ps-6">
+                                {{ __('Microsoft 365 App') }}
                             </x-responsive-nav-link>
 
                             <div class="my-1 border-t border-gray-200 dark:border-gray-700"></div>

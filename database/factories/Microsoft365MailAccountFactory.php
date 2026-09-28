@@ -27,4 +27,16 @@ class Microsoft365MailAccountFactory extends Factory
             'is_active' => true,
         ];
     }
+
+    /**
+     * An account connected through "Connect with Microsoft", which
+     * authenticates with the shared app instead of its own credentials.
+     */
+    public function sharedApp(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'client_id' => null,
+            'client_secret' => null,
+        ]);
+    }
 }

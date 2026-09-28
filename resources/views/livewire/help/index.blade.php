@@ -56,6 +56,12 @@ new #[Layout('layouts.app')] class extends Component
                 ],
                 [
                     'topic' => __('Mail Ingestion'),
+                    'heading' => __('Connect with Microsoft'),
+                    'url' => route('help.mail-ingestion').'#connect-with-microsoft',
+                    'excerpt' => __('Adding Microsoft 365 mailboxes (including shared mailboxes) with a single admin sign-in, and the one-time app setup it needs.'),
+                ],
+                [
+                    'topic' => __('Mail Ingestion'),
                     'heading' => __('Local files and SMTP listener'),
                     'url' => route('help.mail-ingestion').'#local-files-and-smtp',
                     'excerpt' => __('Importing .eml/.msg files, running the SMTP listener, and controlling which relays may connect (including Exchange Online).'),
@@ -64,7 +70,7 @@ new #[Layout('layouts.app')] class extends Component
                     'topic' => __('Mail Ingestion'),
                     'heading' => __('Microsoft 365 Sending Account'),
                     'url' => route('help.mail-ingestion').'#sending-account',
-                    'excerpt' => __('The separate app registration used only to send outbound alert emails.'),
+                    'excerpt' => __('The separate Microsoft 365 account used only to send outbound alert emails.'),
                 ],
                 [
                     'topic' => __('Aggregate & Forensic Reports'),
