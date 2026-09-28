@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AuditLog;
+use App\Models\Microsoft365AppRegistration;
 use App\Models\Microsoft365MailAccount;
 use App\Models\Microsoft365SendAccount;
 use App\Models\User;
@@ -23,9 +24,9 @@ class Microsoft365ConnectTest extends TestCase
     {
         parent::setUp();
 
-        config([
-            'services.microsoft365.client_id' => 'shared-client-id',
-            'services.microsoft365.client_secret' => 'shared-client-secret',
+        Microsoft365AppRegistration::factory()->create([
+            'client_id' => 'shared-client-id',
+            'client_secret' => 'shared-client-secret',
         ]);
     }
 
@@ -45,7 +46,7 @@ class Microsoft365ConnectTest extends TestCase
 
     public function test_connect_explains_when_the_shared_app_is_not_configured(): void
     {
-        config(['services.microsoft365.client_id' => null]);
+        Microsoft365AppRegistration::query()->delete();
 
         $this->actingAs(User::factory()->create())
             ->get(route('admin.microsoft365.connect', 'sending'))
@@ -146,12 +147,12 @@ class Microsoft365ConnectTest extends TestCase
 
     public function test_a_shared_app_account_fails_clearly_when_the_shared_app_is_not_configured(): void
     {
-        config(['services.microsoft365.client_secret' => null]);
+        Microsoft365AppRegistration::query()->delete();
 
         $account = Microsoft365SendAccount::factory()->sharedApp()->create();
 
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('MICROSOFT365_CLIENT_ID');
+        $this->expectExceptionMessage('Microsoft 365 App');
 
         $account->graphCredentials();
     }

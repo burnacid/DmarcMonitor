@@ -29,7 +29,7 @@ class Microsoft365ConnectController extends Controller
 
         if (! Microsoft365App::isConfigured()) {
             return redirect()->route(self::TARGET_ROUTES[$target])
-                ->with('microsoft365_connect_error', __('Connect with Microsoft is not configured: set MICROSOFT365_CLIENT_ID and MICROSOFT365_CLIENT_SECRET.'));
+                ->with('microsoft365_connect_error', __('Connect with Microsoft is not configured: register the app under Settings > Microsoft 365 App.'));
         }
 
         $state = Str::random(40);

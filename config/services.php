@@ -29,8 +29,9 @@ return [
     ],
 
     /*
-     * Shared multi-tenant app registration for "Connect with Microsoft".
-     * Optional: accounts can still use their own app registration.
+     * Legacy: the shared "Connect with Microsoft" app is now managed under
+     * Settings > Microsoft 365 App. These values are only read once, by the
+     * migration that imports them into the database.
      */
     'microsoft365' => [
         'client_id' => env('MICROSOFT365_CLIENT_ID'),

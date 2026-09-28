@@ -1,7 +1,6 @@
 @props([
     'purpose',
     'permission',
-    'redirectUri',
     'sharedAppConfigured',
     'examplePolicyMailbox',
 ])
@@ -13,14 +12,10 @@
     @if ($sharedAppConfigured)
         <p class="mt-2">{{ __('Click "Connect with Microsoft", sign in as a Global Administrator (or Privileged Role Administrator) of the tenant, and accept the permissions. You then only enter the mailbox address — shared mailboxes are supported and the admin does not need a mailbox of their own. Each tenant only needs to be connected once.') }}</p>
     @else
-        <p class="mt-2">{{ __('Not enabled yet. The installation administrator registers one app, once, and every tenant can then be connected with a single sign-in:') }}</p>
-        <ol class="mt-2 list-decimal list-inside space-y-2">
-            <li>{{ __('In the Microsoft Entra admin center, go to App registrations → New registration. Under Supported account types, choose "Accounts in any organizational directory (Multitenant)".') }}</li>
-            <li>{{ __('Under Redirect URI, choose platform "Web" and enter:') }} <code class="px-1 rounded bg-gray-100 dark:bg-gray-900 break-all">{{ $redirectUri }}</code></li>
-            <li>{{ __('Go to API permissions → Add a permission → Microsoft Graph → Application permissions, and add Mail.ReadWrite and Mail.Send (one app serves both collecting and sending).') }}</li>
-            <li>{{ __('Go to Certificates & secrets → New client secret, and copy the value immediately — it is only shown once.') }}</li>
-            <li>{{ __('Set MICROSOFT365_CLIENT_ID (the Application ID) and MICROSOFT365_CLIENT_SECRET in the environment configuration, and clear the config cache if it is cached.') }}</li>
-        </ol>
+        <p class="mt-2">
+            {{ __('Not enabled yet. Register one multi-tenant app, once, and every tenant can then be connected with a single sign-in:') }}
+            <a href="{{ route('admin.microsoft365-app') }}" wire:navigate class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ __('set up the Microsoft 365 App') }}</a>.
+        </p>
     @endif
 
     <h3 class="mt-4 font-medium text-gray-900 dark:text-gray-100">{{ __('Alternative: your own app registration') }}</h3>

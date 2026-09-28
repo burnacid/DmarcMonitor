@@ -168,7 +168,6 @@ new #[Layout('layouts.app')] class extends Component
             'connectedTenants' => Microsoft365SendAccount::whereNull('client_id')->distinct()->orderBy('tenant_id')->pluck('tenant_id')
                 ->merge(Microsoft365MailAccount::whereNull('client_id')->distinct()->pluck('tenant_id'))
                 ->unique()->values(),
-            'redirectUri' => Microsoft365App::redirectUri(),
         ];
     }
 }; ?>
@@ -183,7 +182,6 @@ new #[Layout('layouts.app')] class extends Component
             <x-microsoft365.setup-guide
                 :purpose="__('sending mail')"
                 permission="Mail.Send"
-                :redirect-uri="$redirectUri"
                 :shared-app-configured="$sharedAppConfigured"
                 example-policy-mailbox="sender@example.com"
             >

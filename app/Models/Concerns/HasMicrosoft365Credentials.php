@@ -35,7 +35,7 @@ trait HasMicrosoft365Credentials
         }
 
         if (! Microsoft365App::isConfigured()) {
-            throw new RuntimeException('This account uses "Connect with Microsoft", but MICROSOFT365_CLIENT_ID and MICROSOFT365_CLIENT_SECRET are not set.');
+            throw new RuntimeException('This account uses "Connect with Microsoft", but no app is registered under Settings > Microsoft 365 App.');
         }
 
         return [

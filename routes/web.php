@@ -50,6 +50,7 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Volt::route('imap-accounts', 'admin.imap-accounts')->name('imap-accounts');
     Volt::route('microsoft365-mailboxes', 'admin.microsoft365-mail-accounts')->name('microsoft365-mail-accounts');
     Volt::route('microsoft365-sending', 'admin.microsoft365-send-account')->name('microsoft365-send-account');
+    Volt::route('microsoft365-app', 'admin.microsoft365-app')->name('microsoft365-app');
     Route::get('microsoft365/connect/{target}', [Microsoft365ConnectController::class, 'redirect'])->name('microsoft365.connect');
     Route::get('microsoft365/callback', [Microsoft365ConnectController::class, 'callback'])->name('microsoft365.callback');
     Volt::route('scheduled-tasks', 'admin.scheduled-tasks')->name('scheduled-tasks');

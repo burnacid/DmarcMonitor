@@ -224,7 +224,6 @@ new #[Layout('layouts.app')] class extends Component
             'domains' => Domain::visibleTo($user)->orderBy('fqdn')->get(),
             'sharedAppConfigured' => Microsoft365App::isConfigured(),
             'connectedTenants' => Microsoft365MailAccount::visibleTo($user)->whereNull('client_id')->distinct()->orderBy('tenant_id')->pluck('tenant_id'),
-            'redirectUri' => Microsoft365App::redirectUri(),
         ];
     }
 }; ?>
@@ -239,7 +238,6 @@ new #[Layout('layouts.app')] class extends Component
             <x-microsoft365.setup-guide
                 :purpose="__('collecting DMARC reports')"
                 permission="Mail.ReadWrite"
-                :redirect-uri="$redirectUri"
                 :shared-app-configured="$sharedAppConfigured"
                 example-policy-mailbox="dmarc@example.com"
             />

@@ -2,11 +2,13 @@
 
 namespace App\Support;
 
+use App\Models\Microsoft365AppRegistration;
+
 /**
  * The installation-wide, multi-tenant Microsoft Entra app registration used by
  * "Connect with Microsoft". A tenant admin consents to it once, after which
  * accounts in that tenant authenticate with these credentials instead of an
- * app registration of their own.
+ * app registration of their own. Managed under Settings > Microsoft 365 App.
  */
 class Microsoft365App
 {
@@ -17,12 +19,12 @@ class Microsoft365App
 
     public static function clientId(): ?string
     {
-        return config('services.microsoft365.client_id');
+        return Microsoft365AppRegistration::current()?->client_id;
     }
 
     public static function clientSecret(): ?string
     {
-        return config('services.microsoft365.client_secret');
+        return Microsoft365AppRegistration::current()?->client_secret;
     }
 
     /**
