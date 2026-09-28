@@ -94,6 +94,63 @@ class AdminCrudTest extends TestCase
         $this->assertNull(Domain::find($domain->id));
     }
 
+    public function test_domains_can_be_searched_by_fqdn(): void
+    {
+        $user = User::factory()->create();
+        Domain::create(['fqdn' => 'alpha.test']);
+        Domain::create(['fqdn' => 'bravo.test']);
+
+        Volt::actingAs($user)->test('admin.domains')
+            ->set('search', 'alph')
+            ->assertSee('alpha.test')
+            ->assertDontSee('bravo.test');
+    }
+
+    public function test_domains_can_be_filtered_by_organisation(): void
+    {
+        $user = User::factory()->create();
+        $acme = Organisation::create(['name' => 'Acme Inc']);
+        $globex = Organisation::create(['name' => 'Globex']);
+        Domain::create(['fqdn' => 'acme.test', 'organisation_id' => $acme->id]);
+        Domain::create(['fqdn' => 'globex.test', 'organisation_id' => $globex->id]);
+        Domain::create(['fqdn' => 'orphan.test']);
+
+        Volt::actingAs($user)->test('admin.domains')
+            ->set('organisationFilter', (string) $acme->id)
+            ->assertSee('acme.test')
+            ->assertDontSee('globex.test')
+            ->assertDontSee('orphan.test')
+            ->set('organisationFilter', 'unassigned')
+            ->assertSee('orphan.test')
+            ->assertDontSee('acme.test')
+            ->assertDontSee('globex.test');
+    }
+
+    public function test_organisation_filter_cannot_reveal_domains_outside_the_users_scope(): void
+    {
+        $acme = Organisation::create(['name' => 'Acme Inc']);
+        $globex = Organisation::create(['name' => 'Globex']);
+        Domain::create(['fqdn' => 'globex.test', 'organisation_id' => $globex->id]);
+        $user = User::factory()->create();
+        $user->organisations()->attach($acme->id);
+
+        Volt::actingAs($user)->test('admin.domains')
+            ->set('organisationFilter', (string) $globex->id)
+            ->assertDontSee('globex.test');
+    }
+
+    public function test_organisations_can_be_searched_by_name(): void
+    {
+        $user = User::factory()->create();
+        Organisation::create(['name' => 'Acme Inc']);
+        Organisation::create(['name' => 'Globex']);
+
+        Volt::actingAs($user)->test('admin.organisations')
+            ->set('search', 'acm')
+            ->assertSee('Acme Inc')
+            ->assertDontSee('Globex');
+    }
+
     public function test_admin_can_restore_a_trashed_domain(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);

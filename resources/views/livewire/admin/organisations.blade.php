@@ -4,12 +4,16 @@ use App\Models\Organisation;
 use App\Support\AuditLogger;
 use Carbon\Carbon;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] class extends Component
 {
     use WithPagination;
+
+    #[Url]
+    public string $search = '';
 
     public ?int $editingId = null;
 
@@ -25,6 +29,11 @@ new #[Layout('layouts.app')] class extends Component
     public string $reportTo = '';
 
     public string $reportMonthInput = '';
+
+    public function updatedSearch(): void
+    {
+        $this->resetPage();
+    }
 
     public function create(): void
     {
@@ -136,8 +145,19 @@ new #[Layout('layouts.app')] class extends Component
 
     public function with(): array
     {
+        $search = trim($this->search);
+
+        $organisations = Organisation::visibleTo(auth()->user())
+            ->withCount('domains')
+            ->when($search !== '', fn ($query) => $query->where(function ($query) use ($search): void {
+                $query->where('name', 'like', '%'.$search.'%')
+                    ->orWhere('notes', 'like', '%'.$search.'%');
+            }))
+            ->orderBy('name')
+            ->paginate(15);
+
         return [
-            'organisations' => Organisation::visibleTo(auth()->user())->withCount('domains')->orderBy('name')->paginate(15),
+            'organisations' => $organisations,
             'organisationScoped' => auth()->user()->hasOrganisationScope(),
         ];
     }
@@ -150,11 +170,18 @@ new #[Layout('layouts.app')] class extends Component
 
     <div class="py-8">
         <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8">
-            @unless ($organisationScoped)
-                <div class="flex justify-end mb-4">
-                    <x-primary-button wire:click="create">{{ __('New Organisation') }}</x-primary-button>
+            <div class="flex flex-wrap items-end gap-4 mb-4">
+                <div class="flex-1 min-w-[12rem] max-w-sm">
+                    <x-input-label for="organisation_search" :value="__('Search')" />
+                    <x-text-input wire:model.live.debounce.400ms="search" id="organisation_search" type="search" :placeholder="__('Name or notes')" class="mt-1 block w-full text-sm" />
                 </div>
-            @endunless
+
+                @unless ($organisationScoped)
+                    <div class="ml-auto">
+                        <x-primary-button wire:click="create">{{ __('New Organisation') }}</x-primary-button>
+                    </div>
+                @endunless
+            </div>
 
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 max-md:block">
@@ -170,7 +197,9 @@ new #[Layout('layouts.app')] class extends Component
                         @forelse ($organisations as $organisation)
                             <tr wire:key="org-{{ $organisation->id }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
                                 <td data-label="{{ __('Name') }}" class="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400 max-md:before:font-normal">{{ $organisation->name }}</td>
-                                <td data-label="{{ __('Domains') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $organisation->domains_count }}</td>
+                                <td data-label="{{ __('Domains') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
+                                    <a href="{{ route('admin.domains', ['organisation' => $organisation->id]) }}" wire:navigate class="hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline">{{ $organisation->domains_count }}</a>
+                                </td>
                                 <td data-label="{{ __('Notes') }}" class="px-6 py-4 text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-start max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400 max-md:before:shrink-0">
                                     <span class="max-md:text-right">{{ \Illuminate\Support\Str::limit($organisation->notes, 60) }}</span>
                                 </td>
@@ -182,7 +211,7 @@ new #[Layout('layouts.app')] class extends Component
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="4" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No organisations yet.') }}</td>
+                                <td colspan="4" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ $search !== '' ? __('No organisations match your search.') : __('No organisations yet.') }}</td>
                             </tr>
                         @endforelse
                     </tbody>

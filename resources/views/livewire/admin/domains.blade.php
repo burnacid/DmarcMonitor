@@ -7,12 +7,23 @@ use App\Services\Dns\DomainAuthenticationChecker;
 use App\Support\AuditLogger;
 use Illuminate\Support\Carbon;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] class extends Component
 {
     use WithPagination;
+
+    #[Url]
+    public string $search = '';
+
+    /**
+     * Empty for all organisations, "unassigned" for domains without one,
+     * or an organisation id.
+     */
+    #[Url(as: 'organisation')]
+    public string $organisationFilter = '';
 
     public ?int $editingId = null;
     public ?int $expandedId = null;
@@ -21,6 +32,22 @@ new #[Layout('layouts.app')] class extends Component
     public ?int $organisation_id = null;
     public bool $is_active = true;
     public string $notes = '';
+
+    public function updatedSearch(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedOrganisationFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function clearFilters(): void
+    {
+        $this->reset(['search', 'organisationFilter']);
+        $this->resetPage();
+    }
 
     public function toggleExpand(int $id): void
     {
@@ -118,8 +145,16 @@ new #[Layout('layouts.app')] class extends Component
     {
         $user = auth()->user();
 
+        $domains = Domain::visibleTo($user)
+            ->with('organisation')
+            ->when(trim($this->search) !== '', fn ($query) => $query->where('fqdn', 'like', '%'.trim($this->search).'%'))
+            ->when($this->organisationFilter === 'unassigned', fn ($query) => $query->whereNull('organisation_id'))
+            ->when(ctype_digit($this->organisationFilter), fn ($query) => $query->where('organisation_id', (int) $this->organisationFilter))
+            ->orderBy('fqdn')
+            ->paginate(15);
+
         return [
-            'domains' => Domain::visibleTo($user)->with('organisation')->orderBy('fqdn')->paginate(15),
+            'domains' => $domains,
             'organisations' => Organisation::visibleTo($user)->orderBy('name')->get(),
             'organisationScoped' => $user->hasOrganisationScope(),
         ];
@@ -180,13 +215,37 @@ new #[Layout('layouts.app')] class extends Component
 
     <div class="py-8">
         <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8">
-            <div class="flex justify-end items-center gap-4 mb-4">
-                @if (auth()->user()->isAdmin())
-                    <a href="{{ route('admin.domains.trash') }}" wire:navigate class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-                        {{ __('Trash') }}
-                    </a>
+            <div class="flex flex-wrap items-end gap-4 mb-4">
+                <div class="flex-1 min-w-[12rem] max-w-sm">
+                    <x-input-label for="domain_search" :value="__('Search')" />
+                    <x-text-input wire:model.live.debounce.400ms="search" id="domain_search" type="search" placeholder="example.com" class="mt-1 block w-full text-sm" />
+                </div>
+
+                <div>
+                    <x-input-label for="organisation_filter" :value="__('Organisation')" />
+                    <select wire:model.live="organisationFilter" id="organisation_filter" class="mt-1 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
+                        <option value="">{{ __('All organisations') }}</option>
+                        @unless ($organisationScoped)
+                            <option value="unassigned">{{ __('— Unassigned —') }}</option>
+                        @endunless
+                        @foreach ($organisations as $organisation)
+                            <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                @if ($search !== '' || $organisationFilter !== '')
+                    <button type="button" wire:click="clearFilters" class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 pb-2">{{ __('Clear filters') }}</button>
                 @endif
-                <x-primary-button wire:click="create">{{ __('New Domain') }}</x-primary-button>
+
+                <div class="flex items-center gap-4 ml-auto">
+                    @if (auth()->user()->isAdmin())
+                        <a href="{{ route('admin.domains.trash') }}" wire:navigate class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                            {{ __('Trash') }}
+                        </a>
+                    @endif
+                    <x-primary-button wire:click="create">{{ __('New Domain') }}</x-primary-button>
+                </div>
             </div>
 
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
@@ -316,7 +375,7 @@ new #[Layout('layouts.app')] class extends Component
                             @endif
                         @empty
                             <tr>
-                                <td colspan="7" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No domains yet.') }}</td>
+                                <td colspan="7" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ $search !== '' || $organisationFilter !== '' ? __('No domains match your filters.') : __('No domains yet.') }}</td>
                             </tr>
                         @endforelse
                     </tbody>
