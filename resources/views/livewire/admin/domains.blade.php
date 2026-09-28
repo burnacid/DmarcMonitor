@@ -3,16 +3,42 @@
 use App\Models\AggregateReportRecord;
 use App\Models\Domain;
 use App\Models\Organisation;
+use App\Services\Analytics\DomainHealthService;
 use App\Services\Dns\DomainAuthenticationChecker;
 use App\Support\AuditLogger;
+use App\Support\DmarcRecord;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] class extends Component
 {
     use WithPagination;
+
+    #[Url]
+    public string $search = '';
+
+    /**
+     * Empty for all organisations, "unassigned" for domains without one,
+     * or an organisation id.
+     */
+    #[Url(as: 'organisation')]
+    public string $organisationFilter = '';
+
+    #[Url(as: 'attention')]
+    public bool $needsAttention = false;
+
+    /**
+     * Set by the organisations page's "Add domains" link (?bulk=1); consumed
+     * in mount() and reset, so the modal doesn't reopen on refresh.
+     */
+    #[Url]
+    public bool $bulk = false;
+
+    public bool $openBulkOnLoad = false;
 
     public ?int $editingId = null;
     public ?int $expandedId = null;
@@ -21,6 +47,65 @@ new #[Layout('layouts.app')] class extends Component
     public ?int $organisation_id = null;
     public bool $is_active = true;
     public string $notes = '';
+
+    public string $bulkDomains = '';
+    public ?int $bulkOrganisationId = null;
+    public bool $bulkIsActive = true;
+    public bool $bulkCheckDns = true;
+
+    /**
+     * @var array{added: list<string>, existing: list<string>, trashed: list<string>, invalid: list<string>}|null
+     */
+    public ?array $bulkResult = null;
+
+    public ?int $generatorDomainId = null;
+    public string $generatorFqdn = '';
+    public ?string $generatorCurrentRecord = null;
+    public string $genPolicy = 'none';
+    public string $genSubdomainPolicy = '';
+    public string $genPct = '100';
+    public string $genRua = '';
+    public string $genRuf = '';
+    public string $genAdkim = 'r';
+    public string $genAspf = 'r';
+
+    /**
+     * Tags from the current record the generator has no field for (fo, ri,
+     * rf, ...), carried over unchanged.
+     *
+     * @var array<string, string>
+     */
+    public array $genExtraTags = [];
+
+    public function mount(): void
+    {
+        if ($this->bulk) {
+            $this->prepareBulk();
+            $this->openBulkOnLoad = true;
+            $this->bulk = false;
+        }
+    }
+
+    public function updatedSearch(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedOrganisationFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedNeedsAttention(): void
+    {
+        $this->resetPage();
+    }
+
+    public function clearFilters(): void
+    {
+        $this->reset(['search', 'organisationFilter', 'needsAttention']);
+        $this->resetPage();
+    }
 
     public function toggleExpand(int $id): void
     {
@@ -59,19 +144,9 @@ new #[Layout('layouts.app')] class extends Component
             abort_unless(auth()->user()->canAccessOrganisation($existing->organisation_id), 404);
         }
 
-        $user = auth()->user();
-
         $validated = $this->validate([
             'fqdn' => 'required|string|max:255|unique:domains,fqdn,'.$this->editingId,
-            'organisation_id' => [
-                $user->hasOrganisationScope() ? 'required' : 'nullable',
-                'exists:organisations,id',
-                function (string $attribute, mixed $value, \Closure $fail) use ($user): void {
-                    if (! $user->canAccessOrganisation($value)) {
-                        $fail(__('You do not have access to that organisation.'));
-                    }
-                },
-            ],
+            'organisation_id' => $this->organisationRules(),
             'is_active' => 'boolean',
             'notes' => 'nullable|string',
         ]);
@@ -89,6 +164,212 @@ new #[Layout('layouts.app')] class extends Component
 
         $this->dispatch('close-modal', 'domain-form');
         $this->reset(['editingId', 'fqdn', 'organisation_id', 'notes']);
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    private function organisationRules(): array
+    {
+        $user = auth()->user();
+
+        return [
+            $user->hasOrganisationScope() ? 'required' : 'nullable',
+            'exists:organisations,id',
+            function (string $attribute, mixed $value, \Closure $fail) use ($user): void {
+                if (! $user->canAccessOrganisation($value)) {
+                    $fail(__('You do not have access to that organisation.'));
+                }
+            },
+        ];
+    }
+
+    /**
+     * Pre-selects the organisation the list is filtered on, or the user's
+     * only organisation, as create() does.
+     */
+    private function prepareBulk(): void
+    {
+        $this->reset(['bulkDomains', 'bulkResult']);
+        $this->bulkIsActive = true;
+        $this->bulkCheckDns = true;
+        $this->resetErrorBag();
+
+        $user = auth()->user();
+        $scopedIds = $user->scopedOrganisationIds();
+
+        $this->bulkOrganisationId = match (true) {
+            ctype_digit($this->organisationFilter) && $user->canAccessOrganisation((int) $this->organisationFilter) => (int) $this->organisationFilter,
+            $scopedIds !== null && count($scopedIds) === 1 => $scopedIds[0],
+            default => null,
+        };
+    }
+
+    public function openBulk(): void
+    {
+        $this->prepareBulk();
+        $this->dispatch('open-modal', 'domain-bulk-form');
+    }
+
+    /**
+     * Adds every domain in the pasted list that doesn't exist yet. Accepts
+     * one per line or comma/space separated, and tidies up pasted URLs,
+     * wildcards and trailing dots.
+     */
+    public function saveBulk(): void
+    {
+        $this->validate([
+            'bulkDomains' => 'required|string',
+            'bulkOrganisationId' => $this->organisationRules(),
+            'bulkIsActive' => 'boolean',
+            'bulkCheckDns' => 'boolean',
+        ], attributes: ['bulkDomains' => __('domains'), 'bulkOrganisationId' => __('organisation')]);
+
+        $candidates = collect(preg_split('/[\s,;]+/', strtolower($this->bulkDomains)))
+            ->map(fn (string $entry) => $this->normaliseFqdn($entry))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($candidates->count() > 200) {
+            $this->addError('bulkDomains', __('Add at most 200 domains at a time.'));
+
+            return;
+        }
+
+        [$valid, $invalid] = $candidates->partition(
+            fn (string $fqdn) => (bool) preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/', $fqdn)
+        );
+
+        $existing = Domain::withTrashed()
+            ->whereIn(DB::raw('LOWER(fqdn)'), $valid->all())
+            ->get(['fqdn', 'deleted_at'])
+            ->keyBy(fn (Domain $domain) => strtolower($domain->fqdn));
+
+        $result = ['added' => [], 'existing' => [], 'trashed' => [], 'invalid' => $invalid->values()->all()];
+        $checker = app(DomainAuthenticationChecker::class);
+
+        foreach ($valid as $fqdn) {
+            if ($existing->has($fqdn)) {
+                $result[$existing[$fqdn]->trashed() ? 'trashed' : 'existing'][] = $fqdn;
+
+                continue;
+            }
+
+            $domain = Domain::create([
+                'fqdn' => $fqdn,
+                'organisation_id' => $this->bulkOrganisationId,
+                'is_active' => $this->bulkIsActive,
+            ]);
+
+            AuditLogger::record(
+                action: 'domain.created',
+                description: 'Created domain '.$domain->fqdn,
+                subject: $domain,
+                organisationId: $domain->organisation_id,
+                context: ['bulk' => true],
+            );
+
+            if ($this->bulkCheckDns) {
+                $checker->checkAndStore($domain);
+            }
+
+            $result['added'][] = $fqdn;
+        }
+
+        $this->bulkResult = $result;
+
+        if ($result['added'] !== []) {
+            $this->bulkDomains = '';
+        }
+    }
+
+    private function normaliseFqdn(string $entry): string
+    {
+        $entry = preg_replace('#^[a-z][a-z0-9+.-]*://#', '', trim($entry));
+        $entry = explode('/', $entry)[0];
+        $entry = preg_replace('/^\*\./', '', $entry);
+
+        return rtrim($entry, '.');
+    }
+
+    /**
+     * Opens the DMARC record generator, pre-filled from the domain's current
+     * record plus this app's report address, at the given (or current) policy.
+     */
+    public function openGenerator(int $id, ?string $policy = null): void
+    {
+        $domain = Domain::findOrFail($id);
+        abort_unless(auth()->user()->canAccessOrganisation($domain->organisation_id), 404);
+
+        $tags = $domain->dmarcTags();
+        $ruaAddresses = DmarcRecord::addresses($tags['rua'] ?? null);
+        $ownAddress = strtolower((string) config('dmarc.rua_address'));
+
+        if ($ownAddress !== '' && ! in_array($ownAddress, $ruaAddresses, true)) {
+            $ruaAddresses[] = $ownAddress;
+        }
+
+        $currentPolicy = $domain->dmarcPolicy();
+        $movingPolicy = in_array($policy, ['none', 'quarantine', 'reject'], true) && $policy !== $currentPolicy;
+
+        $this->generatorDomainId = $domain->id;
+        $this->generatorFqdn = $domain->fqdn;
+        $this->generatorCurrentRecord = $domain->dmarc_record;
+        $this->genPolicy = $movingPolicy ? $policy : ($currentPolicy ?? 'none');
+        $this->genSubdomainPolicy = in_array($tags['sp'] ?? '', ['none', 'quarantine', 'reject'], true) ? $tags['sp'] : '';
+        // Asking for a specific policy (a readiness "next step") means applying it to all mail.
+        $this->genPct = (string) ($policy !== null ? 100 : max(0, min(100, (int) ($tags['pct'] ?? 100))));
+        $this->genRua = implode(', ', $ruaAddresses);
+        $this->genRuf = implode(', ', DmarcRecord::addresses($tags['ruf'] ?? null));
+        $this->genAdkim = ($tags['adkim'] ?? 'r') === 's' ? 's' : 'r';
+        $this->genAspf = ($tags['aspf'] ?? 'r') === 's' ? 's' : 'r';
+        $this->genExtraTags = collect($tags)->except(['p', 'sp', 'pct', 'rua', 'ruf', 'adkim', 'aspf'])->all();
+
+        $this->dispatch('open-modal', 'dmarc-generator');
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function generatorAddresses(string $list): array
+    {
+        return collect(preg_split('/[\s,;]+/', strtolower($list)))
+            ->map(fn (string $address) => preg_replace('/^mailto:/', '', trim($address)))
+            ->filter(fn (string $address) => filter_var($address, FILTER_VALIDATE_EMAIL) !== false)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    public function generatedRecord(): string
+    {
+        return DmarcRecord::build([
+            'p' => in_array($this->genPolicy, ['none', 'quarantine', 'reject'], true) ? $this->genPolicy : 'none',
+            'sp' => in_array($this->genSubdomainPolicy, ['none', 'quarantine', 'reject'], true) ? $this->genSubdomainPolicy : '',
+            'pct' => trim($this->genPct) === '' ? '100' : (string) max(0, min(100, (int) $this->genPct)),
+            'rua' => DmarcRecord::uriList($this->generatorAddresses($this->genRua)),
+            'ruf' => DmarcRecord::uriList($this->generatorAddresses($this->genRuf)),
+            'adkim' => $this->genAdkim === 's' ? 's' : 'r',
+            'aspf' => $this->genAspf === 's' ? 's' : 'r',
+            ...$this->genExtraTags,
+        ]);
+    }
+
+    /**
+     * The records each report address's domain must publish before
+     * providers will send this domain's reports there (RFC 7489 §7.1).
+     *
+     * @return list<string>
+     */
+    public function generatorAuthorizationHosts(): array
+    {
+        return collect([...$this->generatorAddresses($this->genRua), ...$this->generatorAddresses($this->genRuf)])
+            ->map(fn (string $address) => DmarcRecord::externalAuthorizationHost($this->generatorFqdn, $address))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     public function delete(int $id): void
@@ -118,8 +399,27 @@ new #[Layout('layouts.app')] class extends Component
     {
         $user = auth()->user();
 
+        $healthService = app(DomainHealthService::class);
+
+        $query = Domain::visibleTo($user)
+            ->with('organisation')
+            ->when(trim($this->search) !== '', fn ($query) => $query->where('fqdn', 'like', '%'.trim($this->search).'%'))
+            ->when($this->organisationFilter === 'unassigned', fn ($query) => $query->whereNull('organisation_id'))
+            ->when(ctype_digit($this->organisationFilter), fn ($query) => $query->where('organisation_id', (int) $this->organisationFilter));
+
+        $attentionHealth = null;
+
+        if ($this->needsAttention) {
+            $attentionHealth = $healthService->forDomains((clone $query)->get())->filter(fn (array $row) => $row['issues'] !== []);
+            $query->whereIn('id', $attentionHealth->keys()->all());
+        }
+
+        $domains = $query->orderBy('fqdn')->paginate(15);
+
         return [
-            'domains' => Domain::visibleTo($user)->with('organisation')->orderBy('fqdn')->paginate(15),
+            'domains' => $domains,
+            'health' => $attentionHealth?->only($domains->getCollection()->pluck('id')->all())
+                ?? $healthService->forDomains($domains->getCollection()),
             'organisations' => Organisation::visibleTo($user)->orderBy('name')->get(),
             'organisationScoped' => $user->hasOrganisationScope(),
         ];
@@ -180,13 +480,43 @@ new #[Layout('layouts.app')] class extends Component
 
     <div class="py-8">
         <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8">
-            <div class="flex justify-end items-center gap-4 mb-4">
-                @if (auth()->user()->isAdmin())
-                    <a href="{{ route('admin.domains.trash') }}" wire:navigate class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-                        {{ __('Trash') }}
-                    </a>
+            <div class="flex flex-wrap items-end gap-4 mb-4">
+                <div class="flex-1 min-w-[12rem] max-w-sm">
+                    <x-input-label for="domain_search" :value="__('Search')" />
+                    <x-text-input wire:model.live.debounce.400ms="search" id="domain_search" type="search" placeholder="example.com" class="mt-1 block w-full text-sm" />
+                </div>
+
+                <div>
+                    <x-input-label for="organisation_filter" :value="__('Organisation')" />
+                    <select wire:model.live="organisationFilter" id="organisation_filter" class="mt-1 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
+                        <option value="">{{ __('All organisations') }}</option>
+                        @unless ($organisationScoped)
+                            <option value="unassigned">{{ __('— Unassigned —') }}</option>
+                        @endunless
+                        @foreach ($organisations as $organisation)
+                            <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <label class="inline-flex items-center gap-2 pb-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input wire:model.live="needsAttention" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                    {{ __('Needs attention') }}
+                </label>
+
+                @if ($search !== '' || $organisationFilter !== '' || $needsAttention)
+                    <button type="button" wire:click="clearFilters" class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 pb-2">{{ __('Clear filters') }}</button>
                 @endif
-                <x-primary-button wire:click="create">{{ __('New Domain') }}</x-primary-button>
+
+                <div class="flex items-center gap-4 ml-auto">
+                    @if (auth()->user()->isAdmin())
+                        <a href="{{ route('admin.domains.trash') }}" wire:navigate class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                            {{ __('Trash') }}
+                        </a>
+                    @endif
+                    <x-secondary-button wire:click="openBulk">{{ __('Bulk add') }}</x-secondary-button>
+                    <x-primary-button wire:click="create">{{ __('New Domain') }}</x-primary-button>
+                </div>
             </div>
 
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
@@ -196,6 +526,7 @@ new #[Layout('layouts.app')] class extends Component
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Domain') }}</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Organisation') }}</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Status') }}</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Policy') }}</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('DMARC') }}</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('SPF') }}</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('DKIM') }}</th>
@@ -204,6 +535,7 @@ new #[Layout('layouts.app')] class extends Component
                     </thead>
                     <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:space-y-3 max-md:p-3">
                         @forelse ($domains as $domain)
+                            @php $domainHealth = $health->get($domain->id); @endphp
                             <tr wire:key="domain-{{ $domain->id }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
                                 <td data-label="{{ __('Domain') }}" class="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400 max-md:before:font-normal">
                                     <button type="button" wire:click="toggleExpand({{ $domain->id }})" class="inline-flex items-center gap-2 hover:text-indigo-600 dark:hover:text-indigo-400">
@@ -212,6 +544,13 @@ new #[Layout('layouts.app')] class extends Component
                                         </svg>
                                         <span>{{ $domain->fqdn }}</span>
                                     </button>
+                                    @if ($domainHealth && $domainHealth['issues'] !== [])
+                                        <div class="mt-1 flex flex-wrap gap-1 md:pl-6 max-md:justify-end">
+                                            @foreach ($domainHealth['issues'] as $issue)
+                                                <span class="inline-flex items-center rounded-full bg-red-50 dark:bg-red-900/40 px-1.5 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-300">{{ \App\Services\Analytics\DomainHealthService::issueLabel($issue) }}</span>
+                                            @endforeach
+                                        </div>
+                                    @endif
                                 </td>
                                 <td data-label="{{ __('Organisation') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                     {{ $domain->organisation?->name ?? '—' }}
@@ -225,6 +564,18 @@ new #[Layout('layouts.app')] class extends Component
                                     @else
                                         <span class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">{{ __('Inactive') }}</span>
                                     @endif
+                                </td>
+                                <td data-label="{{ __('Policy') }}" class="px-6 py-4 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
+                                    <span class="max-md:text-right">
+                                        <x-policy-badge :policy="$domainHealth['policy'] ?? null" />
+                                        @if ($domainHealth)
+                                            <div @class([
+                                                'text-xs mt-0.5',
+                                                'text-green-600 dark:text-green-400' => $domainHealth['readiness']['ready'] && $domainHealth['readiness']['step'] !== 'enforced',
+                                                'text-gray-400 dark:text-gray-500' => ! $domainHealth['readiness']['ready'] || $domainHealth['readiness']['step'] === 'enforced',
+                                            ])>{{ \App\Services\Analytics\DomainHealthService::readinessHint($domainHealth['readiness']) }}</div>
+                                        @endif
+                                    </span>
                                 </td>
                                 <td data-label="{{ __('DMARC') }}" class="px-6 py-4 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                     <span class="max-md:text-right">
@@ -267,7 +618,7 @@ new #[Layout('layouts.app')] class extends Component
                             </tr>
                             @if ($expandedId === $domain->id)
                                 <tr wire:key="domain-{{ $domain->id }}-details" class="max-md:block">
-                                    <td colspan="7" class="bg-gray-50 dark:bg-gray-900/50 px-6 py-4 max-md:block max-md:px-3 max-md:py-3 max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:mt-2">
+                                    <td colspan="8" class="bg-gray-50 dark:bg-gray-900/50 px-6 py-4 max-md:block max-md:px-3 max-md:py-3 max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:mt-2">
                                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             <div>
                                                 <h4 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('DMARC') }}</h4>
@@ -311,12 +662,48 @@ new #[Layout('layouts.app')] class extends Component
                                                 @endif
                                             </div>
                                         </div>
+
+                                        @if ($domainHealth)
+                                            @php
+                                                $readiness = $domainHealth['readiness'];
+                                                $generatorCall = 'openGenerator('.$domain->id.', '.($readiness['next_policy'] ? "'".$readiness['next_policy']."'" : 'null').')';
+                                            @endphp
+                                            <div class="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                                                <div>
+                                                    <h4 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('Path to enforcement') }}</h4>
+                                                    <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">
+                                                        @if ($readiness['step'] === 'publish')
+                                                            {{ __('No DMARC policy yet. Publish p=none with a rua address to start collecting reports.') }}
+                                                        @elseif ($readiness['step'] === 'enforced')
+                                                            {{ __('Fully enforced (p=reject on all mail). Keep an eye on new sending sources.') }}
+                                                        @elseif ($readiness['step'] === 'raise_pct')
+                                                            {{ __('p=:policy applies to only part of the mail. Next step: pct=100.', ['policy' => $readiness['next_policy']]) }}
+                                                        @else
+                                                            {{ __('Next step: p=:policy.', ['policy' => $readiness['next_policy']]) }}
+                                                        @endif
+                                                    </p>
+                                                    @if ($readiness['checks'] !== [])
+                                                        <ul class="mt-2 space-y-1">
+                                                            @foreach ($readiness['checks'] as $check)
+                                                                <li class="flex items-center gap-2 text-xs {{ $check['passed'] ? 'text-green-700 dark:text-green-400' : 'text-gray-500 dark:text-gray-400' }}">
+                                                                    <span aria-hidden="true">{{ $check['passed'] ? '✓' : '✗' }}</span>
+                                                                    <span>{{ $check['label'] }}</span>
+                                                                </li>
+                                                            @endforeach
+                                                        </ul>
+                                                    @endif
+                                                </div>
+                                                <x-secondary-button type="button" wire:click="{{ $generatorCall }}" class="shrink-0">
+                                                    {{ $readiness['next_policy'] ? __('Generate p=:policy record', ['policy' => $readiness['next_policy']]) : __('DMARC record') }}
+                                                </x-secondary-button>
+                                            </div>
+                                        @endif
                                     </td>
                                 </tr>
                             @endif
                         @empty
                             <tr>
-                                <td colspan="7" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No domains yet.') }}</td>
+                                <td colspan="8" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ $search !== '' || $organisationFilter !== '' || $needsAttention ? __('No domains match your filters.') : __('No domains yet.') }}</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -372,5 +759,167 @@ new #[Layout('layouts.app')] class extends Component
                 <x-primary-button type="submit">{{ __('Save') }}</x-primary-button>
             </div>
         </form>
+    </x-modal>
+
+    <x-modal name="domain-bulk-form" :show="$openBulkOnLoad" focusable>
+        <form wire:submit="saveBulk" class="p-6">
+            <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ __('Bulk add domains') }}</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ __('One domain per line, or separated by commas or spaces. Pasted URLs and wildcards are tidied up; domains that already exist are skipped.') }}</p>
+
+            <div class="mt-6">
+                <x-input-label for="bulk_domains" :value="__('Domains')" />
+                <textarea wire:model="bulkDomains" id="bulk_domains" rows="8" placeholder="example.com&#10;example.org" class="mt-1 block w-full font-mono text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm"></textarea>
+                <x-input-error :messages="$errors->get('bulkDomains')" class="mt-2" />
+            </div>
+
+            <div class="mt-6">
+                <x-input-label for="bulk_organisation_id" :value="__('Organisation')" />
+                <select wire:model="bulkOrganisationId" id="bulk_organisation_id" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
+                    @if ($organisationScoped)
+                        <option value="" disabled>{{ __('— Select organisation —') }}</option>
+                    @else
+                        <option value="">{{ __('— Unassigned —') }}</option>
+                    @endif
+                    @foreach ($organisations as $organisation)
+                        <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
+                    @endforeach
+                </select>
+                <x-input-error :messages="$errors->get('bulkOrganisationId')" class="mt-2" />
+            </div>
+
+            <div class="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2">
+                <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input wire:model="bulkIsActive" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                    {{ __('Active') }}
+                </label>
+                <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input wire:model="bulkCheckDns" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                    {{ __('Check DNS records now') }}
+                </label>
+            </div>
+
+            @if ($bulkResult)
+                <div class="mt-6 rounded-md bg-gray-50 dark:bg-gray-900/50 p-4 text-sm space-y-2">
+                    @foreach ([
+                        'added' => ['Added', 'text-green-700 dark:text-green-400'],
+                        'existing' => ['Already exist', 'text-gray-600 dark:text-gray-300'],
+                        'trashed' => ['In the trash (restore them there)', 'text-amber-700 dark:text-amber-400'],
+                        'invalid' => ['Not a valid domain', 'text-red-700 dark:text-red-400'],
+                    ] as $key => [$label, $class])
+                        @if ($bulkResult[$key] !== [])
+                            <div>
+                                <span class="font-medium {{ $class }}">{{ __($label) }} ({{ count($bulkResult[$key]) }}):</span>
+                                <span class="font-mono text-xs text-gray-600 dark:text-gray-300 break-all">{{ implode(', ', $bulkResult[$key]) }}</span>
+                            </div>
+                        @endif
+                    @endforeach
+                </div>
+            @endif
+
+            <div class="mt-6 flex justify-end space-x-3">
+                <x-secondary-button type="button" x-on:click="show = false">{{ $bulkResult ? __('Close') : __('Cancel') }}</x-secondary-button>
+                <x-primary-button type="submit" wire:loading.attr="disabled" wire:target="saveBulk">
+                    <span wire:loading.remove wire:target="saveBulk">{{ __('Add domains') }}</span>
+                    <span wire:loading wire:target="saveBulk">{{ __('Adding…') }}</span>
+                </x-primary-button>
+            </div>
+        </form>
+    </x-modal>
+
+    <x-modal name="dmarc-generator" maxWidth="2xl" focusable>
+        <div class="p-6">
+            <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ __('DMARC record for :domain', ['domain' => $generatorFqdn]) }}</h2>
+
+            <div class="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                    <x-input-label for="gen_policy" :value="__('Policy (p)')" />
+                    <select wire:model.live="genPolicy" id="gen_policy" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
+                        <option value="none">none</option>
+                        <option value="quarantine">quarantine</option>
+                        <option value="reject">reject</option>
+                    </select>
+                </div>
+                <div>
+                    <x-input-label for="gen_pct" :value="__('Percentage (pct)')" />
+                    <x-text-input wire:model.live.debounce.300ms="genPct" id="gen_pct" type="number" min="0" max="100" class="mt-1 block w-full text-sm" />
+                </div>
+                <div>
+                    <x-input-label for="gen_sp" :value="__('Subdomain policy (sp)')" />
+                    <select wire:model.live="genSubdomainPolicy" id="gen_sp" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
+                        <option value="">{{ __('Same as p') }}</option>
+                        <option value="none">none</option>
+                        <option value="quarantine">quarantine</option>
+                        <option value="reject">reject</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <x-input-label for="gen_rua" :value="__('Aggregate report addresses (rua)')" />
+                <x-text-input wire:model.live.debounce.400ms="genRua" id="gen_rua" type="text" class="mt-1 block w-full text-sm font-mono" />
+                @unless (config('dmarc.rua_address'))
+                    <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">{{ __('Set DMARC_RUA_ADDRESS to have this app\'s report mailbox filled in automatically.') }}</p>
+                @endunless
+            </div>
+
+            <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="sm:col-span-1">
+                    <x-input-label for="gen_ruf" :value="__('Forensic addresses (ruf)')" />
+                    <x-text-input wire:model.live.debounce.400ms="genRuf" id="gen_ruf" type="text" :placeholder="__('Optional')" class="mt-1 block w-full text-sm font-mono" />
+                </div>
+                <div>
+                    <x-input-label for="gen_adkim" :value="__('DKIM alignment')" />
+                    <select wire:model.live="genAdkim" id="gen_adkim" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
+                        <option value="r">{{ __('Relaxed') }}</option>
+                        <option value="s">{{ __('Strict') }}</option>
+                    </select>
+                </div>
+                <div>
+                    <x-input-label for="gen_aspf" :value="__('SPF alignment')" />
+                    <select wire:model.live="genAspf" id="gen_aspf" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
+                        <option value="r">{{ __('Relaxed') }}</option>
+                        <option value="s">{{ __('Strict') }}</option>
+                    </select>
+                </div>
+            </div>
+
+            @if ($generatorDomainId)
+                @php
+                    $dnsRecords = [['host' => '_dmarc.'.$generatorFqdn, 'value' => $this->generatedRecord()]];
+                    foreach ($this->generatorAuthorizationHosts() as $authorizationHost) {
+                        $dnsRecords[] = ['host' => $authorizationHost, 'value' => 'v=DMARC1', 'external' => true];
+                    }
+                @endphp
+
+                <div class="mt-6 space-y-3">
+                    @foreach ($dnsRecords as $dnsRecord)
+                        <div class="rounded-md border border-gray-200 dark:border-gray-700 p-3" x-data="{ copied: false }">
+                            <div class="flex items-center justify-between gap-3">
+                                <div class="text-xs text-gray-500 dark:text-gray-400">
+                                    {{ __('TXT record at') }} <span class="font-mono text-gray-700 dark:text-gray-200">{{ $dnsRecord['host'] }}</span>
+                                </div>
+                                <button type="button" x-on:click="navigator.clipboard.writeText(@js($dnsRecord['value'])); copied = true; setTimeout(() => copied = false, 1500)" class="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">
+                                    <span x-show="! copied">{{ __('Copy') }}</span>
+                                    <span x-show="copied" x-cloak>{{ __('Copied') }}</span>
+                                </button>
+                            </div>
+                            <p class="mt-1 font-mono text-sm break-all text-gray-900 dark:text-gray-100">{{ $dnsRecord['value'] }}</p>
+                            @if ($dnsRecord['external'] ?? false)
+                                <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">{{ __('Published on the report address\'s domain, not the client\'s: without it mailbox providers won\'t send reports to another domain.') }}</p>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+
+                <div class="mt-4 text-xs text-gray-500 dark:text-gray-400">
+                    {{ __('Current record:') }}
+                    <span class="font-mono break-all text-gray-600 dark:text-gray-300">{{ $generatorCurrentRecord ?: __('none') }}</span>
+                </div>
+            @endif
+
+            <div class="mt-6 flex justify-end">
+                <x-secondary-button type="button" x-on:click="show = false">{{ __('Close') }}</x-secondary-button>
+            </div>
+        </div>
     </x-modal>
 </div>

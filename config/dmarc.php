@@ -16,6 +16,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Report address
+    |--------------------------------------------------------------------------
+    |
+    | The mailbox clients should publish in their DMARC record's rua tag so
+    | aggregate reports reach this app. Used by the DMARC record generator
+    | and to flag domains whose reports are going elsewhere.
+    |
+    */
+    'rua_address' => env('DMARC_RUA_ADDRESS'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Local .eml/.msg import
     |--------------------------------------------------------------------------
     |

@@ -261,6 +261,32 @@ class DmarcMetricsService
     }
 
     /**
+     * Message volume and DMARC pass counts per domain in one query, for
+     * pages that show many domains side by side.
+     *
+     * @param  array<int, int>  $domainIds
+     * @return Collection<int, array{total: int, dmarc_pass: int, dmarc_pass_pct: float}> Keyed by domain id.
+     */
+    public function summaryByDomain(array $domainIds, CarbonInterface $from, CarbonInterface $to): Collection
+    {
+        if ($domainIds === []) {
+            return collect();
+        }
+
+        return $this->baseQuery(null, $from, $to, null, $domainIds)
+            ->groupBy('aggregate_reports.domain_id')
+            ->selectRaw('aggregate_reports.domain_id as domain_id')
+            ->selectRaw('SUM(aggregate_report_records.count) as total')
+            ->selectRaw("SUM(CASE WHEN aggregate_report_records.dkim_result = 'pass' OR aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as dmarc_pass")
+            ->get()
+            ->mapWithKeys(fn ($row) => [(int) $row->domain_id => [
+                'total' => (int) $row->total,
+                'dmarc_pass' => (int) $row->dmarc_pass,
+                'dmarc_pass_pct' => $this->percentage($row->dmarc_pass, $row->total),
+            ]]);
+    }
+
+    /**
      * Distinct source IPs already seen for a domain before the given cutoff —
      * the baseline used by the "new sending source" alert to detect newly
      * appearing IPs. Matched against ingestion time (see summary()'s
