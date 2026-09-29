@@ -116,6 +116,20 @@ class DomainHealthServiceTest extends TestCase
         $this->assertSame('critical', $health['pass_status']);
     }
 
+    public function test_missing_report_authorisation_is_an_issue_only_for_addresses_in_the_record(): void
+    {
+        $authorization = fn (bool $authorized, bool $inRecord) => [
+            'report_domain' => 'msp.test', 'host' => 'x._report._dmarc.msp.test', 'authorized' => $authorized, 'in_record' => $inRecord,
+        ];
+        $missing = $this->healthyDomain(attributes: ['dmarc_report_authorizations' => [$authorization(false, true)]]);
+        $notListedYet = $this->healthyDomain(attributes: ['dmarc_report_authorizations' => [$authorization(false, false)]]);
+        $found = $this->healthyDomain(attributes: ['dmarc_report_authorizations' => [$authorization(true, true)]]);
+
+        $this->assertContains('report_auth_missing', $this->health($missing)['issues']);
+        $this->assertNotContains('report_auth_missing', $this->health($notListedYet)['issues']);
+        $this->assertNotContains('report_auth_missing', $this->health($found)['issues']);
+    }
+
     public function test_roll_up_weights_pass_rate_by_volume_and_counts_policies(): void
     {
         $a = $this->healthyDomain('v=DMARC1; p=reject');

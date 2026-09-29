@@ -16,12 +16,13 @@ class Domain extends Model
 
     protected $fillable = [
         'organisation_id', 'fqdn', 'is_active', 'notes',
-        'dmarc_status', 'dmarc_record', 'spf_status', 'spf_record',
+        'dmarc_status', 'dmarc_record', 'dmarc_report_authorizations', 'spf_status', 'spf_record',
         'dkim_status', 'dkim_selector', 'dkim_record', 'dkim_selectors', 'dns_checked_at',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'dmarc_report_authorizations' => 'array',
         'dkim_selectors' => 'array',
         'dns_checked_at' => 'datetime',
         'deleted_at' => 'datetime',
@@ -78,6 +79,27 @@ class Domain extends Model
         }
 
         return in_array(strtolower($ruaAddress), DmarcRecord::addresses($this->dmarcTags()['rua'] ?? null), true);
+    }
+
+    /**
+     * The "v=DMARC1" records other domains must publish before providers
+     * send this domain's reports there (RFC 7489 §7.1), as found at the last
+     * DNS check. in_record is false for this app's own report address when
+     * the domain's DMARC record doesn't list it yet.
+     *
+     * @return list<array{report_domain: string, host: string, authorized: bool, in_record: bool}>
+     */
+    public function reportAuthorizations(): array
+    {
+        return $this->dmarc_report_authorizations ?? [];
+    }
+
+    /**
+     * @return list<array{report_domain: string, host: string, authorized: bool, in_record: bool}>
+     */
+    public function missingReportAuthorizations(): array
+    {
+        return array_values(array_filter($this->reportAuthorizations(), fn (array $authorization) => ! $authorization['authorized']));
     }
 
     public function organisation()

@@ -372,6 +372,21 @@ new #[Layout('layouts.app')] class extends Component
             ->all();
     }
 
+    /**
+     * Whether each authorisation record was found at the domain's last DNS
+     * check, keyed by host; hosts that weren't checked are absent.
+     *
+     * @return array<string, bool>
+     */
+    public function generatorCheckedAuthorizations(): array
+    {
+        $domain = $this->generatorDomainId ? Domain::visibleTo(auth()->user())->find($this->generatorDomainId) : null;
+
+        return collect($domain?->reportAuthorizations() ?? [])
+            ->mapWithKeys(fn (array $authorization) => [$authorization['host'] => $authorization['authorized']])
+            ->all();
+    }
+
     public function delete(int $id): void
     {
         $domain = Domain::findOrFail($id);
@@ -508,12 +523,30 @@ new #[Layout('layouts.app')] class extends Component
                     <button type="button" wire:click="clearFilters" class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 pb-2">{{ __('Clear filters') }}</button>
                 @endif
 
-                <div class="flex items-center gap-4 ml-auto">
+                <div class="flex items-center gap-2 ml-auto">
                     @if (auth()->user()->isAdmin())
-                        <a href="{{ route('admin.domains.trash') }}" wire:navigate class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-                            {{ __('Trash') }}
+                        <a href="{{ route('admin.domains.trash') }}" wire:navigate title="{{ __('Trash') }}" class="inline-flex items-center justify-center h-9 w-9 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                            </svg>
+                            <span class="sr-only">{{ __('Trash') }}</span>
                         </a>
                     @endif
+                    <x-dropdown align="right" width="w-72">
+                        <x-slot name="trigger">
+                            <button type="button" title="{{ __('Export missing report records') }}" class="inline-flex items-center justify-center h-9 w-9 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                </svg>
+                                <span class="sr-only">{{ __('Export missing report records') }}</span>
+                            </button>
+                        </x-slot>
+                        <x-slot name="content">
+                            <div class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">{{ __('Missing report authorisation records') }}</div>
+                            <x-dropdown-link href="{{ route('admin.domains.report-authorizations') }}">{{ __('Zone file (.txt)') }}</x-dropdown-link>
+                            <x-dropdown-link href="{{ route('admin.domains.report-authorizations', ['format' => 'csv']) }}">{{ __('CSV') }}</x-dropdown-link>
+                        </x-slot>
+                    </x-dropdown>
                     <x-secondary-button wire:click="openBulk">{{ __('Bulk add') }}</x-secondary-button>
                     <x-primary-button wire:click="create">{{ __('New Domain') }}</x-primary-button>
                 </div>
@@ -624,6 +657,22 @@ new #[Layout('layouts.app')] class extends Component
                                                 <h4 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('DMARC') }}</h4>
                                                 <span class="mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $this->authStatusBadgeClass($domain->dmarc_status) }}">{{ $this->authStatusLabel($domain->dmarc_status) }}</span>
                                                 <p class="mt-2 text-xs font-mono break-all text-gray-600 dark:text-gray-300">{{ $domain->dmarc_record ?: __('No record found.') }}</p>
+
+                                                @php $recordAuthorizations = collect($domain->reportAuthorizations())->where('in_record', true); @endphp
+                                                @if ($recordAuthorizations->isNotEmpty())
+                                                    <h5 class="mt-3 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('Report authorisation') }}</h5>
+                                                    <ul class="mt-1 space-y-1">
+                                                        @foreach ($recordAuthorizations as $authorization)
+                                                            <li class="flex items-start gap-2 text-xs {{ $authorization['authorized'] ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400' }}">
+                                                                <span aria-hidden="true">{{ $authorization['authorized'] ? '✓' : '✗' }}</span>
+                                                                <span>
+                                                                    <span class="font-mono break-all">{{ $authorization['host'] }}</span>
+                                                                    <span class="text-gray-400 dark:text-gray-500">· {{ $authorization['authorized'] ? __('Found') : __('Missing') }}</span>
+                                                                </span>
+                                                            </li>
+                                                        @endforeach
+                                                    </ul>
+                                                @endif
                                             </div>
                                             <div>
                                                 <h4 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('SPF') }}</h4>
@@ -886,8 +935,9 @@ new #[Layout('layouts.app')] class extends Component
             @if ($generatorDomainId)
                 @php
                     $dnsRecords = [['host' => '_dmarc.'.$generatorFqdn, 'value' => $this->generatedRecord()]];
+                    $checkedAuthorizations = $this->generatorCheckedAuthorizations();
                     foreach ($this->generatorAuthorizationHosts() as $authorizationHost) {
-                        $dnsRecords[] = ['host' => $authorizationHost, 'value' => 'v=DMARC1', 'external' => true];
+                        $dnsRecords[] = ['host' => $authorizationHost, 'value' => 'v=DMARC1', 'external' => true, 'authorized' => $checkedAuthorizations[$authorizationHost] ?? null];
                     }
                 @endphp
 
@@ -906,6 +956,11 @@ new #[Layout('layouts.app')] class extends Component
                             <p class="mt-1 font-mono text-sm break-all text-gray-900 dark:text-gray-100">{{ $dnsRecord['value'] }}</p>
                             @if ($dnsRecord['external'] ?? false)
                                 <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">{{ __('Published on the report address\'s domain, not the client\'s: without it mailbox providers won\'t send reports to another domain.') }}</p>
+                                @if ($dnsRecord['authorized'] === true)
+                                    <p class="mt-1 text-xs text-green-700 dark:text-green-400">✓ {{ __('Found in DNS at last check') }}</p>
+                                @elseif ($dnsRecord['authorized'] === false)
+                                    <p class="mt-1 text-xs text-red-700 dark:text-red-400">✗ {{ __('Not found in DNS at last check') }}</p>
+                                @endif
                             @endif
                         </div>
                     @endforeach

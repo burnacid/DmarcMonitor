@@ -4,6 +4,7 @@ namespace App\Services\Dns;
 
 use App\Models\AggregateReportRecord;
 use App\Models\Domain;
+use App\Support\DmarcRecord;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -40,8 +41,11 @@ class DomainAuthenticationChecker
      */
     public function check(Domain $domain): array
     {
+        $dmarc = $this->checkDmarc($domain->fqdn);
+
         return array_merge(
-            $this->checkDmarc($domain->fqdn),
+            $dmarc,
+            $this->checkReportAuthorizations($domain->fqdn, $dmarc['dmarc_record']),
             $this->checkSpf($domain->fqdn),
             $this->checkDkim($domain),
             ['dns_checked_at' => now()],
@@ -76,6 +80,52 @@ class DomainAuthenticationChecker
         };
 
         return ['dmarc_status' => $status, 'dmarc_record' => $record];
+    }
+
+    /**
+     * Looks up the "v=DMARC1" record each rua/ruf address on another domain
+     * needs at <domain>._report._dmarc.<report domain> (RFC 7489 §7.1). This
+     * app's own report address is always checked, even before the domain's
+     * record lists it, so the record can be published ahead of the switch.
+     *
+     * @return array{dmarc_report_authorizations: list<array{report_domain: string, host: string, authorized: bool, in_record: bool}>}
+     */
+    private function checkReportAuthorizations(string $fqdn, ?string $dmarcRecord): array
+    {
+        $tags = DmarcRecord::parse($dmarcRecord);
+        $addresses = collect([...DmarcRecord::addresses($tags['rua'] ?? null), ...DmarcRecord::addresses($tags['ruf'] ?? null)])
+            ->mapWithKeys(fn (string $address) => [$address => true]);
+
+        $ownAddress = strtolower(trim((string) config('dmarc.rua_address')));
+
+        if ($ownAddress !== '' && ! $addresses->has($ownAddress)) {
+            $addresses->put($ownAddress, false);
+        }
+
+        $authorizations = [];
+
+        foreach ($addresses as $address => $inRecord) {
+            $host = DmarcRecord::externalAuthorizationHost($fqdn, $address);
+
+            if ($host === null) {
+                continue;
+            }
+
+            if (isset($authorizations[$host])) {
+                $authorizations[$host]['in_record'] = $authorizations[$host]['in_record'] || $inRecord;
+
+                continue;
+            }
+
+            $authorizations[$host] = [
+                'report_domain' => rtrim(substr(strrchr($address, '@'), 1), '.'),
+                'host' => $host,
+                'authorized' => $this->firstMatching($host, fn (string $txt) => str_starts_with(strtolower($txt), 'v=dmarc1')) !== null,
+                'in_record' => $inRecord,
+            ];
+        }
+
+        return ['dmarc_report_authorizations' => array_values($authorizations)];
     }
 
     /**

@@ -191,6 +191,34 @@ class DomainAuthenticationCheckerTest extends TestCase
         $this->assertNotNull($domain->fresh()->dns_checked_at);
     }
 
+    public function test_it_checks_the_authorisation_record_of_each_external_report_domain(): void
+    {
+        config(['dmarc.rua_address' => null]);
+        $domain = Domain::factory()->create(['fqdn' => 'client.test']);
+
+        $result = $this->checker([
+            '_dmarc.client.test' => ['v=DMARC1; p=none; rua=mailto:dmarc@msp.test,mailto:reports@vendor.test,mailto:postmaster@client.test; ruf=mailto:forensic@msp.test'],
+            'client.test._report._dmarc.msp.test' => ['v=DMARC1'],
+        ])->check($domain);
+
+        $this->assertSame([
+            ['report_domain' => 'msp.test', 'host' => 'client.test._report._dmarc.msp.test', 'authorized' => true, 'in_record' => true],
+            ['report_domain' => 'vendor.test', 'host' => 'client.test._report._dmarc.vendor.test', 'authorized' => false, 'in_record' => true],
+        ], $result['dmarc_report_authorizations']);
+    }
+
+    public function test_it_checks_this_apps_report_address_before_the_record_lists_it(): void
+    {
+        config(['dmarc.rua_address' => 'dmarc@msp.test']);
+        $domain = Domain::factory()->create(['fqdn' => 'client.test']);
+
+        $result = $this->checker([])->check($domain);
+
+        $this->assertSame([
+            ['report_domain' => 'msp.test', 'host' => 'client.test._report._dmarc.msp.test', 'authorized' => false, 'in_record' => false],
+        ], $result['dmarc_report_authorizations']);
+    }
+
     private function recordDkimSelector(Domain $domain, string $selector, ?Carbon $seenAt = null): void
     {
         $report = AggregateReport::factory()->create(array_filter([

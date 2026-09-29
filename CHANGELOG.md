@@ -2,6 +2,13 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
+## [1.2.1]
+
+### Added
+
+- **Report authorisation check**: when a domain's DMARC record sends reports to an address on another domain (for example `dmarc@burnacid.com` for `gameforce.nl`), every DNS check now looks up the `v=DMARC1` record that domain must publish (`gameforce.nl._report._dmarc.burnacid.com`). A missing record flags the domain with "Report authorisation missing". Expanding the domain shows each record as found or missing, and the DMARC record generator shows whether it was found at the last check. A wildcard record (`*._report._dmarc.<report domain>`) also counts.
+- **Export missing report records**: the Domains page can download every missing authorisation record as a BIND zone file or a CSV, grouped by the domain they must be published in. This app's own report address is included even before a client's DMARC record lists it, so the records can be published ahead of the switch.
+
 ## [1.2.0]
 
 ### Added

@@ -42,7 +42,7 @@ class DomainHealthService
 
     public const float READINESS_PASS_FOR_REJECT = 99.0;
 
-    public const array ISSUES = ['no_reports', 'dmarc_missing', 'spf_missing', 'dkim_missing', 'low_pass_rate', 'open_alerts', 'not_reporting_here'];
+    public const array ISSUES = ['no_reports', 'dmarc_missing', 'spf_missing', 'dkim_missing', 'low_pass_rate', 'open_alerts', 'not_reporting_here', 'report_auth_missing'];
 
     public function __construct(private DmarcMetricsService $metrics) {}
 
@@ -65,6 +65,7 @@ class DomainHealthService
             'low_pass_rate' => __('Low pass rate'),
             'open_alerts' => __('Open alerts'),
             'not_reporting_here' => __('Reports sent elsewhere'),
+            'report_auth_missing' => __('Report authorisation missing'),
             default => $issue,
         };
     }
@@ -219,6 +220,10 @@ class DomainHealthService
 
         if ($domain->dmarc_record !== null && $health['reports_to_us'] === false) {
             $issues[] = 'not_reporting_here';
+        }
+
+        if (collect($domain->missingReportAuthorizations())->contains('in_record', true)) {
+            $issues[] = 'report_auth_missing';
         }
 
         return $issues;

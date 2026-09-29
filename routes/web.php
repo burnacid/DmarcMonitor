@@ -4,6 +4,7 @@ use App\Http\Controllers\DashboardSourcesExportController;
 use App\Http\Controllers\ForensicReportDownloadController;
 use App\Http\Controllers\Microsoft365ConnectController;
 use App\Http\Controllers\OrganisationReportPdfController;
+use App\Http\Controllers\ReportAuthorizationExportController;
 use App\Http\Controllers\ReportDownloadController;
 use App\Http\Controllers\ReportsExportController;
 use Illuminate\Support\Facades\Route;
@@ -41,6 +42,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 Route::middleware(['auth', 'verified', 'role:admin,editor'])->prefix('admin')->name('admin.')->group(function () {
     Volt::route('organisations', 'admin.organisations')->name('organisations');
     Volt::route('domains', 'admin.domains')->name('domains');
+    Route::get('domains/report-authorizations', ReportAuthorizationExportController::class)->name('domains.report-authorizations');
     Volt::route('geoip', 'admin.geoip')->name('geoip');
     Volt::route('alert-rules', 'admin.alert-rules')->name('alert-rules');
     Volt::route('alert-events', 'admin.alert-events')->name('alert-events');

@@ -98,7 +98,7 @@ new #[Layout('layouts.app')] class extends Component
                     {{ __('Forwarded mail and mailing lists often fail DMARC through no fault of your own, so check the failing sources on the Dashboard before tightening the policy even when the checklist is green.') }}
                 </p>
                 <p>
-                    {{ __('The "Generate record" button builds the DMARC TXT record to publish, keeping any report addresses already in it and adding this app\'s (DMARC_RUA_ADDRESS). When reports go to an address on a different domain than the one being monitored, mailbox providers only send them if that other domain authorises it with a TXT record "v=DMARC1" at <monitored domain>._report._dmarc.<report domain>. The generator shows that record too; without it, reports silently never arrive.') }}
+                    {{ __('The "Generate record" button builds the DMARC TXT record to publish, keeping any report addresses already in it and adding this app\'s (DMARC_RUA_ADDRESS). When reports go to an address on a different domain than the one being monitored, mailbox providers only send them if that other domain authorises it with a TXT record "v=DMARC1" at <monitored domain>._report._dmarc.<report domain>. The generator shows that record too; without it, reports silently never arrive. Every DNS check looks these records up: a missing one flags the domain with "Report authorisation missing", and the Domains page can export every missing record as a zone file or CSV, grouped by the domain they must be published in. This app\'s own report address is included even before a client\'s record lists it, so the records can be published ahead of the switch.') }}
                 </p>
             </div>
 
