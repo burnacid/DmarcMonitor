@@ -9,7 +9,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 #[Signature('dmarc:check-dns {domain? : ID of a single domain to check}')]
-#[Description('Check DMARC, SPF, and DKIM DNS records for active domains')]
+#[Description('Check DMARC, SPF, DKIM and report authorisation DNS records for active domains')]
 class CheckDomainDnsRecords extends Command
 {
     /**
@@ -30,7 +30,10 @@ class CheckDomainDnsRecords extends Command
         foreach ($domains as $domain) {
             $domain = $checker->checkAndStore($domain);
 
-            $this->line("{$domain->fqdn}: dmarc={$domain->dmarc_status} spf={$domain->spf_status} dkim={$domain->dkim_status}");
+            $missingAuthorizations = count($domain->missingReportAuthorizations());
+            $reportAuth = $missingAuthorizations > 0 ? "missing:{$missingAuthorizations}" : 'ok';
+
+            $this->line("{$domain->fqdn}: dmarc={$domain->dmarc_status} spf={$domain->spf_status} dkim={$domain->dkim_status} report-auth={$reportAuth}");
         }
 
         return self::SUCCESS;
