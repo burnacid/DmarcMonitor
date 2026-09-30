@@ -7,6 +7,8 @@ use App\Models\ForensicReport;
 use App\Models\Microsoft365MailAccount;
 use App\Services\Graph\GraphIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -183,5 +185,59 @@ class GraphIngestionServiceTest extends TestCase
         $this->assertSame(0, $stats['fetched']);
         $account->refresh();
         $this->assertNotNull($account->last_error);
+    }
+
+    public function test_pruning_deletes_messages_older_than_the_cutoff_from_the_inbox_processed_and_failed_folders(): void
+    {
+        Http::fake([
+            'login.microsoftonline.com/*' => Http::response(['access_token' => 'test-token', 'expires_in' => 3600]),
+            'graph.microsoft.com/v1.0/users/*/mailFolders?*' => fn (Request $request) => Http::response(['value' => match (true) {
+                str_contains(urldecode($request->url()), "'Inbox'") => [['id' => 'inbox-id']],
+                str_contains(urldecode($request->url()), "'Processed'") => [['id' => 'processed-id']],
+                str_contains(urldecode($request->url()), "'Failed'") => [['id' => 'failed-id']],
+                default => [],
+            }]),
+            'graph.microsoft.com/v1.0/users/*/mailFolders/inbox-id/messages*' => Http::sequence()
+                ->push(['value' => [['id' => 'old-1'], ['id' => 'old-2']]])
+                ->push(['value' => []]),
+            'graph.microsoft.com/v1.0/users/*/mailFolders/processed-id/messages*' => Http::sequence()
+                ->push(['value' => [['id' => 'old-3']]])
+                ->push(['value' => []]),
+            'graph.microsoft.com/v1.0/users/*/mailFolders/failed-id/messages*' => Http::response(['value' => []]),
+            'graph.microsoft.com/v1.0/users/*/messages/*' => Http::response(null, 204),
+        ]);
+
+        $account = Microsoft365MailAccount::factory()->create([
+            'folder_processed' => 'Processed',
+            'folder_failed' => 'Failed',
+        ]);
+
+        $deleted = (new GraphIngestionService)->pruneMessagesOlderThan($account, Carbon::parse('2025-08-26 12:00:00', 'UTC'));
+
+        $this->assertSame(3, $deleted);
+
+        foreach (['old-1', 'old-2', 'old-3'] as $messageId) {
+            Http::assertSent(fn ($request) => $request->method() === 'DELETE' && str_ends_with($request->url(), "/messages/{$messageId}"));
+        }
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/mailFolders/failed-id/messages')
+            && str_contains(urldecode($request->url()), 'receivedDateTime lt 2025-08-26T12:00:00Z'));
+    }
+
+    public function test_pruning_stops_when_nothing_on_a_page_can_be_deleted(): void
+    {
+        Http::fake([
+            'login.microsoftonline.com/*' => Http::response(['access_token' => 'test-token', 'expires_in' => 3600]),
+            'graph.microsoft.com/v1.0/users/*/mailFolders?*' => Http::response(['value' => [['id' => 'inbox-id']]]),
+            'graph.microsoft.com/v1.0/users/*/mailFolders/*/messages*' => Http::response(['value' => [['id' => 'stuck-1']]]),
+            'graph.microsoft.com/v1.0/users/*/messages/*' => Http::response(['error' => ['message' => 'Access denied']], 403),
+        ]);
+
+        $account = Microsoft365MailAccount::factory()->create();
+
+        $deleted = (new GraphIngestionService)->pruneMessagesOlderThan($account, now()->subDays(400));
+
+        $this->assertSame(0, $deleted);
+        Http::assertSentCount(4);
     }
 }
