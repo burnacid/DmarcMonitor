@@ -7,12 +7,15 @@ use App\Services\Dmarc\AggregateReportParser;
 use App\Services\Dmarc\ForensicReportParser;
 use App\Support\DmarcAttachmentSniffer;
 use App\Support\ForensicReportDetector;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Throwable;
 use Webklex\PHPIMAP\Attachment;
+use Webklex\PHPIMAP\Client;
 use Webklex\PHPIMAP\ClientManager;
+use Webklex\PHPIMAP\IMAP;
 use Webklex\PHPIMAP\Message;
 
 class ImapIngestionService
@@ -55,15 +58,7 @@ class ImapIngestionService
         $stats = ['fetched' => 0, 'parsed' => 0, 'failed' => 0, 'more_remaining' => false];
         $startedAt = microtime(true);
 
-        $client = (new ClientManager)->make([
-            'host' => $account->host,
-            'port' => $account->port,
-            'encryption' => $account->encryption === 'none' ? false : $account->encryption,
-            'validate_cert' => true,
-            'username' => $account->username,
-            'password' => $account->password,
-            'protocol' => $account->protocol,
-        ]);
+        $client = $this->makeClient($account);
 
         $chunkFailure = null;
 
@@ -158,6 +153,83 @@ class ImapIngestionService
         }
 
         return $stats;
+    }
+
+    /**
+     * Permanently delete messages received before the cutoff from the
+     * account's inbox, processed and failed folders. Folders that don't exist
+     * are skipped. Returns how many messages were deleted.
+     */
+    public function pruneMessagesOlderThan(ImapAccount $account, CarbonInterface $cutoff): int
+    {
+        $client = $this->makeClient($account);
+        $deleted = 0;
+
+        try {
+            $client->connect();
+            $connection = $client->getConnection();
+
+            foreach ($this->mailboxFolders($account) as $folderPath) {
+                $folder = $client->getFolderByPath($folderPath);
+
+                if ($folder === null) {
+                    continue;
+                }
+
+                $client->openFolder($folder->path, true);
+
+                // Searched by UID (rather than Webklex's query builder) so the
+                // date uses the RFC 3501 dd-Mon-yyyy format and the ids stay
+                // valid while flagging one message after another.
+                $uids = $connection->search(['BEFORE', $cutoff->format('d-M-Y')], IMAP::ST_UID)->validatedData();
+
+                if (empty($uids)) {
+                    continue;
+                }
+
+                foreach ($uids as $uid) {
+                    $connection->store(['\Deleted'], (int) $uid, null, '+', true, IMAP::ST_UID)->validatedData();
+                }
+
+                $client->expunge();
+                $deleted += count($uids);
+            }
+        } finally {
+            try {
+                $client->disconnect();
+            } catch (Throwable) {
+                // already disconnected or never connected
+            }
+        }
+
+        return $deleted;
+    }
+
+    /**
+     * The distinct inbox, processed and failed folders configured on the account.
+     *
+     * @return array<int, string>
+     */
+    private function mailboxFolders(ImapAccount $account): array
+    {
+        return array_values(array_unique(array_filter([
+            $account->folder_inbox,
+            $account->folder_processed,
+            $account->folder_failed,
+        ])));
+    }
+
+    private function makeClient(ImapAccount $account): Client
+    {
+        return (new ClientManager)->make([
+            'host' => $account->host,
+            'port' => $account->port,
+            'encryption' => $account->encryption === 'none' ? false : $account->encryption,
+            'validate_cert' => true,
+            'username' => $account->username,
+            'password' => $account->password,
+            'protocol' => $account->protocol,
+        ]);
     }
 
     /**

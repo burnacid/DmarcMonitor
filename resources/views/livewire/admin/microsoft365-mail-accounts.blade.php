@@ -28,6 +28,7 @@ new #[Layout('layouts.app')] class extends Component
     public bool $mark_as_read = true;
     public bool $include_read_messages = false;
     public bool $delete_after_processing = false;
+    public bool $delete_old_messages = false;
     public bool $is_active = true;
     /** @var array<int> */
     public array $domain_ids = [];
@@ -66,6 +67,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->mark_as_read = true;
         $this->include_read_messages = false;
         $this->delete_after_processing = false;
+        $this->delete_old_messages = false;
         $this->is_active = true;
         $this->dispatch('open-modal', 'microsoft365-mail-account-form');
     }
@@ -86,6 +88,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->mark_as_read = $account->mark_as_read;
         $this->include_read_messages = $account->include_read_messages;
         $this->delete_after_processing = $account->delete_after_processing;
+        $this->delete_old_messages = $account->delete_old_messages;
         $this->is_active = $account->is_active;
         $this->domain_ids = $account->domains()->pluck('domains.id')->all();
         $this->dispatch('open-modal', 'microsoft365-mail-account-form');
@@ -121,6 +124,7 @@ new #[Layout('layouts.app')] class extends Component
             'mark_as_read' => 'boolean',
             'include_read_messages' => 'boolean',
             'delete_after_processing' => 'boolean',
+            'delete_old_messages' => 'boolean',
             'is_active' => 'boolean',
             'domain_ids' => 'array',
             'domain_ids.*' => [
@@ -221,6 +225,7 @@ new #[Layout('layouts.app')] class extends Component
 
         return [
             'accounts' => Microsoft365MailAccount::visibleTo($user)->withCount('domains')->orderBy('label')->paginate(15),
+            'retentionDays' => config('dmarc.retention_days'),
             'domains' => Domain::visibleTo($user)->orderBy('fqdn')->get(),
             'sharedAppConfigured' => Microsoft365App::isConfigured(),
             'connectedTenants' => Microsoft365MailAccount::visibleTo($user)->whereNull('client_id')->distinct()->orderBy('tenant_id')->pluck('tenant_id'),
@@ -377,6 +382,20 @@ new #[Layout('layouts.app')] class extends Component
                 <div class="flex items-center">
                     <input wire:model="delete_after_processing" id="delete_after_processing" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
                     <label for="delete_after_processing" class="ml-2 text-sm text-gray-700 dark:text-gray-300">{{ __('Delete after processing') }}</label>
+                </div>
+
+                <div class="sm:col-span-2">
+                    <div class="flex items-center">
+                        <input wire:model="delete_old_messages" id="delete_old_messages" type="checkbox" @disabled($retentionDays === null) class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                        <label for="delete_old_messages" class="ml-2 text-sm text-gray-700 dark:text-gray-300">{{ __('Delete messages older than the retention period') }}</label>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                        @if ($retentionDays === null)
+                            {{ __('Unavailable: no data retention period is configured (DATA_RETENTION_DAYS).') }}
+                        @else
+                            {{ __('The daily cleanup deletes messages older than :days days from the inbox, processed and failed folders (they go to Deleted Items).', ['days' => $retentionDays]) }}
+                        @endif
+                    </p>
                 </div>
 
                 <div class="flex items-center">

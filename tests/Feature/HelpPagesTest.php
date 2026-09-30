@@ -46,4 +46,20 @@ class HelpPagesTest extends TestCase
             ->assertSee('DKIM selectors, and the', false)
             ->assertSee('#dkim-selectors', false);
     }
+
+    public function test_the_help_covers_the_overview_attention_flags_and_two_factor_sign_in(): void
+    {
+        $user = User::factory()->create(['role' => 'viewer']);
+
+        $this->actingAs($user);
+
+        $this->get('help')
+            ->assertSee('#overview', false)
+            ->assertSee('#needs-attention', false)
+            ->assertSee('#moving-to-enforcement', false);
+
+        $this->get('help/dashboard')->assertSee('id="overview"', false);
+        $this->get('help/organisations-and-domains')->assertSee('id="needs-attention"', false)->assertSee('Report authorisation missing');
+        $this->get('help/users-and-roles')->assertSee('Two-factor authentication can also be turned on');
+    }
 }

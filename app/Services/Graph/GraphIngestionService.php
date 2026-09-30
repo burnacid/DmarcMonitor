@@ -6,6 +6,7 @@ use App\Models\Microsoft365MailAccount;
 use App\Services\Dmarc\AggregateReportParser;
 use App\Services\Dmarc\ForensicReportParser;
 use App\Support\DmarcAttachmentSniffer;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -32,6 +33,12 @@ class GraphIngestionService
      * budget.
      */
     private const int MAX_BATCHES_PER_RUN = 100;
+
+    /**
+     * How many message ids to list per Graph round-trip when pruning old
+     * messages — only ids are selected, so this can be larger than CHUNK_SIZE.
+     */
+    private const int PRUNE_CHUNK_SIZE = 100;
 
     /**
      * @var array<string, ?string>
@@ -123,6 +130,74 @@ class GraphIngestionService
         }
 
         return $stats;
+    }
+
+    /**
+     * Delete messages received before the cutoff from the account's inbox,
+     * processed and failed folders. Like "delete after processing", this goes
+     * through Graph's DELETE, so Exchange moves them to Deleted Items. Folders
+     * that don't exist are skipped. Returns how many messages were deleted.
+     */
+    public function pruneMessagesOlderThan(Microsoft365MailAccount $account, CarbonInterface $cutoff): int
+    {
+        $token = $this->tokenService->getAccessTokenFor($account);
+        $mailbox = rawurlencode($account->mailbox);
+        $deleted = 0;
+
+        $folderNames = array_values(array_unique(array_filter([
+            $account->folder_inbox,
+            $account->folder_processed,
+            $account->folder_failed,
+        ])));
+
+        foreach ($folderNames as $folderName) {
+            $folderId = $this->resolveFolderId($mailbox, $token, $folderName);
+
+            if ($folderId === null) {
+                continue;
+            }
+
+            $url = 'https://graph.microsoft.com/v1.0/users/'.$mailbox."/mailFolders/{$folderId}/messages?".http_build_query([
+                '$top' => self::PRUNE_CHUNK_SIZE,
+                '$select' => 'id',
+                '$filter' => 'receivedDateTime lt '.$cutoff->copy()->utc()->format('Y-m-d\TH:i:s\Z'),
+            ]);
+
+            // The first page is requested again after every batch rather than
+            // following @odata.nextLink: deleted messages drop out of the
+            // results, so a skip-based next page would jump past survivors.
+            for ($batch = 0; $batch < self::MAX_BATCHES_PER_RUN; $batch++) {
+                $response = Http::withToken($token)->get($url);
+
+                if ($response->failed()) {
+                    throw new RuntimeException($response->json('error.message') ?? $response->body());
+                }
+
+                $messageIds = array_column($response->json('value') ?? [], 'id');
+
+                if (empty($messageIds)) {
+                    break;
+                }
+
+                $deletedInBatch = 0;
+
+                foreach ($messageIds as $messageId) {
+                    if (Http::withToken($token)->delete("https://graph.microsoft.com/v1.0/users/{$mailbox}/messages/{$messageId}")->successful()) {
+                        $deletedInBatch++;
+                    }
+                }
+
+                $deleted += $deletedInBatch;
+
+                if ($deletedInBatch === 0) {
+                    // Nothing on this page could be deleted, so requesting it
+                    // again would just return the same messages.
+                    break;
+                }
+            }
+        }
+
+        return $deleted;
     }
 
     /**

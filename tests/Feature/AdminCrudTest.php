@@ -177,6 +177,7 @@ class AdminCrudTest extends TestCase
             ->set('username', 'reports@example.com')
             ->set('password', 'secret')
             ->set('include_read_messages', true)
+            ->set('delete_old_messages', true)
             ->set('domain_ids', [$domain->id])
             ->call('save');
 
@@ -184,6 +185,7 @@ class AdminCrudTest extends TestCase
             'label' => 'Main mailbox',
             'host' => 'imap.example.com',
             'include_read_messages' => true,
+            'delete_old_messages' => true,
         ]);
 
         $account = ImapAccount::firstWhere('label', 'Main mailbox');

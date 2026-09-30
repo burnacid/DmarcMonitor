@@ -2,6 +2,13 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
+## [1.2.2]
+
+### Added
+
+- **Delete old mailbox messages**: IMAP accounts and Microsoft 365 mailboxes have a new option, "Delete messages older than the retention period". When it's on, the daily cleanup deletes messages older than `DATA_RETENTION_DAYS` from the account's Inbox, Processed and Failed folders. Microsoft 365 moves them to Deleted Items. The option is off by default and can't be turned on when no retention period is set. If one mailbox fails (for example with wrong credentials), the others are still cleaned up.
+- Help now covers the Overview page, the "Needs attention" flags, bulk add, search and the trash on the Domains page, organisation PDF reports and two-factor authentication. Users & Roles lists the pages each role can open.
+
 ## [1.2.1]
 
 ### Added

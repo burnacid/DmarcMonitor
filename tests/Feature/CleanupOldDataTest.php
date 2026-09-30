@@ -8,7 +8,14 @@ use App\Models\AlertEvent;
 use App\Models\AlertRule;
 use App\Models\AuditLog;
 use App\Models\Domain;
+use App\Models\ImapAccount;
+use App\Models\Microsoft365MailAccount;
+use App\Services\Graph\GraphIngestionService;
+use App\Services\Imap\ImapIngestionService;
+use Carbon\CarbonInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Mockery\MockInterface;
+use RuntimeException;
 use Tests\TestCase;
 
 class CleanupOldDataTest extends TestCase
@@ -155,5 +162,54 @@ class CleanupOldDataTest extends TestCase
 
         $this->assertDatabaseMissing('audit_logs', ['id' => $old->id]);
         $this->assertDatabaseHas('audit_logs', ['id' => $recent->id]);
+    }
+
+    public function test_deletes_old_mailbox_messages_only_for_active_accounts_that_opted_in(): void
+    {
+        config(['dmarc.retention_days' => 400]);
+
+        $imapOptedIn = ImapAccount::factory()->create(['delete_old_messages' => true]);
+        ImapAccount::factory()->create(['delete_old_messages' => false]);
+        ImapAccount::factory()->create(['delete_old_messages' => true, 'is_active' => false]);
+        $microsoft365OptedIn = Microsoft365MailAccount::factory()->create(['delete_old_messages' => true]);
+        Microsoft365MailAccount::factory()->create(['delete_old_messages' => false]);
+
+        $this->mock(ImapIngestionService::class, fn (MockInterface $mock) => $mock
+            ->shouldReceive('pruneMessagesOlderThan')
+            ->once()
+            ->withArgs(fn (ImapAccount $account, CarbonInterface $cutoff) => $account->is($imapOptedIn) && $cutoff->isSameDay(now()->subDays(400)))
+            ->andReturn(2));
+
+        $this->mock(GraphIngestionService::class, fn (MockInterface $mock) => $mock
+            ->shouldReceive('pruneMessagesOlderThan')
+            ->once()
+            ->withArgs(fn (Microsoft365MailAccount $account, CarbonInterface $cutoff) => $account->is($microsoft365OptedIn) && $cutoff->isSameDay(now()->subDays(400)))
+            ->andReturn(3));
+
+        $this->artisan('dmarc:cleanup')
+            ->expectsOutputToContain('Deleted 5 mailbox message(s) older than 400 days.')
+            ->assertSuccessful();
+    }
+
+    public function test_a_failing_mailbox_does_not_stop_the_others_from_being_cleaned_up(): void
+    {
+        config(['dmarc.retention_days' => 400]);
+
+        ImapAccount::factory()->create(['delete_old_messages' => true, 'label' => 'Broken mailbox']);
+        Microsoft365MailAccount::factory()->create(['delete_old_messages' => true]);
+
+        $this->mock(ImapIngestionService::class, fn (MockInterface $mock) => $mock
+            ->shouldReceive('pruneMessagesOlderThan')
+            ->andThrow(new RuntimeException('Authentication failed')));
+
+        $this->mock(GraphIngestionService::class, fn (MockInterface $mock) => $mock
+            ->shouldReceive('pruneMessagesOlderThan')
+            ->once()
+            ->andReturn(3));
+
+        $this->artisan('dmarc:cleanup')
+            ->expectsOutputToContain('Deleting old messages failed for IMAP account [Broken mailbox]: Authentication failed')
+            ->expectsOutputToContain('Deleted 3 mailbox message(s) older than 400 days.')
+            ->assertSuccessful();
     }
 }

@@ -38,6 +38,7 @@ new #[Layout('layouts.app')] class extends Component
                     <li>{{ __('Mark as read — whether processed messages are flagged as read in the mailbox.') }}</li>
                     <li>{{ __('Include read messages — whether to also process messages that were already marked read before this app saw them (useful for a first import).') }}</li>
                     <li>{{ __('Delete after processing — removes the message from the mailbox entirely instead of moving it to Processed/Failed.') }}</li>
+                    <li>{{ __('Delete messages older than the retention period — the daily cleanup deletes messages older than the data retention period (DATA_RETENTION_DAYS) from the Inbox, Processed and Failed folders. Microsoft 365 moves them to Deleted Items.') }}</li>
                     <li>{{ __('Active — inactive accounts are skipped by the polling job.') }}</li>
                 </ul>
                 <p>

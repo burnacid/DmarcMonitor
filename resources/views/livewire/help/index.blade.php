@@ -16,13 +16,19 @@ new #[Layout('layouts.app')] class extends Component
                     'topic' => __('Organisations & Domains'),
                     'heading' => __('Organisations'),
                     'url' => route('help.organisations-and-domains').'#organisations',
-                    'excerpt' => __('A grouping of domains — typically a client or business unit — used to keep reporting, users and settings separated.'),
+                    'excerpt' => __('A grouping of domains — typically a client or business unit — used to keep reporting, users and settings separated. Includes the per-organisation PDF report.'),
                 ],
                 [
                     'topic' => __('Organisations & Domains'),
                     'heading' => __('Domains'),
                     'url' => route('help.organisations-and-domains').'#domains',
-                    'excerpt' => __('What this app actually monitors: FQDN, organisation, active flag, notes, the Recheck button, and expanding a row for raw DNS records.'),
+                    'excerpt' => __('What this app actually monitors: FQDN, organisation, active flag, notes, the Recheck button, bulk add, search and filters, and the trash.'),
+                ],
+                [
+                    'topic' => __('Organisations & Domains'),
+                    'heading' => __('Needs attention'),
+                    'url' => route('help.organisations-and-domains').'#needs-attention',
+                    'excerpt' => __('The flags shown under a domain: no recent reports, missing records, low pass rate, open alerts, reports sent elsewhere, report authorisation missing.'),
                 ],
                 [
                     'topic' => __('DMARC, SPF & DKIM'),
@@ -43,6 +49,12 @@ new #[Layout('layouts.app')] class extends Component
                     'excerpt' => __('Selectors seen in reports, what "Configured" means, and why unfamiliar selectors with only failures usually mean spoofed mail.'),
                 ],
                 [
+                    'topic' => __('DMARC, SPF & DKIM'),
+                    'heading' => __('Moving to enforcement'),
+                    'url' => route('help.dns-authentication').'#moving-to-enforcement',
+                    'excerpt' => __('Stepping from p=none to reject, the readiness checklist, the DMARC record generator and report authorisation records.'),
+                ],
+                [
                     'topic' => __('Mail Ingestion'),
                     'heading' => __('How reports get in'),
                     'url' => route('help.mail-ingestion').'#how-reports-get-in',
@@ -52,7 +64,7 @@ new #[Layout('layouts.app')] class extends Component
                     'topic' => __('Mail Ingestion'),
                     'heading' => __('Common settings'),
                     'url' => route('help.mail-ingestion').'#common-settings',
-                    'excerpt' => __('Inbox/Processed/Failed folders, mark as read, include read messages, delete after processing, last polled, last error.'),
+                    'excerpt' => __('Inbox/Processed/Failed folders, mark as read, include read messages, delete after processing, deleting old messages, last polled, last error.'),
                 ],
                 [
                     'topic' => __('Mail Ingestion'),
@@ -103,6 +115,12 @@ new #[Layout('layouts.app')] class extends Component
                     'excerpt' => __('Pass/fail volume, trend chart, and sending-source breakdown, filterable by organisation and domain.'),
                 ],
                 [
+                    'topic' => __('Dashboard'),
+                    'heading' => __('Overview'),
+                    'url' => route('help.dashboard').'#overview',
+                    'excerpt' => __('One row per organisation with volume, pass rate, policies, domains needing attention and open alerts.'),
+                ],
+                [
                     'topic' => __('Users & Roles'),
                     'heading' => __('Roles'),
                     'url' => route('help.users-and-roles').'#roles',
@@ -110,9 +128,9 @@ new #[Layout('layouts.app')] class extends Component
                 ],
                 [
                     'topic' => __('Users & Roles'),
-                    'heading' => __('Profile & passkeys'),
+                    'heading' => __('Profile, passkeys & two-factor'),
                     'url' => route('help.users-and-roles').'#profile-passkeys',
-                    'excerpt' => __('Managing your own name, email, password, and passwordless sign-in.'),
+                    'excerpt' => __('Managing your own name, email, password, passwordless sign-in and two-factor authentication.'),
                 ],
             ],
         ];
