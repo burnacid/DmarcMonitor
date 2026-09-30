@@ -27,6 +27,19 @@ new #[Layout('layouts.app')] class extends Component
                 <p>
                     {{ __('The trend chart tracks pass/fail volume over time so a sudden change (a new sending source going unauthenticated, or an authentication regression) stands out. The sending-sources breakdown lists the source IPs/organisations behind the volume, enriched with country and ASN/organisation info where available.') }}
                 </p>
+                <p>
+                    {{ __('The filters (organisation, domain and period) are kept in the address bar, so a filtered dashboard can be bookmarked or shared.') }}
+                </p>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-4 text-sm text-gray-600 dark:text-gray-300">
+                <h3 id="overview" class="text-base font-medium text-gray-900 dark:text-gray-100">{{ __('Overview') }}</h3>
+                <p>
+                    {{ __('The Overview page shows one row per organisation: its domains, message volume, DMARC pass rate, the mix of published policies, how many domains need attention, when the last report arrived and open alerts. Organisations with problems are listed first.') }}
+                </p>
+                <p>
+                    {{ __('Filter by name, period (7, 30 or 90 days) or "Only needing attention", and expand an organisation to see its domains with their flags (see Needs attention on the Organisations & Domains page). "Open dashboard" opens the Dashboard already filtered to that organisation.') }}
+                </p>
             </div>
 
             <x-help.topic-nav current="dashboard" />
