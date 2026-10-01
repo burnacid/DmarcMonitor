@@ -68,17 +68,41 @@ class Domain extends Model
 
     /**
      * Whether the DMARC record sends aggregate reports to this tool's
-     * mailbox; null when that address isn't configured.
+     * mailbox or one of its active ingestion mailboxes; null when the
+     * report address isn't configured.
      */
     public function reportsToThisTool(): ?bool
     {
-        $ruaAddress = config('dmarc.rua_address');
+        $ruaAddress = strtolower(trim((string) config('dmarc.rua_address')));
 
-        if (! $ruaAddress) {
+        if ($ruaAddress === '') {
             return null;
         }
 
-        return in_array(strtolower($ruaAddress), DmarcRecord::addresses($this->dmarcTags()['rua'] ?? null), true);
+        $recordAddresses = DmarcRecord::addresses($this->dmarcTags()['rua'] ?? null);
+
+        if (in_array($ruaAddress, $recordAddresses, true)) {
+            return true;
+        }
+
+        return array_intersect($recordAddresses, self::ingestionAddresses()) !== [];
+    }
+
+    /**
+     * Lowercased addresses of the active mailboxes reports are ingested from,
+     * memoised for the request so domain lists query them only once.
+     *
+     * @return list<string>
+     */
+    public static function ingestionAddresses(): array
+    {
+        return once(fn () => ImapAccount::query()->where('is_active', true)->pluck('username')
+            ->merge(Microsoft365MailAccount::query()->where('is_active', true)->pluck('mailbox'))
+            ->map(fn (?string $address) => strtolower(trim((string) $address)))
+            ->filter(fn (string $address) => str_contains($address, '@'))
+            ->unique()
+            ->values()
+            ->all());
     }
 
     /**

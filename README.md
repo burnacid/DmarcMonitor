@@ -158,7 +158,7 @@ There is no `.env` file in the image: every setting is a container environment v
 | Variable | Default | Description |
 | --- | --- | --- |
 | `DATA_RETENTION_DAYS` | `400` | Days of report data, resolved alert events, trashed domains and audit logs to keep. Mailboxes with "Delete messages older than the retention period" turned on are also cleaned up. |
-| `DMARC_RUA_ADDRESS` | unset | The report mailbox clients publish in their DMARC `rua` tag. Pre-filled by the DMARC record generator; domains whose record doesn't include it are flagged "Reports sent elsewhere". |
+| `DMARC_RUA_ADDRESS` | unset | The report mailbox clients publish in their DMARC `rua` tag. Pre-filled by the DMARC record generator; domains whose record includes neither it nor the address of an active ingestion mailbox are flagged "Reports sent elsewhere". |
 | `DMARC_EML_IMPORT_PATH` | `/app/storage/app/dmarc-eml` | Base folder of the local `.eml`/`.msg` import: files are read from `inbox/` and moved to `processed/` or `failed/` inside it. |
 | `MAXMIND_LICENSE_KEY` | unset | MaxMind licence key; enables the weekly GeoLite2 download. Without it reverse DNS still works. |
 | `MAXMIND_ASN_DB_PATH` | `/app/storage/app/geoip/GeoLite2-ASN.mmdb` | Path of the GeoLite2 ASN database. |

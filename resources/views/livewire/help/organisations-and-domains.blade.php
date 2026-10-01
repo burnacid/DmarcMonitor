@@ -60,7 +60,7 @@ new #[Layout('layouts.app')] class extends Component
                     <li>{{ __('DMARC missing, SPF missing, DKIM missing — the record was not found at the last DNS check.') }}</li>
                     <li>{{ __('Low pass rate — the DMARC pass rate is below :pct% (only with at least :messages messages in the period).', ['pct' => \App\Services\Analytics\DomainHealthService::PASS_GOOD, 'messages' => \App\Services\Analytics\DomainHealthService::MIN_VOLUME_FOR_PASS_RATE]) }}</li>
                     <li>{{ __('Open alerts — the domain has alert events that are not resolved yet.') }}</li>
-                    <li>{{ __('Reports sent elsewhere — the domain\'s DMARC record does not send aggregate reports to this app\'s address (DMARC_RUA_ADDRESS).') }}</li>
+                    <li>{{ __('Reports sent elsewhere — the domain\'s DMARC record does not send aggregate reports to this app\'s address (DMARC_RUA_ADDRESS) or to any active ingestion mailbox.') }}</li>
                     <li>{{ __('Report authorisation missing — reports go to an address on another domain that has not published the authorisation record (see Moving to enforcement on the DMARC, SPF & DKIM page).') }}</li>
                 </ul>
             </div>
