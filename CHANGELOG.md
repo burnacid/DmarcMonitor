@@ -2,6 +2,12 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
+## [Unreleased]
+
+### Fixed
+
+- A domain is no longer flagged "Reports sent elsewhere" when its DMARC record sends reports to one of this app's active ingestion mailboxes (an IMAP account or a Microsoft 365 mailbox). Before, only `DMARC_RUA_ADDRESS` counted. The flag still needs `DMARC_RUA_ADDRESS` to be set.
+
 ## [1.2.2]
 
 ### Added
