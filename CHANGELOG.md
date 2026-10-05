@@ -4,6 +4,10 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 
 ## [Unreleased]
 
+### Added
+
+- **Export DMARC records not reporting here**: the export menu on the Domains page can also download the DMARC record to publish for every active domain whose reports don't reach this app yet (no DMARC record, or a `rua` tag without `DMARC_RUA_ADDRESS` or an active ingestion mailbox), as a BIND zone file or a CSV. Each record keeps the current tags and adds `DMARC_RUA_ADDRESS`; a domain without a record gets `p=none`. Needs `DMARC_RUA_ADDRESS` to be set.
+
 ### Fixed
 
 - A domain is no longer flagged "Reports sent elsewhere" when its DMARC record sends reports to one of this app's active ingestion mailboxes (an IMAP account or a Microsoft 365 mailbox). Before, only `DMARC_RUA_ADDRESS` counted. The flag still needs `DMARC_RUA_ADDRESS` to be set.

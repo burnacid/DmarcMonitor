@@ -89,6 +89,33 @@ class Domain extends Model
     }
 
     /**
+     * The DMARC record to publish so aggregate reports reach this app: the
+     * current record (or p=none without one) with DMARC_RUA_ADDRESS added
+     * to its rua tag; null when that address isn't configured.
+     */
+    public function recommendedDmarcRecord(): ?string
+    {
+        $ruaAddress = strtolower(trim((string) config('dmarc.rua_address')));
+
+        if ($ruaAddress === '') {
+            return null;
+        }
+
+        $tags = $this->dmarcTags();
+        $addresses = DmarcRecord::addresses($tags['rua'] ?? null);
+
+        if (! in_array($ruaAddress, $addresses, true)) {
+            $addresses[] = $ruaAddress;
+        }
+
+        return DmarcRecord::build([
+            ...$tags,
+            'p' => $this->dmarcPolicy() ?? 'none',
+            'rua' => DmarcRecord::uriList($addresses),
+        ]);
+    }
+
+    /**
      * Lowercased addresses of the active mailboxes reports are ingested from,
      * memoised for the request so domain lists query them only once.
      *

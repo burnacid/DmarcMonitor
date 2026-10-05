@@ -534,17 +534,20 @@ new #[Layout('layouts.app')] class extends Component
                     @endif
                     <x-dropdown align="right" width="w-72">
                         <x-slot name="trigger">
-                            <button type="button" title="{{ __('Export missing report records') }}" class="inline-flex items-center justify-center h-9 w-9 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                            <button type="button" title="{{ __('Export missing DNS records') }}" class="inline-flex items-center justify-center h-9 w-9 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5" aria-hidden="true">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
                                 </svg>
-                                <span class="sr-only">{{ __('Export missing report records') }}</span>
+                                <span class="sr-only">{{ __('Export missing DNS records') }}</span>
                             </button>
                         </x-slot>
                         <x-slot name="content">
                             <div class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">{{ __('Missing report authorisation records') }}</div>
                             <x-dropdown-link href="{{ route('admin.domains.report-authorizations') }}">{{ __('Zone file (.txt)') }}</x-dropdown-link>
                             <x-dropdown-link href="{{ route('admin.domains.report-authorizations', ['format' => 'csv']) }}">{{ __('CSV') }}</x-dropdown-link>
+                            <div class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-600">{{ __('DMARC records not reporting here') }}</div>
+                            <x-dropdown-link href="{{ route('admin.domains.dmarc-records') }}">{{ __('Zone file (.txt)') }}</x-dropdown-link>
+                            <x-dropdown-link href="{{ route('admin.domains.dmarc-records', ['format' => 'csv']) }}">{{ __('CSV') }}</x-dropdown-link>
                         </x-slot>
                     </x-dropdown>
                     <x-secondary-button wire:click="openBulk">{{ __('Bulk add') }}</x-secondary-button>

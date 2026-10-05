@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\DashboardSourcesExportController;
+use App\Http\Controllers\DmarcRecordExportController;
 use App\Http\Controllers\ForensicReportDownloadController;
 use App\Http\Controllers\Microsoft365ConnectController;
 use App\Http\Controllers\OrganisationReportPdfController;
@@ -43,6 +44,7 @@ Route::middleware(['auth', 'verified', 'role:admin,editor'])->prefix('admin')->n
     Volt::route('organisations', 'admin.organisations')->name('organisations');
     Volt::route('domains', 'admin.domains')->name('domains');
     Route::get('domains/report-authorizations', ReportAuthorizationExportController::class)->name('domains.report-authorizations');
+    Route::get('domains/dmarc-records', DmarcRecordExportController::class)->name('domains.dmarc-records');
     Volt::route('geoip', 'admin.geoip')->name('geoip');
     Volt::route('alert-rules', 'admin.alert-rules')->name('alert-rules');
     Volt::route('alert-events', 'admin.alert-events')->name('alert-events');
