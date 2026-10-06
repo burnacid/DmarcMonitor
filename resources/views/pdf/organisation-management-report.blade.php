@@ -7,13 +7,17 @@
         @page { margin: 0; }
         body { margin: 0; font-family: Helvetica, Arial, sans-serif; font-size: 10.5px; color: #111827; line-height: 1.45; }
         .page { padding: 0 44px 60px; }
-        .accent-bar { height: 6px; background: #4f46e5; }
+        .accent-bar { height: 6px; background: {{ $branding['accent'] }}; }
         .glyph { font-family: 'DejaVu Sans', sans-serif; }
         .muted { color: #6b7280; }
 
-        .eyebrow { margin-top: 34px; font-size: 8.5px; letter-spacing: 1.6px; text-transform: uppercase; color: #4f46e5; font-weight: bold; }
+        .eyebrow { margin-top: 34px; font-size: 8.5px; letter-spacing: 1.6px; text-transform: uppercase; color: {{ $branding['accent'] }}; font-weight: bold; }
         h1 { font-size: 26px; font-weight: bold; margin: 4px 0 2px; letter-spacing: -0.3px; }
         .meta { font-size: 10px; color: #6b7280; }
+        .masthead { width: 100%; border-collapse: collapse; }
+        .masthead td { vertical-align: bottom; padding: 0; }
+        .masthead .logo { text-align: right; }
+        .masthead .logo img { max-height: 44px; max-width: 180px; }
 
         .verdict { margin-top: 26px; width: 100%; border-collapse: collapse; }
         .verdict td { padding: 14px 18px; vertical-align: middle; }
@@ -63,7 +67,7 @@
         .actions { width: 100%; border-collapse: collapse; }
         .actions td { padding: 5px 0; vertical-align: top; }
         .action-num { width: 26px; }
-        .action-num span { display: inline-block; width: 16px; height: 16px; line-height: 16px; border-radius: 8px; background: #eef2ff; color: #4338ca; font-size: 8.5px; font-weight: bold; text-align: center; }
+        .action-num span { display: inline-block; width: 16px; height: 16px; line-height: 16px; border-radius: 8px; background: {{ $branding['accentSoft'] }}; color: {{ $branding['accentText'] }}; font-size: 8.5px; font-weight: bold; text-align: center; }
         .action-text { font-size: 11px; color: #1f2937; }
         .all-clear { font-size: 11px; color: #047857; }
 
@@ -95,11 +99,20 @@
 <div class="accent-bar"></div>
 
 <div class="page">
-    <div class="eyebrow">{{ __('Email security report') }}</div>
-    <h1>{{ $organisation->name }}</h1>
-    <div class="meta">
-        {{ $period($from, $to) }} &middot; {{ $domainCount }} {{ \Illuminate\Support\Str::plural('domain', $domainCount) }}
-    </div>
+    <table class="masthead">
+        <tr>
+            <td>
+                <div class="eyebrow">{{ __('Email security report') }}</div>
+                <h1>{{ $organisation->name }}</h1>
+                <div class="meta">
+                    {{ $period($from, $to) }} &middot; {{ $domainCount }} {{ \Illuminate\Support\Str::plural('domain', $domainCount) }}
+                </div>
+            </td>
+            @if ($branding['logo'])
+                <td class="logo"><img src="{{ $branding['logo'] }}" alt=""></td>
+            @endif
+        </tr>
+    </table>
 
     <table class="verdict verdict-{{ $verdict['status'] }}">
         <tr>

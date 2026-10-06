@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Domain;
 use App\Models\Organisation;
+use App\Models\ReportBranding;
 use App\Services\Analytics\OrganisationManagementReport;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -26,13 +27,16 @@ class OrganisationManagementReportPdfController extends Controller
         $to = $request->filled('to') ? Carbon::parse($request->string('to'))->endOfDay() : now()->endOfDay();
         $from = $request->filled('from') ? Carbon::parse($request->string('from'))->startOfDay() : $to->copy()->subDays(29)->startOfDay();
 
+        $branding = ReportBranding::forReports();
+
         $data = [
             'organisation' => $organisation,
             'from' => $from,
             'to' => $to,
             'domainCount' => Domain::where('organisation_id', $organisation->id)->count(),
             'generatedAt' => now(),
-            ...$report->build($organisation, $from, $to),
+            'branding' => $branding,
+            ...$report->build($organisation, $from, $to, $branding['accent']),
         ];
 
         $pdf = Pdf::loadView('pdf.organisation-management-report', $data)->setPaper('a4');
