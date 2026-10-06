@@ -4,6 +4,7 @@ namespace App\Services\Analytics;
 
 use App\Models\Domain;
 use App\Models\Organisation;
+use App\Models\ReportBranding;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -39,7 +40,7 @@ class OrganisationManagementReport
      *     previousTo: CarbonInterface,
      * }
      */
-    public function build(Organisation $organisation, CarbonInterface $from, CarbonInterface $to): array
+    public function build(Organisation $organisation, CarbonInterface $from, CarbonInterface $to, string $accent = ReportBranding::DEFAULT_ACCENT): array
     {
         $days = (int) Carbon::parse($from)->startOfDay()->diffInDays(Carbon::parse($to)->startOfDay(), true) + 1;
         $previousFrom = Carbon::parse($from)->subDays($days)->startOfDay();
@@ -60,7 +61,7 @@ class OrganisationManagementReport
         return [
             'verdict' => $this->verdict($current, $healthRows, $rollUp),
             'kpis' => $this->kpis($current, $previous, $currentFailures, $previousFailures, $domains),
-            'chartSvg' => $this->trendChartSvg($this->metrics->trend(null, $from, $to, $organisation->id)),
+            'chartSvg' => $this->trendChartSvg($this->metrics->trend(null, $from, $to, $organisation->id), $accent),
             'scorecard' => $this->scorecard($healthRows, $periodByDomain),
             'actions' => $actions,
             'moreActions' => $moreActions,
@@ -269,7 +270,7 @@ class OrganisationManagementReport
      *
      * @param  Collection<int, array{date: string, total: int, dmarc_pass_pct: float}>  $trend
      */
-    public function trendChartSvg(Collection $trend): string
+    public function trendChartSvg(Collection $trend, string $accent = ReportBranding::DEFAULT_ACCENT): string
     {
         if ($trend->isEmpty()) {
             return '';
@@ -310,12 +311,12 @@ class OrganisationManagementReport
         }
 
         if ($count > 1) {
-            $svg .= '<polygon points="'.$x(0).','.$baseline.' '.$points.' '.$x($count - 1).','.$baseline.'" fill="#6366f1" fill-opacity="0.08" stroke="none"/>';
-            $svg .= '<polyline points="'.$points.'" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+            $svg .= '<polygon points="'.$x(0).','.$baseline.' '.$points.' '.$x($count - 1).','.$baseline.'" fill="'.$accent.'" fill-opacity="0.08" stroke="none"/>';
+            $svg .= '<polyline points="'.$points.'" fill="none" stroke="'.$accent.'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
         }
 
         $last = $trend->last();
-        $svg .= '<circle cx="'.$x($count - 1).'" cy="'.$y((float) $last['dmarc_pass_pct']).'" r="3" fill="#4f46e5"/>';
+        $svg .= '<circle cx="'.$x($count - 1).'" cy="'.$y((float) $last['dmarc_pass_pct']).'" r="3" fill="'.$accent.'"/>';
 
         $labelCount = min(5, $count);
         $labelIndexes = $labelCount === 1 ? [0] : array_unique(array_map(fn (int $i) => (int) round($i * ($count - 1) / ($labelCount - 1)), range(0, $labelCount - 1)));

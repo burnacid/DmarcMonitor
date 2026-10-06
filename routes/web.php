@@ -61,6 +61,7 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Volt::route('microsoft365-app', 'admin.microsoft365-app')->name('microsoft365-app');
     Route::get('microsoft365/connect/{target}', [Microsoft365ConnectController::class, 'redirect'])->name('microsoft365.connect');
     Route::get('microsoft365/callback', [Microsoft365ConnectController::class, 'callback'])->name('microsoft365.callback');
+    Volt::route('report-branding', 'admin.report-branding')->name('report-branding');
     Volt::route('scheduled-tasks', 'admin.scheduled-tasks')->name('scheduled-tasks');
     Volt::route('audit-log', 'admin.audit-log')->name('audit-log');
 });

@@ -7,7 +7,7 @@
         @page { margin: 28px 32px; }
         body { font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #1f2937; }
         h1 { font-size: 18px; margin: 0 0 2px; }
-        h2 { font-size: 13px; margin: 20px 0 8px; border-bottom: 1px solid #d1d5db; padding-bottom: 4px; }
+        h2 { font-size: 13px; margin: 20px 0 8px; border-bottom: 1px solid {{ $branding['accent'] }}; padding-bottom: 4px; }
         .muted { color: #6b7280; }
         .header-meta { font-size: 10px; color: #6b7280; margin-bottom: 4px; }
 
@@ -27,6 +27,11 @@
         .pct-critical { color: #b91c1c; }
 
         .footer { margin-top: 20px; font-size: 9px; color: #9ca3af; }
+
+        .masthead { width: 100%; border-collapse: collapse; margin: 0; }
+        .masthead td { padding: 0; vertical-align: top; font-size: 11px; }
+        .masthead .logo { text-align: right; }
+        .masthead .logo img { max-height: 36px; max-width: 160px; }
     </style>
 </head>
 <body>
@@ -39,12 +44,21 @@
     };
 @endphp
 
-<h1>{{ $organisation->name }}</h1>
-<div class="header-meta">
-    DMARC Report &middot; {{ $from->toDateString() }} to {{ $to->toDateString() }}
-    &middot; {{ $domainCount }} {{ \Illuminate\Support\Str::plural('domain', $domainCount) }}
-    &middot; Generated {{ $generatedAt->format('Y-m-d H:i') }}
-</div>
+<table class="masthead">
+    <tr>
+        <td>
+            <h1>{{ $organisation->name }}</h1>
+            <div class="header-meta">
+                DMARC Report &middot; {{ $from->toDateString() }} to {{ $to->toDateString() }}
+                &middot; {{ $domainCount }} {{ \Illuminate\Support\Str::plural('domain', $domainCount) }}
+                &middot; Generated {{ $generatedAt->format('Y-m-d H:i') }}
+            </div>
+        </td>
+        @if ($branding['logo'])
+            <td class="logo"><img src="{{ $branding['logo'] }}" alt=""></td>
+        @endif
+    </tr>
+</table>
 
 <table class="tiles">
     <tr>

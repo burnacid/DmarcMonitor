@@ -94,7 +94,7 @@ new class extends Component
                 </a>
 
                 @php
-                    $settingsActive = request()->routeIs(['admin.organisations', 'admin.domains', 'admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.microsoft365-app', 'admin.geoip', 'admin.alert-rules', 'admin.users', 'admin.scheduled-tasks', 'admin.audit-log']);
+                    $settingsActive = request()->routeIs(['admin.organisations', 'admin.domains', 'admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.microsoft365-app', 'admin.geoip', 'admin.alert-rules', 'admin.users', 'admin.scheduled-tasks', 'admin.audit-log', 'admin.report-branding']);
                 @endphp
                 @if (auth()->user()->canManage() || auth()->user()->isAdmin())
                     <x-dropdown align="right" width="48">
@@ -154,6 +154,9 @@ new class extends Component
 
                                 <div class="my-1 border-t border-gray-200 dark:border-gray-600"></div>
 
+                                <x-dropdown-link :href="route('admin.report-branding')" wire:navigate>
+                                    {{ __('Report Branding') }}
+                                </x-dropdown-link>
                                 <x-dropdown-link :href="route('admin.scheduled-tasks')" wire:navigate>
                                     {{ __('Scheduled Tasks') }}
                                 </x-dropdown-link>
@@ -260,7 +263,7 @@ new class extends Component
                 {{ __('Help') }}
             </x-responsive-nav-link>
             @php
-                $settingsActive = request()->routeIs(['admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.microsoft365-app', 'admin.geoip', 'admin.alert-rules', 'admin.users']);
+                $settingsActive = request()->routeIs(['admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.microsoft365-app', 'admin.geoip', 'admin.alert-rules', 'admin.users', 'admin.report-branding']);
             @endphp
             @if (auth()->user()->canManage() || auth()->user()->isAdmin())
                 <div x-data="{ settingsOpen: {{ $settingsActive ? 'true' : 'false' }} }">
@@ -315,6 +318,9 @@ new class extends Component
 
                             <div class="my-1 border-t border-gray-200 dark:border-gray-700"></div>
 
+                            <x-responsive-nav-link :href="route('admin.report-branding')" :active="request()->routeIs('admin.report-branding')" wire:navigate class="ps-6">
+                                {{ __('Report Branding') }}
+                            </x-responsive-nav-link>
                             <x-responsive-nav-link :href="route('admin.users')" :active="request()->routeIs('admin.users')" wire:navigate class="ps-6">
                                 {{ __('Users') }}
                             </x-responsive-nav-link>

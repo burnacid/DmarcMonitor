@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Domain;
 use App\Models\Organisation;
+use App\Models\ReportBranding;
 use App\Services\Analytics\DmarcMetricsService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -39,6 +40,7 @@ class OrganisationReportPdfController extends Controller
             'failureBreakdown' => $service->failureBreakdown(null, $from, $to, $organisation->id),
             'topSources' => $service->groupedSourceBreakdown(null, $from, $to, $organisation->id)->take(15),
             'generatedAt' => now(),
+            'branding' => ReportBranding::forReports(),
         ];
 
         $pdf = Pdf::loadView('pdf.organisation-report', $data)->setPaper('a4');
