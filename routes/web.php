@@ -4,6 +4,7 @@ use App\Http\Controllers\DashboardSourcesExportController;
 use App\Http\Controllers\DmarcRecordExportController;
 use App\Http\Controllers\ForensicReportDownloadController;
 use App\Http\Controllers\Microsoft365ConnectController;
+use App\Http\Controllers\OrganisationManagementReportPdfController;
 use App\Http\Controllers\OrganisationReportPdfController;
 use App\Http\Controllers\ReportAuthorizationExportController;
 use App\Http\Controllers\ReportDownloadController;
@@ -38,6 +39,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Volt::route('forensic-reports/{forensicReport}', 'forensic-reports.show')->name('forensic-reports.show');
 
     Route::get('organisations/{organisation}/report.pdf', OrganisationReportPdfController::class)->name('organisations.report-pdf');
+    Route::get('organisations/{organisation}/management-report.pdf', OrganisationManagementReportPdfController::class)->name('organisations.management-report-pdf');
 });
 
 Route::middleware(['auth', 'verified', 'role:admin,editor'])->prefix('admin')->name('admin.')->group(function () {
