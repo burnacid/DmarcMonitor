@@ -95,10 +95,48 @@ class DomainHealthServiceTest extends TestCase
         $this->addReport($stale, 50, ingestedAt: now()->subDays(10));
         $new = $this->healthyDomain(attributes: ['created_at' => now()->subDay()]);
         $inactive = $this->healthyDomain(attributes: ['is_active' => false]);
+        $neverReported = $this->healthyDomain();
 
         $this->assertContains('no_reports', $this->health($stale)['issues']);
+        $this->assertSame([], $this->health($stale)['remarks']);
         $this->assertNotContains('no_reports', $this->health($new)['issues']);
         $this->assertSame([], $this->health($inactive)['issues']);
+        $this->assertContains('no_reports', $this->health($neverReported)['issues']);
+        $this->assertSame([], $this->health($neverReported)['remarks']);
+    }
+
+    public function test_domain_that_rarely_sends_gets_a_remark_instead_of_a_no_reports_issue(): void
+    {
+        $rarelySends = $this->healthyDomain();
+        foreach ([80, 61, 45, 33, 21] as $daysAgo) {
+            $this->addReport($rarelySends, 3, begin: now()->subDays($daysAgo), ingestedAt: now()->subDays($daysAgo - 1));
+        }
+
+        $sendsDaily = $this->healthyDomain();
+        foreach (range(40, 10) as $daysAgo) {
+            $this->addReport($sendsDaily, 3, begin: now()->subDays($daysAgo), ingestedAt: now()->subDays($daysAgo - 1));
+        }
+
+        $health = $this->health($rarelySends);
+        $this->assertNotContains('no_reports', $health['issues']);
+        $this->assertSame(['rarely_sends'], $health['remarks']);
+
+        $this->assertContains('no_reports', $this->health($sendsDaily)['issues']);
+        $this->assertSame([], $this->health($sendsDaily)['remarks']);
+    }
+
+    public function test_never_reported_domain_whose_record_reports_here_gets_a_remark_instead_of_a_no_reports_issue(): void
+    {
+        config(['dmarc.rua_address' => 'dmarc@msp.test']);
+        $reportsHere = $this->healthyDomain();
+        $reportsElsewhere = $this->healthyDomain('v=DMARC1; p=none; rua=mailto:reports@vendor.test');
+
+        $health = $this->health($reportsHere);
+        $this->assertSame([], $health['issues']);
+        $this->assertSame(['no_mail_seen'], $health['remarks']);
+
+        $this->assertContains('no_reports', $this->health($reportsElsewhere)['issues']);
+        $this->assertSame([], $this->health($reportsElsewhere)['remarks']);
     }
 
     public function test_dns_problems_low_pass_rate_open_alerts_and_foreign_rua_are_issues(): void

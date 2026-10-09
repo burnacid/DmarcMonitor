@@ -266,6 +266,9 @@ new #[Layout('layouts.app')] class extends Component
                                                                     @foreach ($row['issues'] as $issue)
                                                                         <span class="inline-flex items-center rounded-full bg-red-50 dark:bg-red-900/40 px-1.5 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-300">{{ \App\Services\Analytics\DomainHealthService::issueLabel($issue) }}</span>
                                                                     @endforeach
+                                                                    @foreach ($row['remarks'] as $remark)
+                                                                        <span title="{{ \App\Services\Analytics\DomainHealthService::remarkDescription($remark) }}" class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-300">{{ \App\Services\Analytics\DomainHealthService::remarkLabel($remark) }}</span>
+                                                                    @endforeach
                                                                 </span>
                                                             </td>
                                                         </tr>

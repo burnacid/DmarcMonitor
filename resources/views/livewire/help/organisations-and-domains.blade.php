@@ -63,6 +63,7 @@ new #[Layout('layouts.app')] class extends Component
                     <li>{{ __('Reports sent elsewhere — the domain\'s DMARC record does not send aggregate reports to this app\'s address (DMARC_RUA_ADDRESS) or to any active ingestion mailbox.') }}</li>
                     <li>{{ __('Report authorisation missing — reports go to an address on another domain that has not published the authorisation record (see Moving to enforcement on the DMARC, SPF & DKIM page).') }}</li>
                 </ul>
+                <p>{{ __('Some domains only send mail now and then. When reports arrived on fewer than :share% of the last :lookback days (with at least :history days of history), a quiet spell is shown as a grey "Rarely sends mail" remark instead of "No recent reports", and the domain does not count as needing attention. Likewise, a domain whose DMARC record sends reports here but has never received one is shown as "No mail seen".',['share' => (int) (\App\Services\Analytics\DomainHealthService::RARELY_SENDS_MAX_DAY_SHARE * 100), 'lookback' => \App\Services\Analytics\DomainHealthService::RARELY_SENDS_LOOKBACK_DAYS, 'history' => \App\Services\Analytics\DomainHealthService::RARELY_SENDS_MIN_HISTORY_DAYS]) }}</p>
             </div>
 
             <x-help.topic-nav current="organisations-and-domains" />

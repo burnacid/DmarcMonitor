@@ -31,6 +31,15 @@ class DomainHealthService
     /** Days a newly added domain gets before missing reports are flagged. */
     public const int NEW_DOMAIN_GRACE_DAYS = 3;
 
+    /** Days of report history used to judge whether a domain only sends mail now and then. */
+    public const int RARELY_SENDS_LOOKBACK_DAYS = 90;
+
+    /** Days of report history needed before a domain can count as rarely sending. */
+    public const int RARELY_SENDS_MIN_HISTORY_DAYS = 30;
+
+    /** Share of observed days with reports below which a domain counts as rarely sending. */
+    public const float RARELY_SENDS_MAX_DAY_SHARE = 0.25;
+
     /** Readiness is always judged on this many days, whatever period a page displays. */
     public const int READINESS_WINDOW_DAYS = 30;
 
@@ -43,6 +52,9 @@ class DomainHealthService
     public const float READINESS_PASS_FOR_REJECT = 99.0;
 
     public const array ISSUES = ['no_reports', 'dmarc_missing', 'spf_missing', 'dkim_missing', 'low_pass_rate', 'open_alerts', 'not_reporting_here', 'report_auth_missing'];
+
+    /** Worth knowing, but not a reason for a domain to need attention. */
+    public const array REMARKS = ['rarely_sends', 'no_mail_seen'];
 
     public function __construct(private DmarcMetricsService $metrics) {}
 
@@ -67,6 +79,24 @@ class DomainHealthService
             'not_reporting_here' => __('Reports sent elsewhere'),
             'report_auth_missing' => __('Report authorisation missing'),
             default => $issue,
+        };
+    }
+
+    public static function remarkLabel(string $remark): string
+    {
+        return match ($remark) {
+            'rarely_sends' => __('Rarely sends mail'),
+            'no_mail_seen' => __('No mail seen'),
+            default => $remark,
+        };
+    }
+
+    public static function remarkDescription(string $remark): string
+    {
+        return match ($remark) {
+            'rarely_sends' => __('No reports for over :days days, which is normal for this domain.', ['days' => self::NO_REPORTS_DAYS]),
+            'no_mail_seen' => __('The DMARC record sends reports here, but none have arrived yet. The domain most likely sends no mail.'),
+            default => '',
         };
     }
 
@@ -109,6 +139,7 @@ class DomainHealthService
             ->whereIn('domain_id', $domainIds)
             ->groupBy('domain_id')
             ->selectRaw('domain_id, MAX(created_at) as last_report_at, MIN(date_range_begin) as first_report_at')
+            ->selectRaw('COUNT(DISTINCT CASE WHEN date_range_begin >= ? THEN DATE(date_range_begin) END) as recent_report_days', [$now->copy()->subDays(self::RARELY_SENDS_LOOKBACK_DAYS - 1)->startOfDay()])
             ->get()
             ->keyBy('domain_id');
 
@@ -136,9 +167,11 @@ class DomainHealthService
                 'open_alerts' => (int) ($openAlerts[$domain->id] ?? 0),
                 'policy' => $domain->dmarcPolicy(),
                 'reports_to_us' => $domain->reportsToThisTool(),
+                'rarely_sends' => $this->rarelySends($firstReportAt, (int) ($dates?->recent_report_days ?? 0), $now),
             ];
 
             $health['issues'] = $this->issues($domain, $health, $now);
+            $health['remarks'] = $this->remarks($domain, $health, $now);
             $health['readiness'] = $this->readiness(
                 $domain,
                 $readinessSummaries->get($domain->id, ['total' => 0, 'dmarc_pass_pct' => 0.0]),
@@ -191,10 +224,7 @@ class DomainHealthService
 
         $issues = [];
 
-        $pastGracePeriod = $domain->created_at === null || $domain->created_at->lt($now->copy()->subDays(self::NEW_DOMAIN_GRACE_DAYS));
-        $staleSince = $now->copy()->subDays(self::NO_REPORTS_DAYS);
-
-        if ($pastGracePeriod && ($health['last_report_at'] === null || $health['last_report_at']->lt($staleSince))) {
+        if ($this->reportsOverdue($domain, $health, $now) && $this->quietSpellRemark($health) === null) {
             $issues[] = 'no_reports';
         }
 
@@ -227,6 +257,64 @@ class DomainHealthService
         }
 
         return $issues;
+    }
+
+    /**
+     * @param  array<string, mixed>  $health
+     * @return list<string>
+     */
+    private function remarks(Domain $domain, array $health, CarbonInterface $now): array
+    {
+        if (! $domain->is_active) {
+            return [];
+        }
+
+        $remark = $this->quietSpellRemark($health);
+
+        return $remark !== null && $this->reportsOverdue($domain, $health, $now) ? [$remark] : [];
+    }
+
+    /**
+     * Why missing reports are expected rather than a problem, if they are:
+     * the domain has historically sent only now and then, or its DMARC
+     * record points here and no report has ever arrived, so it most likely
+     * sends no mail at all.
+     *
+     * @param  array<string, mixed>  $health
+     */
+    private function quietSpellRemark(array $health): ?string
+    {
+        return match (true) {
+            $health['rarely_sends'] => 'rarely_sends',
+            $health['last_report_at'] === null && $health['reports_to_us'] === true => 'no_mail_seen',
+            default => null,
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $health
+     */
+    private function reportsOverdue(Domain $domain, array $health, CarbonInterface $now): bool
+    {
+        $pastGracePeriod = $domain->created_at === null || $domain->created_at->lt($now->copy()->subDays(self::NEW_DOMAIN_GRACE_DAYS));
+
+        return $pastGracePeriod && ($health['last_report_at'] === null || $health['last_report_at']->lt($now->copy()->subDays(self::NO_REPORTS_DAYS)));
+    }
+
+    /**
+     * Whether reports have historically arrived on only a few days, so a
+     * quiet spell is normal. Needs at least one report to judge from.
+     */
+    private function rarelySends(?CarbonInterface $firstReportAt, int $recentReportDays, CarbonInterface $now): bool
+    {
+        if ($firstReportAt === null) {
+            return false;
+        }
+
+        $observedDays = min(self::RARELY_SENDS_LOOKBACK_DAYS, (int) floor($firstReportAt->diffInDays($now, true)));
+
+        return $observedDays >= self::RARELY_SENDS_MIN_HISTORY_DAYS
+            && $recentReportDays / $observedDays < self::RARELY_SENDS_MAX_DAY_SHARE;
     }
 
     /**

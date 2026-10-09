@@ -580,10 +580,13 @@ new #[Layout('layouts.app')] class extends Component
                                         </svg>
                                         <span>{{ $domain->fqdn }}</span>
                                     </button>
-                                    @if ($domainHealth && $domainHealth['issues'] !== [])
+                                    @if ($domainHealth && ($domainHealth['issues'] !== [] || $domainHealth['remarks'] !== []))
                                         <div class="mt-1 flex flex-wrap gap-1 md:pl-6 max-md:justify-end">
                                             @foreach ($domainHealth['issues'] as $issue)
                                                 <span class="inline-flex items-center rounded-full bg-red-50 dark:bg-red-900/40 px-1.5 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-300">{{ \App\Services\Analytics\DomainHealthService::issueLabel($issue) }}</span>
+                                            @endforeach
+                                            @foreach ($domainHealth['remarks'] as $remark)
+                                                <span title="{{ \App\Services\Analytics\DomainHealthService::remarkDescription($remark) }}" class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-300">{{ \App\Services\Analytics\DomainHealthService::remarkLabel($remark) }}</span>
                                             @endforeach
                                         </div>
                                     @endif
