@@ -296,7 +296,7 @@ class DomainHealthService
             $issues[] = 'not_reporting_here';
         }
 
-        if (collect($domain->missingReportAuthorizations())->contains('in_record', true)) {
+        if ($domain->missingIngestionReportAuthorizations() !== []) {
             $issues[] = 'report_auth_missing';
         }
 

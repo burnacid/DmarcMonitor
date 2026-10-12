@@ -195,7 +195,7 @@ new #[Layout('layouts.app')] class extends Component
                     @endforeach
                 </select>
 
-                <select wire:model.live="domainId" class="border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
+                <select wire:model.live="domainId" wire:key="domain-filter-{{ $organisationId ?? 'all' }}" class="border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
                     <option value="">{{ __('All domains') }}</option>
                     @foreach ($domains as $domain)
                         <option value="{{ $domain->id }}">{{ $domain->fqdn }}</option>
