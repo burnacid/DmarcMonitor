@@ -6,7 +6,7 @@
         <meta name="robots" content="noindex, nofollow">
         <meta http-equiv="refresh" content="300">
 
-        <title>{{ __('Overview') }} · {{ config('app.name', 'DMARC Monitor') }}</title>
+        <title>{{ config('app.name', 'DMARC Monitor') }}</title>
 
         <link rel="icon" type="image/svg+xml" href="/favicon.svg">
         <link rel="icon" href="/favicon.ico" sizes="any">
@@ -36,7 +36,7 @@
                         @else
                             <x-application-logo class="h-9 w-auto fill-current text-gray-800 dark:text-gray-200" />
                         @endif
-                        <h1 class="font-semibold text-xl text-gray-800 dark:text-gray-100 leading-tight">{{ __('Overview') }}</h1>
+                        <h1 class="font-semibold text-xl text-gray-800 dark:text-gray-100 leading-tight">{{ config('app.name', 'DMARC Monitor') }}</h1>
                     </div>
 
                     <div class="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
