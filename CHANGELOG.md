@@ -2,7 +2,7 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
-## [Unreleased]
+## [1.3.0]
 
 ### Added
 
@@ -16,7 +16,8 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
   - Panels for the newest open alerts and the top failing sending sources. Use the 7, 30 or 90-day buttons to pick the period.
   - Inactive domains are left out completely.
   - Refreshes every 5 minutes, shows the report branding logo and the app name, and has its own dark mode button.
-  - Logged-in users can always open it (limited to their own organisations), for example from the new "Open wallboard" link on the Overview page. Without logging in, it opens only from IP addresses and ranges on the allowlist under Settings > Public Dashboard (admins only); with an empty list, only logged-in users can open it. Behind a reverse proxy, set `TRUSTED_PROXIES` so the visitor's real IP is checked.
+  - Switched off by default: an admin enables (or disables) it under Settings > Public Dashboard. While disabled, `/wall` returns a 404 for everyone and the "Open wallboard" link is hidden.
+  - While enabled, logged-in users can always open it (limited to their own organisations), for example from the new "Open wallboard" link on the Overview page. Without logging in, it opens only from IP addresses and ranges on the allowlist under Settings > Public Dashboard (admins only); with an empty list, only logged-in users can open it. Behind a reverse proxy, set `TRUSTED_PROXIES` so the visitor's real IP is checked.
 - **Activate or deactivate domains from the list**: click the Active/Inactive badge on the Domains page to switch a domain on or off without opening it.
 
 ### Changed

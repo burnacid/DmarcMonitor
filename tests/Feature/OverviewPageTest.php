@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Domain;
 use App\Models\Organisation;
+use App\Models\PublicDashboardSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -19,6 +20,17 @@ class OverviewPageTest extends TestCase
         $viewer = User::factory()->viewer()->create();
 
         $this->actingAs($viewer)->get('/overview')->assertOk()->assertSee('Overview');
+    }
+
+    public function test_the_wallboard_link_is_only_shown_while_the_wallboard_is_enabled(): void
+    {
+        $user = User::factory()->create();
+
+        Volt::actingAs($user)->test('overview')->assertDontSee('Open wallboard');
+
+        PublicDashboardSetting::factory()->create();
+
+        Volt::actingAs($user)->test('overview')->assertSee('Open wallboard');
     }
 
     public function test_organisations_needing_attention_are_listed_first(): void

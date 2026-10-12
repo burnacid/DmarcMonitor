@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\DashboardAllowedIp;
+use App\Models\PublicDashboardSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Volt\Volt;
@@ -17,6 +18,23 @@ class PublicDashboardAdminTest extends TestCase
         $this->actingAs(User::factory()->editor()->create())->get(route('admin.public-dashboard'))->assertForbidden();
         $this->actingAs(User::factory()->viewer()->create())->get(route('admin.public-dashboard'))->assertForbidden();
         $this->actingAs(User::factory()->create())->get(route('admin.public-dashboard'))->assertOk();
+    }
+
+    public function test_admin_can_enable_and_disable_the_dashboard(): void
+    {
+        $admin = User::factory()->create();
+
+        $this->assertFalse(PublicDashboardSetting::isEnabled());
+
+        Volt::actingAs($admin)->test('admin.public-dashboard')->call('toggleEnabled');
+
+        $this->assertTrue(PublicDashboardSetting::isEnabled());
+        $this->assertDatabaseHas('audit_logs', ['action' => 'public_dashboard.enabled', 'user_id' => $admin->id]);
+
+        Volt::actingAs($admin)->test('admin.public-dashboard')->call('toggleEnabled');
+
+        $this->assertFalse(PublicDashboardSetting::isEnabled());
+        $this->assertSame(1, PublicDashboardSetting::count());
     }
 
     public function test_admin_can_add_and_remove_addresses(): void

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\DashboardAllowedIp;
+use App\Models\PublicDashboardSetting;
 use App\Rules\IpOrCidr;
 use App\Support\AuditLogger;
 use Illuminate\Validation\Rule;
@@ -71,11 +72,23 @@ new #[Layout('layouts.app')] class extends Component
         $allowedIp->delete();
     }
 
+    public function toggleEnabled(): void
+    {
+        $setting = PublicDashboardSetting::setEnabled(! PublicDashboardSetting::isEnabled());
+
+        AuditLogger::record(
+            action: $setting->is_enabled ? 'public_dashboard.enabled' : 'public_dashboard.disabled',
+            description: ($setting->is_enabled ? 'Enabled' : 'Disabled').' the public dashboard',
+            subject: $setting,
+        );
+    }
+
     public function with(): array
     {
         $currentIp = request()->ip();
 
         return [
+            'isEnabled' => PublicDashboardSetting::isEnabled(),
             'allowedIps' => DashboardAllowedIp::orderBy('address')->get(),
             'currentIp' => $currentIp,
             'currentIpAllowed' => DashboardAllowedIp::allows($currentIp),
@@ -91,7 +104,16 @@ new #[Layout('layouts.app')] class extends Component
     <div class="py-8">
         <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8 space-y-4">
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-3 text-sm text-gray-600 dark:text-gray-300">
-                <p>{{ __('A read-only overview of all organisations, meant for wall screens. Logged-in users can always open it; without logging in it can only be opened from the IP addresses and ranges listed below.') }}</p>
+                <p>{{ __('A read-only overview of all organisations, meant for wall screens. While enabled, logged-in users can always open it; without logging in it can only be opened from the IP addresses and ranges listed below. While disabled, nobody can open it.') }}</p>
+                <p class="flex flex-wrap items-center gap-2">
+                    <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('Status') }}:</span>
+                    @if ($isEnabled)
+                        <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">{{ __('Enabled') }}</span>
+                    @else
+                        <span class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-800 dark:text-gray-200">{{ __('Disabled') }}</span>
+                    @endif
+                    <button type="button" wire:click="toggleEnabled" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ $isEnabled ? __('Disable') : __('Enable') }}</button>
+                </p>
                 <p>
                     <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('URL') }}:</span>
                     <a href="{{ route('public.overview') }}" target="_blank" rel="noopener" class="font-mono text-indigo-600 dark:text-indigo-400 hover:underline break-all">{{ route('public.overview') }}</a>

@@ -2,6 +2,7 @@
 
 use App\Models\Domain;
 use App\Models\Organisation;
+use App\Models\PublicDashboardSetting;
 use App\Services\Analytics\DomainHealthService;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
@@ -68,6 +69,7 @@ new #[Layout('layouts.app')] class extends Component
             'groups' => $groups,
             'totals' => $service->rollUp($health->values()),
             'canManage' => $user->canManage(),
+            'wallboardEnabled' => PublicDashboardSetting::isEnabled(),
         ];
     }
 }; ?>
@@ -128,7 +130,9 @@ new #[Layout('layouts.app')] class extends Component
                     {{ __('Show inactive domains') }}
                 </label>
 
-                <a href="{{ route('public.overview', ['days' => $days]) }}" target="_blank" rel="noopener" class="ml-auto pb-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Open wallboard') }}</a>
+                @if ($wallboardEnabled)
+                    <a href="{{ route('public.overview', ['days' => $days]) }}" target="_blank" rel="noopener" class="ml-auto pb-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Open wallboard') }}</a>
+                @endif
             </div>
 
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
