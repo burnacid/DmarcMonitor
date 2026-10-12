@@ -29,7 +29,9 @@ class Microsoft365TransportTest extends TestCase
 
         Http::assertSentInOrder([
             fn ($request) => str_contains($request->url(), 'login.microsoftonline.com'),
-            fn ($request) => str_ends_with($request->url(), '/messages') && str_contains($request->body(), 'Test subject'),
+            fn ($request) => str_ends_with($request->url(), '/messages')
+                && $request->header('Content-Type')[0] === 'text/plain'
+                && str_contains((string) base64_decode($request->body(), strict: true), 'Subject: Test subject'),
             fn ($request) => str_ends_with($request->url(), '/messages/draft-1/send'),
         ]);
 

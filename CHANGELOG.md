@@ -29,6 +29,7 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 
 - A domain is no longer flagged "Reports sent elsewhere" when its DMARC record sends reports to one of this app's active ingestion mailboxes (an IMAP account or a Microsoft 365 mailbox). Before, only `DMARC_RUA_ADDRESS` counted. The flag still needs `DMARC_RUA_ADDRESS` to be set.
 - On the Dashboard, the domain filter now always lists only the domains of the selected organisation.
+- Sending mail through a Microsoft 365 sending account failed with "Invalid base64 string for MIME content". This affected the test email, alert emails and the new user invitations.
 
 ## [1.2.2]
 
