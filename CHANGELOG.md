@@ -2,7 +2,7 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
-## [Unreleased]
+## [1.3.0]
 
 ### Added
 
@@ -16,12 +16,14 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
   - Panels for the newest open alerts and the top failing sending sources. Use the 7, 30 or 90-day buttons to pick the period.
   - Inactive domains are left out completely.
   - Refreshes every 5 minutes, shows the report branding logo and the app name, and has its own dark mode button.
-  - Logged-in users can always open it (limited to their own organisations), for example from the new "Open wallboard" link on the Overview page. Without logging in, it opens only from IP addresses and ranges on the allowlist under Settings > Public Dashboard (admins only); with an empty list, only logged-in users can open it. Behind a reverse proxy, set `TRUSTED_PROXIES` so the visitor's real IP is checked.
+  - Switched off by default: an admin enables (or disables) it under Settings > Public Dashboard. While disabled, `/wall` returns a 404 for everyone and the "Open wallboard" link is hidden.
+  - While enabled, logged-in users can always open it (limited to their own organisations), for example from the new "Open wallboard" link on the Overview page. Without logging in, it opens only from IP addresses and ranges on the allowlist under Settings > Public Dashboard (admins only); with an empty list, only logged-in users can open it. Behind a reverse proxy, set `TRUSTED_PROXIES` so the visitor's real IP is checked.
 - **Activate or deactivate domains from the list**: click the Active/Inactive badge on the Domains page to switch a domain on or off without opening it.
 
 ### Changed
 
 - The Overview page hides inactive domains by default; they are left out of the domain lists, tiles and organisation totals. Tick "Show inactive domains" to include them again (kept in the URL like the other filters).
+- The "New sending source" alert now fires once per source name instead of once per IP address. A source is named as on the Dashboard: the ASN organisation, else the reverse-DNS hostname, else the IP. A known service sending from a new IP no longer fires it. The alert lists the source, up to 10 of its IPs and the IP count, and waits until the IP lookup for the report has run. Alerts that already fired per IP stay as they are.
 - A domain is no longer flagged "No reports" when reports are only expected now and then. It gets a grey note instead: "Rarely sends mail" when, over the last 90 days, reports arrived on fewer than a quarter of the days (needs 30 days of history), or "No mail seen" when the DMARC record sends reports here but none have arrived yet.
 - "Report authorisation missing" is now only flagged for report addresses that reach this app: the domain of `DMARC_RUA_ADDRESS` or of an active ingestion mailbox. Missing authorisations for other report services the domain also uses no longer count as a problem, although the Domains page and the export still list them.
 
@@ -30,6 +32,7 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 - A domain is no longer flagged "Reports sent elsewhere" when its DMARC record sends reports to one of this app's active ingestion mailboxes (an IMAP account or a Microsoft 365 mailbox). Before, only `DMARC_RUA_ADDRESS` counted. The flag still needs `DMARC_RUA_ADDRESS` to be set.
 - On the Dashboard, the domain filter now always lists only the domains of the selected organisation.
 - Sending mail through a Microsoft 365 sending account failed with "Invalid base64 string for MIME content". This affected the test email, alert emails and the new user invitations.
+- Mail sent through a Microsoft 365 sending account now always comes from that account's mailbox, keeping `MAIL_FROM_NAME` as the display name. Before, it used `MAIL_FROM_ADDRESS` as the sender, which Exchange refuses ("does not have the right to send mail on behalf of the specified sending account") unless it matches the mailbox.
 
 ## [1.2.2]
 

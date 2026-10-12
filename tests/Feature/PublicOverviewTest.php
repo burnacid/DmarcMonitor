@@ -8,6 +8,7 @@ use App\Models\AlertEvent;
 use App\Models\DashboardAllowedIp;
 use App\Models\Domain;
 use App\Models\Organisation;
+use App\Models\PublicDashboardSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
@@ -17,9 +18,32 @@ class PublicOverviewTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        PublicDashboardSetting::factory()->create();
+    }
+
     private function getWall(string $ip = '203.0.113.7'): TestResponse
     {
         return $this->withServerVariables(['REMOTE_ADDR' => $ip])->get(route('public.overview'));
+    }
+
+    public function test_nobody_can_open_it_while_it_is_disabled(): void
+    {
+        PublicDashboardSetting::setEnabled(false);
+        DashboardAllowedIp::factory()->create(['address' => '203.0.113.7']);
+
+        $this->getWall()->assertNotFound();
+        $this->actingAs(User::factory()->create())->get(route('public.overview'))->assertNotFound();
+    }
+
+    public function test_it_is_disabled_until_an_admin_enables_it(): void
+    {
+        PublicDashboardSetting::query()->delete();
+
+        $this->actingAs(User::factory()->create())->get(route('public.overview'))->assertNotFound();
     }
 
     public function test_problem_domains_are_listed_and_all_good_organisations_are_collapsed(): void

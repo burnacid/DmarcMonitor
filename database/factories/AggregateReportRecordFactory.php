@@ -30,4 +30,17 @@ class AggregateReportRecordFactory extends Factory
             'envelope_to' => $this->faker->domainName(),
         ];
     }
+
+    /**
+     * A record the enrichment job has processed, optionally with the
+     * organisation and hostname it resolved to.
+     */
+    public function enriched(?string $asnOrg = null, ?string $ptrHostname = null): static
+    {
+        return $this->state(fn () => [
+            'asn_org' => $asnOrg,
+            'ptr_hostname' => $ptrHostname,
+            'enriched_at' => now(),
+        ]);
+    }
 }

@@ -25,6 +25,9 @@ new #[Layout('layouts.app')] class extends Component
                     {{ __('An Alert Rule watches one organisation (or every domain, if left unscoped) for a condition — for example, DMARC pass rate dropping below a threshold percentage over a lookback window — and fires per domain when it\'s met. Rules can notify by email and/or webhook, to the addresses/URL you configure.') }}
                 </p>
                 <p>
+                    {{ __('A "New sending source" rule fires once per source that hasn\'t sent for the domain before the lookback window, named as on the Dashboard: the network organisation (ASN), else the reverse-DNS hostname, else the bare IP. A known service sending from a new IP doesn\'t fire it. Sources are only checked once their IP lookup has run, which normally happens within minutes of a report arriving.') }}
+                </p>
+                <p>
                     {{ __('Rules are re-evaluated every 15 minutes. The lookback window counts reports by when we received them, not the period they cover — providers often send reports a day or more after the traffic they describe, so a window based on the covered period would permanently miss anything that arrives late.') }}
                 </p>
             </div>
