@@ -6,7 +6,7 @@
         <meta name="robots" content="noindex, nofollow">
         <meta http-equiv="refresh" content="300">
 
-        <title>{{ __('Overview') }} · {{ config('app.name', 'DMARC Monitor') }}</title>
+        <title>{{ config('app.name', 'DMARC Monitor') }}</title>
 
         <link rel="icon" type="image/svg+xml" href="/favicon.svg">
         <link rel="icon" href="/favicon.ico" sizes="any">
@@ -36,7 +36,7 @@
                         @else
                             <x-application-logo class="h-9 w-auto fill-current text-gray-800 dark:text-gray-200" />
                         @endif
-                        <h1 class="font-semibold text-xl text-gray-800 dark:text-gray-100 leading-tight">{{ __('Overview') }}</h1>
+                        <h1 class="font-semibold text-xl text-gray-800 dark:text-gray-100 leading-tight">{{ config('app.name', 'DMARC Monitor') }}</h1>
                     </div>
 
                     <div class="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
@@ -50,6 +50,20 @@
                             @endforeach
                         </div>
                         <span>{{ __('Updated :time', ['time' => now()->format('H:i')]) }}</span>
+                        <button
+                            type="button"
+                            id="theme-toggle"
+                            title="{{ __('Toggle dark mode') }}"
+                            aria-label="{{ __('Toggle dark mode') }}"
+                            class="p-2 rounded-md text-gray-400 dark:text-gray-300 hover:text-gray-500 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none transition ease-in-out duration-150"
+                        >
+                            <svg class="h-5 w-5 dark:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                            <svg class="h-5 w-5 hidden dark:block" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                            </svg>
+                        </button>
                     </div>
                 </div>
             </header>
@@ -177,5 +191,13 @@
                 </div>
             </main>
         </div>
+
+        <script nonce="{{ app('csp-nonce') }}">
+            document.getElementById('theme-toggle').addEventListener('click', () => {
+                const isDark = ! document.documentElement.classList.contains('dark');
+                localStorage.theme = isDark ? 'dark' : 'light';
+                document.documentElement.classList.toggle('dark', isDark);
+            });
+        </script>
     </body>
 </html>
