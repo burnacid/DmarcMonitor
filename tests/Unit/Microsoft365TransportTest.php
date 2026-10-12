@@ -75,4 +75,22 @@ class Microsoft365TransportTest extends TestCase
         $account->refresh();
         $this->assertNotNull($account->last_error);
     }
+
+    public function test_a_refused_send_reports_the_mailbox_and_the_drafts_from_address(): void
+    {
+        Microsoft365SendAccount::factory()->create(['mailbox' => 'dmarc@contoso.test']);
+
+        Http::fake([
+            'login.microsoftonline.com/*' => Http::response(['access_token' => 'test-token', 'expires_in' => 3600]),
+            'graph.microsoft.com/v1.0/users/*/messages/*/send' => Http::response(['error' => ['message' => 'Cannot submit message.']], 403),
+            'graph.microsoft.com/v1.0/users/*/messages' => Http::response(['id' => 'draft-1', 'from' => ['emailAddress' => ['address' => 'alias@contoso.test']]]),
+        ]);
+
+        $this->expectException(TransportException::class);
+        $this->expectExceptionMessage('Cannot submit message. (sending account mailbox: dmarc@contoso.test, draft From: alias@contoso.test)');
+
+        Mail::mailer('microsoft365')->raw('Test body', function ($message) {
+            $message->to('recipient@example.com')->subject('Test subject');
+        });
+    }
 }

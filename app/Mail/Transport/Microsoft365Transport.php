@@ -58,7 +58,12 @@ class Microsoft365Transport extends AbstractTransport
                 ->post("https://graph.microsoft.com/v1.0/users/{$mailbox}/messages/{$messageId}/send");
 
             if ($sendResponse->failed()) {
-                throw new TransportException('Failed to send message via Microsoft Graph: '.$this->errorMessage($sendResponse));
+                throw new TransportException(sprintf(
+                    'Failed to send message via Microsoft Graph: %s (sending account mailbox: %s, draft From: %s)',
+                    $this->errorMessage($sendResponse),
+                    $account->mailbox,
+                    $draft->json('from.emailAddress.address') ?? 'none',
+                ));
             }
 
             $account->update(['last_used_at' => now(), 'last_error' => null]);
