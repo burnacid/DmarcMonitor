@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Http;
 use Symfony\Component\Mailer\Exception\TransportException;
 use Symfony\Component\Mailer\SentMessage;
 use Symfony\Component\Mailer\Transport\AbstractTransport;
+use Symfony\Component\Mime\Address;
+use Symfony\Component\Mime\Message;
 
 class Microsoft365Transport extends AbstractTransport
 {
@@ -43,7 +45,7 @@ class Microsoft365Transport extends AbstractTransport
             $mailbox = rawurlencode($account->mailbox);
 
             $draft = Http::withToken($token)
-                ->withBody(base64_encode($message->toString()), 'text/plain')
+                ->withBody(base64_encode($this->mimeFrom($message, $account->mailbox)), 'text/plain')
                 ->post("https://graph.microsoft.com/v1.0/users/{$mailbox}/messages");
 
             if ($draft->failed()) {
@@ -65,6 +67,30 @@ class Microsoft365Transport extends AbstractTransport
 
             throw $e instanceof TransportException ? $e : new TransportException($e->getMessage(), previous: $e);
         }
+    }
+
+    /**
+     * The MIME message with its From set to the sending mailbox, keeping the
+     * display name. Exchange refuses to send as any other address (such as
+     * MAIL_FROM_ADDRESS) unless the mailbox has "Send As" rights for it.
+     */
+    private function mimeFrom(SentMessage $message, string $mailbox): string
+    {
+        $original = $message->getOriginalMessage();
+
+        if (! $original instanceof Message) {
+            return $message->toString();
+        }
+
+        $original = clone $original;
+        $headers = $original->getHeaders();
+        $name = $headers->get('From')?->getBody()[0]?->getName() ?? '';
+
+        $headers->remove('From');
+        $headers->remove('Sender');
+        $headers->addMailboxListHeader('From', [new Address($mailbox, $name)]);
+
+        return $original->toString();
     }
 
     private function errorMessage(Response $response): string

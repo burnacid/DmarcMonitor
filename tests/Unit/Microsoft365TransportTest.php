@@ -15,7 +15,8 @@ class Microsoft365TransportTest extends TestCase
 
     public function test_it_sends_the_raw_mime_message_via_graph_and_updates_the_account(): void
     {
-        $account = Microsoft365SendAccount::factory()->create();
+        $account = Microsoft365SendAccount::factory()->create(['mailbox' => 'dmarc@contoso.test']);
+        config(['mail.from' => ['address' => 'noreply@elsewhere.test', 'name' => 'DMARC Monitor']]);
 
         Http::fake([
             'login.microsoftonline.com/*' => Http::response(['access_token' => 'test-token', 'expires_in' => 3600]),
@@ -31,7 +32,9 @@ class Microsoft365TransportTest extends TestCase
             fn ($request) => str_contains($request->url(), 'login.microsoftonline.com'),
             fn ($request) => str_ends_with($request->url(), '/messages')
                 && $request->header('Content-Type')[0] === 'text/plain'
-                && str_contains((string) base64_decode($request->body(), strict: true), 'Subject: Test subject'),
+                && str_contains($mime = (string) base64_decode($request->body(), strict: true), 'Subject: Test subject')
+                && str_contains($mime, 'From: DMARC Monitor <dmarc@contoso.test>')
+                && ! str_contains($mime, 'noreply@elsewhere.test'),
             fn ($request) => str_ends_with($request->url(), '/messages/draft-1/send'),
         ]);
 
