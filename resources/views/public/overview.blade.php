@@ -22,13 +22,14 @@
     </head>
     <body class="font-sans antialiased">
         @php
-            $cell = 'px-6 py-3 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400';
-            $th = 'px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider';
+            $panel = 'bg-white dark:bg-gray-800 shadow-sm rounded-lg flex flex-col lg:min-h-0 lg:overflow-hidden';
+            $panelTitle = 'px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between text-sm font-semibold text-gray-700 dark:text-gray-200';
+            $panelFooter = 'px-4 py-2 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400';
         @endphp
 
-        <div class="min-h-screen flex flex-col bg-gray-100 dark:bg-gray-900">
-            <header class="bg-white dark:bg-gray-800 shadow">
-                <div class="max-w-[100rem] mx-auto py-4 px-4 sm:px-6 lg:px-8 flex flex-wrap items-center justify-between gap-4">
+        <div class="min-h-screen lg:h-screen flex flex-col bg-gray-100 dark:bg-gray-900 lg:overflow-hidden">
+            <header class="bg-white dark:bg-gray-800 shadow shrink-0">
+                <div class="px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-4">
                     <div class="flex items-center gap-3">
                         @if ($logo)
                             <img src="{{ $logo }}" alt="" class="h-9 w-auto">
@@ -53,111 +54,126 @@
                 </div>
             </header>
 
-            <main class="flex-1 py-6">
-                <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8 space-y-4">
-                    <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 max-sm:px-4">
-                        @foreach ([
-                            ['label' => __('Domains'), 'value' => number_format($totals['domains'])],
-                            ['label' => __('Need attention'), 'value' => number_format($totals['domains_with_issues'])],
-                            ['label' => __('DMARC pass rate (:days d)', ['days' => $days]), 'value' => $totals['dmarc_pass_pct'] !== null ? $totals['dmarc_pass_pct'].'%' : '—'],
-                            ['label' => __('Enforced (p=reject)'), 'value' => number_format($totals['policies']['reject'] ?? 0).' / '.number_format($totals['domains'])],
-                            ['label' => __('Open alerts'), 'value' => number_format($totals['open_alerts'])],
-                        ] as $tile)
-                            <div class="bg-white dark:bg-gray-800 shadow-sm rounded-lg p-4">
-                                <div class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ $tile['label'] }}</div>
-                                <div class="mt-1 text-2xl font-semibold text-gray-900 dark:text-gray-100">{{ $tile['value'] }}</div>
-                            </div>
-                        @endforeach
-                    </div>
+            <main class="flex-1 lg:min-h-0 flex flex-col gap-4 p-4 sm:px-6">
+                <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 shrink-0">
+                    @foreach ([
+                        ['label' => __('Active domains'), 'value' => number_format($totals['domains']), 'alert' => false],
+                        ['label' => __('Need attention'), 'value' => number_format($totals['domains_with_issues']), 'alert' => $totals['domains_with_issues'] > 0],
+                        ['label' => __('DMARC pass rate (:days d)', ['days' => $days]), 'value' => $totals['dmarc_pass_pct'] !== null ? $totals['dmarc_pass_pct'].'%' : '—', 'alert' => false],
+                        ['label' => __('Enforced (p=reject)'), 'value' => number_format($totals['policies']['reject'] ?? 0).' / '.number_format($totals['domains']), 'alert' => false],
+                        ['label' => __('Open alerts'), 'value' => number_format($alertCount), 'alert' => $alertCount > 0],
+                    ] as $tile)
+                        <div class="bg-white dark:bg-gray-800 shadow-sm rounded-lg p-4">
+                            <div class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ $tile['label'] }}</div>
+                            <div @class([
+                                'mt-1 text-2xl font-semibold',
+                                'text-red-600 dark:text-red-400' => $tile['alert'],
+                                'text-gray-900 dark:text-gray-100' => ! $tile['alert'],
+                            ])>{{ $tile['value'] }}</div>
+                        </div>
+                    @endforeach
+                </div>
 
-                    <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
-                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 max-md:block">
-                            <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
-                                <tr>
-                                    <th class="{{ $th }}">{{ __('Organisation / domain') }}</th>
-                                    <th class="{{ $th }}">{{ __('Messages') }}</th>
-                                    <th class="{{ $th }}">{{ __('DMARC pass') }}</th>
-                                    <th class="{{ $th }}">{{ __('Policy') }}</th>
-                                    <th class="{{ $th }}">{{ __('Last report') }}</th>
-                                    <th class="{{ $th }}">{{ __('Open alerts') }}</th>
-                                    <th class="{{ $th }}">{{ __('Issues') }}</th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:space-y-3 max-md:p-3">
-                                @forelse ($groups as $group)
-                                    @php $summary = $group['summary']; @endphp
-                                    <tr class="bg-gray-50 dark:bg-gray-900/50 max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
-                                        <td data-label="{{ __('Organisation') }}" class="{{ $cell }} font-semibold text-gray-900 dark:text-gray-100">
-                                            {{ $group['name'] }}
-                                            <span class="ml-1 text-xs font-normal text-gray-400 dark:text-gray-500">{{ trans_choice(':count domain|:count domains', $summary['domains']) }}</span>
-                                        </td>
-                                        <td data-label="{{ __('Messages') }}" class="{{ $cell }} text-gray-500 dark:text-gray-400">{{ number_format($summary['total']) }}</td>
-                                        <td data-label="{{ __('DMARC pass') }}" class="{{ $cell }}">
-                                            <x-pass-badge :status="$summary['pass_status']">
-                                                {{ $summary['dmarc_pass_pct'] !== null ? $summary['dmarc_pass_pct'].'%' : __('No data') }}
-                                            </x-pass-badge>
-                                        </td>
-                                        <td data-label="{{ __('Policy') }}" class="{{ $cell }}">
-                                            <span class="inline-flex flex-wrap gap-1 max-md:justify-end">
-                                                @foreach ($summary['policies'] as $policy => $count)
-                                                    <x-policy-badge :policy="$policy === 'missing' ? null : $policy">{{ $count }} × {{ $policy === 'missing' ? __('none published') : $policy }}</x-policy-badge>
-                                                @endforeach
-                                            </span>
-                                        </td>
-                                        <td data-label="{{ __('Last report') }}" class="{{ $cell }} text-sm text-gray-500 dark:text-gray-400">{{ $summary['last_report_at']?->diffForHumans() ?? __('Never') }}</td>
-                                        <td data-label="{{ __('Open alerts') }}" class="{{ $cell }} text-sm">
-                                            <span @class(['font-medium text-red-600 dark:text-red-400' => $summary['open_alerts'] > 0, 'text-gray-400 dark:text-gray-500' => $summary['open_alerts'] === 0])>{{ $summary['open_alerts'] }}</span>
-                                        </td>
-                                        <td data-label="{{ __('Attention') }}" class="{{ $cell }} text-sm">
-                                            @if ($summary['domains_with_issues'] > 0)
-                                                <span class="text-red-600 dark:text-red-400 font-medium">{{ trans_choice(':count domain|:count domains', $summary['domains_with_issues']) }}</span>
-                                            @elseif ($summary['domains'] > 0)
-                                                <span class="text-green-600 dark:text-green-400">{{ __('All good') }}</span>
-                                            @else
-                                                <span class="text-gray-400 dark:text-gray-500">—</span>
-                                            @endif
-                                        </td>
-                                    </tr>
-
-                                    @foreach ($group['domains'] as $row)
-                                        <tr class="text-sm max-md:block max-md:px-3 max-md:py-2">
-                                            <td class="px-6 py-2 pl-10 font-medium text-gray-900 dark:text-gray-100 max-md:block max-md:p-0">
-                                                {{ $row['domain']->fqdn }}
-                                                @unless ($row['domain']->is_active)
-                                                    <span class="ml-1 text-xs font-normal text-gray-400 dark:text-gray-500">({{ __('inactive') }})</span>
-                                                @endunless
-                                            </td>
-                                            <td class="px-6 py-2 text-gray-500 dark:text-gray-400 max-md:inline-block max-md:p-0 max-md:pr-3">{{ number_format($row['total']) }}</td>
-                                            <td class="px-6 py-2 max-md:inline-block max-md:p-0 max-md:pr-3">
-                                                <x-pass-badge :status="$row['pass_status']">
-                                                    {{ $row['total'] > 0 ? $row['dmarc_pass_pct'].'%' : __('No data') }}
-                                                </x-pass-badge>
-                                            </td>
-                                            <td class="px-6 py-2 max-md:inline-block max-md:p-0 max-md:pr-3"><x-policy-badge :policy="$row['policy']" /></td>
-                                            <td class="px-6 py-2 text-gray-500 dark:text-gray-400 max-md:inline-block max-md:p-0 max-md:pr-3">{{ $row['last_report_at']?->diffForHumans() ?? __('Never') }}</td>
-                                            <td class="px-6 py-2 max-md:hidden">
-                                                <span @class(['font-medium text-red-600 dark:text-red-400' => $row['open_alerts'] > 0, 'text-gray-400 dark:text-gray-500' => $row['open_alerts'] === 0])>{{ $row['open_alerts'] }}</span>
-                                            </td>
-                                            <td class="px-6 py-2 max-md:block max-md:p-0 max-md:pt-1">
-                                                <span class="inline-flex flex-wrap gap-1">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:flex-1 lg:min-h-0">
+                    {{-- Organisations: problem domains listed, all-good organisations collapsed --}}
+                    <section class="{{ $panel }}">
+                        <h2 class="{{ $panelTitle }}">
+                            <span>{{ __('Organisations') }}</span>
+                            <span class="text-xs font-normal text-gray-400 dark:text-gray-500">{{ trans_choice(':count needs attention|:count need attention', $problemGroups->count()) }}</span>
+                        </h2>
+                        <div class="flex-1 lg:min-h-0 lg:overflow-hidden divide-y divide-gray-100 dark:divide-gray-700">
+                            @foreach ($problemGroups as $group)
+                                <div class="px-4 py-2">
+                                    <div class="flex items-center justify-between gap-2 text-sm">
+                                        <span class="font-semibold text-gray-900 dark:text-gray-100 truncate">{{ $group['name'] }}</span>
+                                        <span class="shrink-0 text-xs text-red-600 dark:text-red-400 font-medium">{{ trans_choice(':count of :total domain|:count of :total domains', $group['problem_domains']->count(), ['total' => $group['domains']->count()]) }}</span>
+                                    </div>
+                                    <ul class="mt-1 space-y-1">
+                                        @foreach ($group['problem_domains'] as $row)
+                                            <li class="flex items-center gap-2 text-xs pl-3">
+                                                <span class="text-gray-700 dark:text-gray-300 truncate">{{ $row['domain']->fqdn }}</span>
+                                                <x-pass-badge :status="$row['pass_status']" class="shrink-0 !text-[10px] !px-1.5">{{ $row['total'] > 0 ? $row['dmarc_pass_pct'].'%' : __('No data') }}</x-pass-badge>
+                                                <span class="flex flex-wrap gap-1 ml-auto justify-end">
                                                     @foreach ($row['issues'] as $issue)
-                                                        <span class="inline-flex items-center rounded-full bg-red-50 dark:bg-red-900/40 px-1.5 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-300">{{ \App\Services\Analytics\DomainHealthService::issueLabel($issue) }}</span>
-                                                    @endforeach
-                                                    @foreach ($row['remarks'] as $remark)
-                                                        <span title="{{ \App\Services\Analytics\DomainHealthService::remarkDescription($remark) }}" class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-300">{{ \App\Services\Analytics\DomainHealthService::remarkLabel($remark) }}</span>
+                                                        <span class="inline-flex items-center rounded-full bg-red-50 dark:bg-red-900/40 px-1.5 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-300 whitespace-nowrap">{{ \App\Services\Analytics\DomainHealthService::issueLabel($issue) }}</span>
                                                     @endforeach
                                                 </span>
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                @empty
-                                    <tr>
-                                        <td colspan="7" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No organisations yet.') }}</td>
-                                    </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
-                    </div>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            @endforeach
+
+                            @if ($healthyGroups->isNotEmpty())
+                                <div class="px-4 py-3">
+                                    <div class="text-xs font-medium uppercase tracking-wider text-green-700 dark:text-green-400 mb-2">{{ __('All good') }}</div>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        @foreach ($healthyGroups as $group)
+                                            <span class="inline-flex items-center gap-1 rounded-full bg-green-50 dark:bg-green-900/30 px-2 py-0.5 text-xs text-green-800 dark:text-green-200" title="{{ trans_choice(':count domain|:count domains', $group['domains']->count()) }}">
+                                                {{ $group['name'] }}
+                                                <span class="text-green-600/70 dark:text-green-300/60">{{ $group['domains']->count() }}</span>
+                                            </span>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
+
+                            @if ($problemGroups->isEmpty() && $healthyGroups->isEmpty())
+                                <p class="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500">{{ __('No active domains yet.') }}</p>
+                            @endif
+                        </div>
+                    </section>
+
+                    {{-- Open alerts --}}
+                    <section class="{{ $panel }}">
+                        <h2 class="{{ $panelTitle }}">
+                            <span>{{ __('Open alerts') }}</span>
+                            <span @class(['text-xs font-medium', 'text-red-600 dark:text-red-400' => $alertCount > 0, 'text-gray-400 dark:text-gray-500' => $alertCount === 0])>{{ number_format($alertCount) }}</span>
+                        </h2>
+                        <ul class="flex-1 lg:min-h-0 lg:overflow-hidden divide-y divide-gray-100 dark:divide-gray-700">
+                            @forelse ($alerts as $alert)
+                                <li class="px-4 py-2 text-sm">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="font-medium text-gray-900 dark:text-gray-100 truncate">{{ $alert->domain->fqdn }}</span>
+                                        <span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">{{ $alert->fired_at->diffForHumans() }}</span>
+                                    </div>
+                                    <div class="flex items-center justify-between gap-2 text-xs">
+                                        <span class="text-red-600 dark:text-red-400 capitalize">{{ str_replace('_', ' ', $alert->alertRule->type) }}</span>
+                                        <span class="text-gray-500 dark:text-gray-400 truncate">{{ $alert->domain->organisation?->name }}</span>
+                                    </div>
+                                </li>
+                            @empty
+                                <li class="px-4 py-8 text-center text-sm text-green-600 dark:text-green-400">{{ __('No open alerts.') }}</li>
+                            @endforelse
+                        </ul>
+                        @if ($alertCount > $alerts->count())
+                            <div class="{{ $panelFooter }}">{{ __('+:count more', ['count' => $alertCount - $alerts->count()]) }}</div>
+                        @endif
+                    </section>
+
+                    {{-- Top failing sources --}}
+                    <section class="{{ $panel }}">
+                        <h2 class="{{ $panelTitle }}">
+                            <span>{{ __('Top failing sources') }}</span>
+                            <span class="text-xs font-normal text-gray-400 dark:text-gray-500">{{ __(':days days', ['days' => $days]) }}</span>
+                        </h2>
+                        <ul class="flex-1 lg:min-h-0 lg:overflow-hidden divide-y divide-gray-100 dark:divide-gray-700">
+                            @forelse ($failingSources as $source)
+                                <li class="px-4 py-2 text-sm">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="font-medium text-gray-900 dark:text-gray-100 truncate">{{ $source['label'] }}</span>
+                                        <x-pass-badge :status="\App\Services\Analytics\DomainHealthService::passStatus($source['dmarc_pass_pct'])" class="shrink-0">{{ $source['dmarc_pass_pct'] }}%</x-pass-badge>
+                                    </div>
+                                    <div class="flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                        <span class="truncate">{{ $source['domain'] }}</span>
+                                        <span class="shrink-0 tabular-nums">{{ trans_choice(':count message|:count messages', $source['total'], ['count' => number_format($source['total'])]) }}</span>
+                                    </div>
+                                </li>
+                            @empty
+                                <li class="px-4 py-8 text-center text-sm text-green-600 dark:text-green-400">{{ __('No failing sources.') }}</li>
+                            @endforelse
+                        </ul>
+                    </section>
                 </div>
             </main>
         </div>

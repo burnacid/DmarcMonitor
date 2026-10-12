@@ -94,6 +94,35 @@ class AdminCrudTest extends TestCase
         $this->assertNull(Domain::find($domain->id));
     }
 
+    public function test_domain_active_flag_can_be_toggled_from_the_list(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::factory()->create(['is_active' => true]);
+
+        Volt::actingAs($user)->test('admin.domains')->call('toggleActive', $domain->id);
+
+        $this->assertFalse($domain->fresh()->is_active);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'domain.deactivated', 'subject_id' => $domain->id]);
+
+        Volt::actingAs($user)->test('admin.domains')->call('toggleActive', $domain->id);
+
+        $this->assertTrue($domain->fresh()->is_active);
+    }
+
+    public function test_scoped_user_cannot_toggle_a_domain_outside_their_organisations(): void
+    {
+        $own = Organisation::factory()->create();
+        $user = User::factory()->editor()->create();
+        $user->organisations()->attach($own->id);
+        $domain = Domain::factory()->create(['organisation_id' => Organisation::factory()->create()->id, 'is_active' => true]);
+
+        Volt::actingAs($user)->test('admin.domains')
+            ->call('toggleActive', $domain->id)
+            ->assertNotFound();
+
+        $this->assertTrue($domain->fresh()->is_active);
+    }
+
     public function test_domains_can_be_searched_by_fqdn(): void
     {
         $user = User::factory()->create();

@@ -203,6 +203,23 @@ class DmarcMetricsService
     }
 
     /**
+     * The worst-performing sending sources from groupedSourceBreakdown(),
+     * ignoring sources with too little volume to be meaningful (a single
+     * message at 0% pass is noise, not a signal).
+     *
+     * @param  Collection<int, array<string, mixed>>  $sourceGroups
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function topFailingSources(Collection $sourceGroups, int $minVolume = 5, int $limit = 5): Collection
+    {
+        return $sourceGroups
+            ->filter(fn (array $group) => $group['total'] >= $minVolume && $group['dmarc_pass_pct'] < 100)
+            ->sortBy('dmarc_pass_pct')
+            ->take($limit)
+            ->values();
+    }
+
+    /**
      * Splits message volume by *why* DMARC does or doesn't pass — both
      * mechanisms aligned, only SPF broken, only DKIM broken, or both failed
      * (the only case that actually fails DMARC, since it's an OR of the two).

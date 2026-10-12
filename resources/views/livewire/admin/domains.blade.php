@@ -402,6 +402,21 @@ new #[Layout('layouts.app')] class extends Component
         $domain->delete();
     }
 
+    public function toggleActive(int $id): void
+    {
+        $domain = Domain::findOrFail($id);
+        abort_unless(auth()->user()->canAccessOrganisation($domain->organisation_id), 404);
+
+        $domain->update(['is_active' => ! $domain->is_active]);
+
+        AuditLogger::record(
+            action: $domain->is_active ? 'domain.activated' : 'domain.deactivated',
+            description: ($domain->is_active ? 'Activated domain ' : 'Deactivated domain ').$domain->fqdn,
+            subject: $domain,
+            organisationId: $domain->organisation_id,
+        );
+    }
+
     public function checkDns(int $id): void
     {
         $domain = Domain::findOrFail($id);
@@ -598,11 +613,16 @@ new #[Layout('layouts.app')] class extends Component
                                     @endunless
                                 </td>
                                 <td data-label="{{ __('Status') }}" class="px-6 py-4 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
-                                    @if ($domain->is_active)
-                                        <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">{{ __('Active') }}</span>
-                                    @else
-                                        <span class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">{{ __('Inactive') }}</span>
-                                    @endif
+                                    <button
+                                        type="button"
+                                        wire:click="toggleActive({{ $domain->id }})"
+                                        title="{{ $domain->is_active ? __('Click to deactivate') : __('Click to activate') }}"
+                                        @class([
+                                            'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium hover:ring-2 hover:ring-indigo-300 dark:hover:ring-indigo-600',
+                                            'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' => $domain->is_active,
+                                            'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' => ! $domain->is_active,
+                                        ])
+                                    >{{ $domain->is_active ? __('Active') : __('Inactive') }}</button>
                                 </td>
                                 <td data-label="{{ __('Policy') }}" class="px-6 py-4 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                     <span class="max-md:text-right">
