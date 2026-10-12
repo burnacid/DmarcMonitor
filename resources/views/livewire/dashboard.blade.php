@@ -165,28 +165,11 @@ new #[Layout('layouts.app')] class extends Component
             'trend' => $this->trendData(),
             'failureBreakdown' => $service->failureBreakdown($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
             'sourceGroups' => $sourceGroups->take(25),
-            'topFailingSources' => $this->topFailingSources($sourceGroups),
+            'topFailingSources' => $service->topFailingSources($sourceGroups),
             'hasAnyReports' => \App\Models\AggregateReport::visibleTo($user)->exists(),
             'windowFrom' => $from->toDateString(),
             'windowTo' => $to->toDateString(),
         ];
-    }
-
-    /**
-     * The worst-performing sending sources in the window, ignoring sources
-     * with too little volume to be meaningful (a single message at 0% pass
-     * is noise, not a signal).
-     *
-     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $sourceGroups
-     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
-     */
-    private function topFailingSources($sourceGroups, int $minVolume = 5, int $limit = 5)
-    {
-        return $sourceGroups
-            ->filter(fn ($group) => $group['total'] >= $minVolume && $group['dmarc_pass_pct'] < 100)
-            ->sortBy('dmarc_pass_pct')
-            ->take($limit)
-            ->values();
     }
 
     public function statusFor(float $pct): string

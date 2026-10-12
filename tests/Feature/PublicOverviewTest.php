@@ -2,54 +2,98 @@
 
 namespace Tests\Feature;
 
+use App\Models\AggregateReport;
+use App\Models\AggregateReportRecord;
+use App\Models\AlertEvent;
 use App\Models\DashboardAllowedIp;
 use App\Models\Domain;
 use App\Models\Organisation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 class PublicOverviewTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_guest_from_an_allowed_ip_sees_all_organisations_and_domains(): void
+    private function getWall(string $ip = '203.0.113.7'): TestResponse
+    {
+        return $this->withServerVariables(['REMOTE_ADDR' => $ip])->get(route('public.overview'));
+    }
+
+    public function test_problem_domains_are_listed_and_all_good_organisations_are_collapsed(): void
     {
         DashboardAllowedIp::factory()->create(['address' => '203.0.113.7']);
-        $organisation = Organisation::factory()->create(['name' => 'Acme']);
-        Domain::factory()->create(['organisation_id' => $organisation->id, 'fqdn' => 'acme-mail.test']);
-        Domain::factory()->create(['organisation_id' => null, 'fqdn' => 'loose.test']);
+        $broken = Organisation::factory()->create(['name' => 'Broken BV']);
+        $healthy = Organisation::factory()->create(['name' => 'Healthy Ltd']);
+        Domain::factory()->create(['organisation_id' => $broken->id, 'fqdn' => 'no-dmarc.test', 'dmarc_status' => 'missing']);
+        Domain::factory()->create(['organisation_id' => $broken->id, 'fqdn' => 'fine-sibling.test', 'created_at' => now()]);
+        Domain::factory()->create(['organisation_id' => $healthy->id, 'fqdn' => 'healthy-domain.test', 'created_at' => now()]);
 
-        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.7'])
-            ->get(route('public.overview'))
+        $this->getWall()
             ->assertOk()
-            ->assertSee('Acme')
-            ->assertSee('acme-mail.test')
-            ->assertSee('Unassigned domains')
-            ->assertSee('loose.test');
+            ->assertSee('Broken BV')
+            ->assertSee('no-dmarc.test')
+            ->assertDontSee('fine-sibling.test')
+            ->assertSee('Healthy Ltd')
+            ->assertDontSee('healthy-domain.test');
+    }
+
+    public function test_inactive_domains_and_their_alerts_are_left_out(): void
+    {
+        DashboardAllowedIp::factory()->create(['address' => '203.0.113.7']);
+        $active = Domain::factory()->create(['fqdn' => 'active-alerting.test']);
+        $inactive = Domain::factory()->create(['fqdn' => 'not-live-yet.test', 'is_active' => false, 'dmarc_status' => 'missing']);
+        AlertEvent::factory()->create(['domain_id' => $active->id]);
+        AlertEvent::factory()->create(['domain_id' => $inactive->id]);
+        AlertEvent::factory()->resolved()->create(['domain_id' => $active->id]);
+
+        $response = $this->getWall()
+            ->assertOk()
+            ->assertSee('active-alerting.test')
+            ->assertDontSee('not-live-yet.test');
+
+        $this->assertSame(1, $response->viewData('alertCount'));
+        $this->assertSame(1, $response->viewData('totals')['domains']);
+    }
+
+    public function test_top_failing_sources_are_shown_for_active_domains_only(): void
+    {
+        DashboardAllowedIp::factory()->create(['address' => '203.0.113.7']);
+
+        foreach (['198.51.100.1' => true, '198.51.100.2' => false] as $sourceIp => $isActive) {
+            $domain = Domain::factory()->create(['is_active' => $isActive]);
+            $report = AggregateReport::factory()->create(['domain_id' => $domain->id, 'date_range_begin' => now()]);
+            AggregateReportRecord::factory()->create([
+                'aggregate_report_id' => $report->id,
+                'source_ip' => $sourceIp,
+                'count' => 20,
+                'spf_result' => 'fail',
+                'dkim_result' => 'fail',
+            ]);
+        }
+
+        $sources = $this->getWall()->assertOk()->viewData('failingSources');
+
+        $this->assertSame(['198.51.100.1'], $sources->pluck('ips')->flatten(1)->pluck('source_ip')->all());
     }
 
     public function test_cidr_ranges_are_matched(): void
     {
         DashboardAllowedIp::factory()->create(['address' => '198.51.100.0/24']);
 
-        $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.200'])
-            ->get(route('public.overview'))
-            ->assertOk();
+        $this->getWall('198.51.100.200')->assertOk();
     }
 
     public function test_ips_not_on_the_list_are_forbidden(): void
     {
         DashboardAllowedIp::factory()->create(['address' => '198.51.100.0/24']);
 
-        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.7'])
-            ->get(route('public.overview'))
-            ->assertForbidden();
+        $this->getWall('203.0.113.7')->assertForbidden();
     }
 
     public function test_page_is_unavailable_while_the_list_is_empty(): void
     {
-        $this->withServerVariables(['REMOTE_ADDR' => '127.0.0.1'])
-            ->get(route('public.overview'))
-            ->assertForbidden();
+        $this->getWall('127.0.0.1')->assertForbidden();
     }
 }
