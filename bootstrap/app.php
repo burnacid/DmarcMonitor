@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureIpIsAllowed;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
@@ -14,7 +15,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->alias(['role' => EnsureUserHasRole::class]);
+        $middleware->alias([
+            'role' => EnsureUserHasRole::class,
+            'allowed-ip' => EnsureIpIsAllowed::class,
+        ]);
         $middleware->append(SecurityHeaders::class);
 
         // Behind a TLS-terminating reverse proxy (typical for the container) the

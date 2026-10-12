@@ -6,6 +6,7 @@ use App\Http\Controllers\ForensicReportDownloadController;
 use App\Http\Controllers\Microsoft365ConnectController;
 use App\Http\Controllers\OrganisationManagementReportPdfController;
 use App\Http\Controllers\OrganisationReportPdfController;
+use App\Http\Controllers\PublicOverviewController;
 use App\Http\Controllers\ReportAuthorizationExportController;
 use App\Http\Controllers\ReportDownloadController;
 use App\Http\Controllers\ReportsExportController;
@@ -21,6 +22,10 @@ Volt::route('dashboard', 'dashboard')
 Route::get('dashboard/export-sources', DashboardSourcesExportController::class)
     ->middleware(['auth', 'verified'])
     ->name('dashboard.export-sources');
+
+Route::get('wall', PublicOverviewController::class)
+    ->middleware('allowed-ip')
+    ->name('public.overview');
 
 Route::view('profile', 'profile')
     ->middleware(['auth'])
@@ -62,6 +67,7 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Route::get('microsoft365/connect/{target}', [Microsoft365ConnectController::class, 'redirect'])->name('microsoft365.connect');
     Route::get('microsoft365/callback', [Microsoft365ConnectController::class, 'callback'])->name('microsoft365.callback');
     Volt::route('report-branding', 'admin.report-branding')->name('report-branding');
+    Volt::route('public-dashboard', 'admin.public-dashboard')->name('public-dashboard');
     Volt::route('scheduled-tasks', 'admin.scheduled-tasks')->name('scheduled-tasks');
     Volt::route('audit-log', 'admin.audit-log')->name('audit-log');
 });

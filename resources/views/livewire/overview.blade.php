@@ -41,57 +41,24 @@ new #[Layout('layouts.app')] class extends Component
 
         $domains = Domain::visibleTo($user)->orderBy('fqdn')->get();
         $health = $service->forDomains($domains, $this->days);
-        $healthByOrganisation = $health->groupBy(fn (array $row) => $row['domain']->organisation_id ?? 'unassigned');
 
-        $groups = Organisation::visibleTo($user)
+        $organisations = Organisation::visibleTo($user)
             ->when($search !== '', fn ($query) => $query->where('name', 'like', '%'.$search.'%'))
             ->orderBy('name')
-            ->get()
-            ->map(fn (Organisation $organisation) => [
-                'key' => (string) $organisation->id,
-                'organisation' => $organisation,
-                'name' => $organisation->name,
-                'domains' => $healthByOrganisation->get($organisation->id, collect())->values(),
-            ]);
+            ->get();
 
-        if (! $user->hasOrganisationScope() && $search === '' && $healthByOrganisation->has('unassigned')) {
-            $groups->push([
-                'key' => 'unassigned',
-                'organisation' => null,
-                'name' => __('Unassigned domains'),
-                'domains' => $healthByOrganisation->get('unassigned')->values(),
-            ]);
-        }
-
-        $groups = $groups
-            ->map(fn (array $group) => $group + ['summary' => $service->rollUp($group['domains'])])
-            ->when($this->needsAttention, fn ($groups) => $groups->filter(fn (array $group) => $group['summary']['domains_with_issues'] > 0))
-            ->sort(fn (array $a, array $b) => [
-                -$a['summary']['domains_with_issues'],
-                $a['summary']['dmarc_pass_pct'] ?? 101,
-                $a['name'],
-            ] <=> [
-                -$b['summary']['domains_with_issues'],
-                $b['summary']['dmarc_pass_pct'] ?? 101,
-                $b['name'],
-            ])
-            ->values();
+        $groups = $service->organisationGroups(
+            $health,
+            $organisations,
+            includeUnassigned: ! $user->hasOrganisationScope() && $search === '',
+            needsAttentionOnly: $this->needsAttention,
+        );
 
         return [
             'groups' => $groups,
             'totals' => $service->rollUp($health->values()),
             'canManage' => $user->canManage(),
         ];
-    }
-
-    public function passBadgeClass(?string $status): string
-    {
-        return match ($status) {
-            'good' => 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200',
-            'warning' => 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200',
-            'critical' => 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200',
-            default => 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
-        };
     }
 }; ?>
 
@@ -176,9 +143,9 @@ new #[Layout('layouts.app')] class extends Component
                                 <td data-label="{{ __('Domains') }}" class="{{ $cell }} text-gray-500 dark:text-gray-400">{{ $summary['domains'] }}</td>
                                 <td data-label="{{ __('Messages') }}" class="{{ $cell }} text-gray-500 dark:text-gray-400">{{ number_format($summary['total']) }}</td>
                                 <td data-label="{{ __('DMARC pass') }}" class="{{ $cell }}">
-                                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $this->passBadgeClass($summary['pass_status']) }}">
+                                    <x-pass-badge :status="$summary['pass_status']">
                                         {{ $summary['dmarc_pass_pct'] !== null ? $summary['dmarc_pass_pct'].'%' : __('No data') }}
-                                    </span>
+                                    </x-pass-badge>
                                 </td>
                                 <td data-label="{{ __('Policies') }}" class="{{ $cell }}">
                                     <span class="inline-flex flex-wrap gap-1 max-md:justify-end">
@@ -252,9 +219,9 @@ new #[Layout('layouts.app')] class extends Component
                                                             </td>
                                                             <td class="py-2 pr-4 text-gray-500 dark:text-gray-400 max-md:inline-block">{{ number_format($row['total']) }}</td>
                                                             <td class="py-2 pr-4 max-md:inline-block">
-                                                                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $this->passBadgeClass($row['pass_status']) }}">
+                                                                <x-pass-badge :status="$row['pass_status']">
                                                                     {{ $row['total'] > 0 ? $row['dmarc_pass_pct'].'%' : __('No data') }}
-                                                                </span>
+                                                                </x-pass-badge>
                                                             </td>
                                                             <td class="py-2 pr-4 max-md:block">
                                                                 <x-policy-badge :policy="$row['policy']" />

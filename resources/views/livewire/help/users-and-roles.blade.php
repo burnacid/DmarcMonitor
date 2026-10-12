@@ -38,6 +38,13 @@ new #[Layout('layouts.app')] class extends Component
             </div>
 
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-4 text-sm text-gray-600 dark:text-gray-300">
+                <h3 id="invitations" class="text-base font-medium text-gray-900 dark:text-gray-100">{{ __('Inviting users') }}</h3>
+                <p>
+                    {{ __('When an admin creates a user under Settings > Users, an invitation is mailed by default. The link lets the user choose their own password and stays valid for 7 days; until it is used the user shows as "Invite pending" and cannot sign in. Use "Resend invite" to send a fresh link, which replaces the old one. Untick the invitation option to set a password yourself instead.') }}
+                </p>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-4 text-sm text-gray-600 dark:text-gray-300">
                 <h3 id="profile-passkeys" class="text-base font-medium text-gray-900 dark:text-gray-100">{{ __('Profile, passkeys & two-factor') }}</h3>
                 <p>
                     {{ __('Every user manages their own name, email and password from the Profile page, and can register a passkey there for passwordless sign-in.') }}

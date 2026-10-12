@@ -4,6 +4,7 @@ use App\Models\Organisation;
 use App\Models\User;
 use App\Support\AuditLogger;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -16,12 +17,20 @@ new #[Layout('layouts.app')] class extends Component
 
     public string $errorMessage = '';
 
+    public string $statusMessage = '';
+
     public ?int $editingId = null;
 
     public string $name = '';
     public string $email = '';
     public string $password = '';
     public string $role = 'viewer';
+
+    /**
+     * When creating a user: mail them an invitation to choose their own
+     * password instead of setting one here.
+     */
+    public bool $sendInvite = true;
 
     /** @var array<int> */
     public array $organisation_ids = [];
@@ -33,7 +42,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function create(): void
     {
-        $this->reset(['editingId', 'name', 'email', 'password', 'organisation_ids']);
+        $this->reset(['editingId', 'name', 'email', 'password', 'organisation_ids', 'sendInvite']);
         $this->role = 'viewer';
         $this->dispatch('open-modal', 'user-form');
     }
@@ -55,7 +64,7 @@ new #[Layout('layouts.app')] class extends Component
         $validated = $this->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255|unique:users,email,'.$this->editingId,
-            'password' => ($this->editingId ? 'nullable' : 'required').'|string|min:8',
+            'password' => ($this->editingId || $this->sendInvite ? 'nullable' : 'required').'|string|min:8',
             'role' => 'required|in:'.implode(',', self::ROLES),
             'organisation_ids' => 'array',
             'organisation_ids.*' => 'exists:organisations,id',
@@ -74,29 +83,62 @@ new #[Layout('layouts.app')] class extends Component
             }
         }
 
-        if (empty($validated['password'])) {
+        $wasNew = $this->editingId === null;
+        $isInvite = $wasNew && $this->sendInvite;
+
+        if ($isInvite) {
+            $validated['password'] = Hash::make(Str::password(64));
+        } elseif (empty($validated['password'])) {
             unset($validated['password']);
         } else {
             $validated['password'] = Hash::make($validated['password']);
         }
 
-        $wasNew = $this->editingId === null;
         $user = User::updateOrCreate(['id' => $this->editingId], $validated);
         $user->organisations()->sync($organisationIds);
 
-        if (! $this->editingId) {
+        if ($wasNew && ! $isInvite) {
             $user->forceFill(['email_verified_at' => now()])->save();
         }
 
         AuditLogger::record(
-            action: $wasNew ? 'user.created' : 'user.updated',
-            description: ($wasNew ? 'Created user ' : 'Updated user ').$user->email,
+            action: $isInvite ? 'user.invited' : ($wasNew ? 'user.created' : 'user.updated'),
+            description: ($isInvite ? 'Invited user ' : ($wasNew ? 'Created user ' : 'Updated user ')).$user->email,
             subject: $user,
             context: $wasNew ? null : AuditLogger::describeChanges($user),
         );
 
+        if ($isInvite) {
+            $user->sendInvitation();
+            $this->statusMessage = __('An invitation has been sent to :email.', ['email' => $user->email]);
+        }
+
         $this->dispatch('close-modal', 'user-form');
         $this->reset(['editingId', 'name', 'email', 'password', 'organisation_ids']);
+    }
+
+    public function resendInvite(int $id): void
+    {
+        $this->errorMessage = '';
+        $this->statusMessage = '';
+
+        $user = User::findOrFail($id);
+
+        if (! $user->isInvitePending()) {
+            $this->errorMessage = __(':email has already accepted their invitation.', ['email' => $user->email]);
+
+            return;
+        }
+
+        $user->sendInvitation();
+
+        AuditLogger::record(
+            action: 'user.invite_resent',
+            description: 'Resent invitation to '.$user->email,
+            subject: $user,
+        );
+
+        $this->statusMessage = __('A new invitation has been sent to :email.', ['email' => $user->email]);
     }
 
     public function delete(int $id): void
@@ -147,6 +189,12 @@ new #[Layout('layouts.app')] class extends Component
                 <x-primary-button wire:click="create">{{ __('New User') }}</x-primary-button>
             </div>
 
+            @if ($statusMessage)
+                <div class="mb-4 rounded-md bg-green-50 dark:bg-green-950 p-4 text-sm text-green-700 dark:text-green-300">
+                    {{ $statusMessage }}
+                </div>
+            @endif
+
             @if ($errorMessage)
                 <div class="mb-4 rounded-md bg-red-50 dark:bg-red-950 p-4 text-sm text-red-700 dark:text-red-300">
                     {{ $errorMessage }}
@@ -178,7 +226,7 @@ new #[Layout('layouts.app')] class extends Component
                                     @if ($user->email_verified_at)
                                         <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">{{ __('Verified') }}</span>
                                     @else
-                                        <span class="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">{{ __('Unverified') }}</span>
+                                        <span class="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">{{ __('Invite pending') }}</span>
                                     @endif
                                 </td>
                                 <td data-label="{{ __('Role') }}" class="px-6 py-4 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
@@ -186,6 +234,9 @@ new #[Layout('layouts.app')] class extends Component
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm space-x-3 max-md:px-0 max-md:py-0 max-md:pt-1 max-md:space-x-0 max-md:flex max-md:flex-wrap max-md:gap-3">
                                     <button wire:click="edit({{ $user->id }})" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Edit') }}</button>
+                                    @if ($user->isInvitePending())
+                                        <button wire:click="resendInvite({{ $user->id }})" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Resend invite') }}</button>
+                                    @endif
                                     @unless ($user->id === auth()->id())
                                         <button wire:click="delete({{ $user->id }})" wire:confirm="{{ __('Delete this user?') }}" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">{{ __('Delete') }}</button>
                                     @endunless
@@ -224,11 +275,22 @@ new #[Layout('layouts.app')] class extends Component
                 <x-input-error :messages="$errors->get('email')" class="mt-2" />
             </div>
 
-            <div class="mt-6">
-                <x-input-label for="password" :value="__('Password')" />
-                <x-text-input wire:model="password" id="password" type="password" :placeholder="$editingId ? __('Leave blank to keep current') : ''" class="mt-1 block w-full" />
-                <x-input-error :messages="$errors->get('password')" class="mt-2" />
-            </div>
+            @unless ($editingId)
+                <div class="mt-6">
+                    <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input wire:model.live="sendInvite" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                        {{ __('Send an invitation so the user can choose their own password') }}
+                    </label>
+                </div>
+            @endunless
+
+            @if ($editingId || ! $sendInvite)
+                <div class="mt-6">
+                    <x-input-label for="password" :value="__('Password')" />
+                    <x-text-input wire:model="password" id="password" type="password" :placeholder="$editingId ? __('Leave blank to keep current') : ''" class="mt-1 block w-full" />
+                    <x-input-error :messages="$errors->get('password')" class="mt-2" />
+                </div>
+            @endif
 
             <div class="mt-6">
                 <x-input-label for="role" :value="__('Role')" />
@@ -253,7 +315,7 @@ new #[Layout('layouts.app')] class extends Component
 
             <div class="mt-6 flex justify-end space-x-3">
                 <x-secondary-button type="button" x-on:click="show = false">{{ __('Cancel') }}</x-secondary-button>
-                <x-primary-button type="submit">{{ __('Save') }}</x-primary-button>
+                <x-primary-button type="submit">{{ ! $editingId && $sendInvite ? __('Send invite') : __('Save') }}</x-primary-button>
             </div>
         </form>
     </x-modal>
