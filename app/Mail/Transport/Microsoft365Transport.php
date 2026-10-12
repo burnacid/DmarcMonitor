@@ -27,7 +27,8 @@ class Microsoft365Transport extends AbstractTransport
      * sending account: submit the raw MIME as a draft, then send that draft.
      * Graph has no single-call "send this exact MIME" endpoint, so this is
      * the documented two-step way to relay an already-built MIME message
-     * (headers, HTML/text alternatives, attachments) unchanged.
+     * (headers, HTML/text alternatives, attachments) unchanged. Graph only
+     * accepts MIME content base64-encoded, sent as text/plain.
      */
     protected function doSend(SentMessage $message): void
     {
@@ -42,7 +43,7 @@ class Microsoft365Transport extends AbstractTransport
             $mailbox = rawurlencode($account->mailbox);
 
             $draft = Http::withToken($token)
-                ->withBody($message->toString(), 'text/plain')
+                ->withBody(base64_encode($message->toString()), 'text/plain')
                 ->post("https://graph.microsoft.com/v1.0/users/{$mailbox}/messages");
 
             if ($draft->failed()) {
