@@ -153,6 +153,29 @@ class Domain extends Model
         return array_values(array_filter($this->reportAuthorizations(), fn (array $authorization) => ! $authorization['authorized']));
     }
 
+    /**
+     * Missing authorizations that actually stop reports reaching this app:
+     * those for a report domain one of the ingestion mailboxes (or the
+     * configured report address) lives on and that the DMARC record lists.
+     * Third-party report destinations (other DMARC services) are the domain
+     * owner's business and not flagged.
+     *
+     * @return list<array{report_domain: string, host: string, authorized: bool, in_record: bool}>
+     */
+    public function missingIngestionReportAuthorizations(): array
+    {
+        $ingestionDomains = collect([...static::ingestionAddresses(), strtolower(trim((string) config('dmarc.rua_address')))])
+            ->filter(fn (string $address) => str_contains($address, '@'))
+            ->map(fn (string $address) => rtrim(substr(strrchr($address, '@'), 1), '.'))
+            ->unique()
+            ->all();
+
+        return array_values(array_filter(
+            $this->missingReportAuthorizations(),
+            fn (array $authorization) => $authorization['in_record'] && in_array(strtolower($authorization['report_domain']), $ingestionDomains, true),
+        ));
+    }
+
     public function organisation()
     {
         return $this->belongsTo(Organisation::class);

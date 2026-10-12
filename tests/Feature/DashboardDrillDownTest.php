@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AggregateReport;
 use App\Models\AggregateReportRecord;
 use App\Models\Domain;
+use App\Models\Organisation;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Volt\Volt;
@@ -13,6 +14,20 @@ use Tests\TestCase;
 class DashboardDrillDownTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_domain_filter_only_lists_domains_of_the_selected_organisation(): void
+    {
+        $user = User::factory()->create();
+        $selected = Organisation::factory()->create();
+        Domain::factory()->create(['organisation_id' => $selected->id, 'fqdn' => 'selected-org.test']);
+        Domain::factory()->create(['organisation_id' => Organisation::factory()->create()->id, 'fqdn' => 'other-org.test']);
+
+        Volt::actingAs($user)->test('dashboard')
+            ->assertSee('other-org.test')
+            ->set('organisationId', $selected->id)
+            ->assertSee('selected-org.test')
+            ->assertDontSee('other-org.test');
+    }
 
     public function test_clicking_a_day_scopes_the_summary_to_that_day_only(): void
     {

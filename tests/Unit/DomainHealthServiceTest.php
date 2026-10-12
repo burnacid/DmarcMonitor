@@ -156,6 +156,7 @@ class DomainHealthServiceTest extends TestCase
 
     public function test_missing_report_authorisation_is_an_issue_only_for_addresses_in_the_record(): void
     {
+        config(['dmarc.rua_address' => 'dmarc@msp.test']);
         $authorization = fn (bool $authorized, bool $inRecord) => [
             'report_domain' => 'msp.test', 'host' => 'x._report._dmarc.msp.test', 'authorized' => $authorized, 'in_record' => $inRecord,
         ];
@@ -166,6 +167,16 @@ class DomainHealthServiceTest extends TestCase
         $this->assertContains('report_auth_missing', $this->health($missing)['issues']);
         $this->assertNotContains('report_auth_missing', $this->health($notListedYet)['issues']);
         $this->assertNotContains('report_auth_missing', $this->health($found)['issues']);
+    }
+
+    public function test_missing_report_authorisation_for_a_third_party_report_destination_is_not_an_issue(): void
+    {
+        config(['dmarc.rua_address' => 'dmarc@msp.test']);
+        $thirdParty = $this->healthyDomain(attributes: ['dmarc_report_authorizations' => [[
+            'report_domain' => 'other-dmarc-service.test', 'host' => 'x._report._dmarc.other-dmarc-service.test', 'authorized' => false, 'in_record' => true,
+        ]]]);
+
+        $this->assertNotContains('report_auth_missing', $this->health($thirdParty)['issues']);
     }
 
     public function test_roll_up_weights_pass_rate_by_volume_and_counts_policies(): void
