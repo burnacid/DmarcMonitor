@@ -91,7 +91,7 @@ new #[Layout('layouts.app')] class extends Component
     <div class="py-8">
         <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8 space-y-4">
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-3 text-sm text-gray-600 dark:text-gray-300">
-                <p>{{ __('A read-only overview of all organisations, meant for wall screens. It can be opened without logging in, but only from the IP addresses and ranges listed below. With no entries the page is unavailable.') }}</p>
+                <p>{{ __('A read-only overview of all organisations, meant for wall screens. Logged-in users can always open it; without logging in it can only be opened from the IP addresses and ranges listed below.') }}</p>
                 <p>
                     <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('URL') }}:</span>
                     <a href="{{ route('public.overview') }}" target="_blank" rel="noopener" class="font-mono text-indigo-600 dark:text-indigo-400 hover:underline break-all">{{ route('public.overview') }}</a>
@@ -132,7 +132,7 @@ new #[Layout('layouts.app')] class extends Component
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="3" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No addresses yet — the public dashboard is unavailable.') }}</td>
+                                <td colspan="3" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No addresses yet — only logged-in users can open the wallboard.') }}</td>
                             </tr>
                         @endforelse
                     </tbody>

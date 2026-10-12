@@ -10,13 +10,14 @@ use Symfony\Component\HttpFoundation\Response;
 class EnsureIpIsAllowed
 {
     /**
-     * Only lets through clients whose IP is on the public dashboard allowlist.
+     * Lets through logged-in users, and guests whose IP is on the public
+     * dashboard allowlist.
      *
      * @param  Closure(Request): (Response)  $next
      */
     public function handle(Request $request, Closure $next): Response
     {
-        abort_unless(DashboardAllowedIp::allows($request->ip()), 403);
+        abort_unless($request->user() !== null || DashboardAllowedIp::allows($request->ip()), 403);
 
         return $next($request);
     }
