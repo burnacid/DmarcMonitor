@@ -7,10 +7,28 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 ### Added
 
 - **Export DMARC records not reporting here**: the export menu on the Domains page can also download the DMARC record to publish for every active domain whose reports don't reach this app yet (no DMARC record, or a `rua` tag without `DMARC_RUA_ADDRESS` or an active ingestion mailbox), as a BIND zone file or a CSV. Each record keeps the current tags and adds `DMARC_RUA_ADDRESS`; a domain without a record gets `p=none`. Needs `DMARC_RUA_ADDRESS` to be set.
+- **Management PDF report**: next to the existing (now "Technical") PDF, the Organisations page can download a short report for management. It gives an overall verdict, key figures compared with the previous period of the same length, a pass-rate chart, a scorecard per domain with its next step, and up to five recommended actions in plain language.
+- **Report branding** (Settings > Report Branding, admins only): upload a logo (PNG or JPG, up to 2 MB) and pick an accent colour for both PDF reports, with a live preview. PNG logos need the PHP GD extension; without it they are left out of the PDFs.
+- **User invitations**: when an admin creates a user, an invitation is mailed by default so the user can choose their own password. The link stays valid for 7 days. Until it is used the user shows as "Invite pending" and can't sign in, and "Resend invite" sends a fresh link that replaces the old one. Untick the option to set a password yourself, as before. Invitations are sent through the queue, so a queue worker must be running.
+- **Wallboard** (`/wall`): a read-only overview for wall screens that fits on one screen without scrolling.
+  - Tiles for active domains, domains needing attention, DMARC pass rate, enforced domains and open alerts.
+  - Organisations with problems are listed first with only their problem domains; organisations where all is well are collapsed into a single line each.
+  - Panels for the newest open alerts and the top failing sending sources. Use the 7, 30 or 90-day buttons to pick the period.
+  - Inactive domains are left out completely.
+  - Refreshes every 5 minutes, shows the report branding logo and the app name, and has its own dark mode button.
+  - Logged-in users can always open it (limited to their own organisations), for example from the new "Open wallboard" link on the Overview page. Without logging in, it opens only from IP addresses and ranges on the allowlist under Settings > Public Dashboard (admins only); with an empty list, only logged-in users can open it. Behind a reverse proxy, set `TRUSTED_PROXIES` so the visitor's real IP is checked.
+- **Activate or deactivate domains from the list**: click the Active/Inactive badge on the Domains page to switch a domain on or off without opening it.
+
+### Changed
+
+- The Overview page hides inactive domains by default; they are left out of the domain lists, tiles and organisation totals. Tick "Show inactive domains" to include them again (kept in the URL like the other filters).
+- A domain is no longer flagged "No reports" when reports are only expected now and then. It gets a grey note instead: "Rarely sends mail" when, over the last 90 days, reports arrived on fewer than a quarter of the days (needs 30 days of history), or "No mail seen" when the DMARC record sends reports here but none have arrived yet.
+- "Report authorisation missing" is now only flagged for report addresses that reach this app: the domain of `DMARC_RUA_ADDRESS` or of an active ingestion mailbox. Missing authorisations for other report services the domain also uses no longer count as a problem, although the Domains page and the export still list them.
 
 ### Fixed
 
 - A domain is no longer flagged "Reports sent elsewhere" when its DMARC record sends reports to one of this app's active ingestion mailboxes (an IMAP account or a Microsoft 365 mailbox). Before, only `DMARC_RUA_ADDRESS` counted. The flag still needs `DMARC_RUA_ADDRESS` to be set.
+- On the Dashboard, the domain filter now always lists only the domains of the selected organisation.
 
 ## [1.2.2]
 
