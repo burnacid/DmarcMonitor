@@ -36,6 +36,23 @@ class OverviewPageTest extends TestCase
             ->assertDontSee('Aardvark Ltd');
     }
 
+    public function test_inactive_domains_are_hidden_until_toggled_on(): void
+    {
+        $user = User::factory()->create();
+        $org = Organisation::factory()->create();
+        Domain::factory()->create(['organisation_id' => $org->id, 'fqdn' => 'live-domain.test']);
+        Domain::factory()->create(['organisation_id' => $org->id, 'fqdn' => 'not-live-yet.test', 'is_active' => false]);
+
+        Volt::actingAs($user)->test('overview')
+            ->call('toggleExpand', (string) $org->id)
+            ->assertSee('live-domain.test')
+            ->assertDontSee('not-live-yet.test')
+            ->assertViewHas('totals', fn (array $totals) => $totals['domains'] === 1)
+            ->set('showInactive', true)
+            ->assertSee('not-live-yet.test')
+            ->assertViewHas('totals', fn (array $totals) => $totals['domains'] === 2);
+    }
+
     public function test_scoped_user_only_sees_their_organisations_and_no_unassigned_row(): void
     {
         $own = Organisation::factory()->create(['name' => 'Own Org']);

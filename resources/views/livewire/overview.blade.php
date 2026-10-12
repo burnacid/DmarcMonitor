@@ -19,6 +19,13 @@ new #[Layout('layouts.app')] class extends Component
     public bool $needsAttention = false;
 
     /**
+     * Inactive domains (not live yet, or no longer used) are hidden unless
+     * asked for, and then also count towards the tiles and roll-ups.
+     */
+    #[Url(as: 'inactive')]
+    public bool $showInactive = false;
+
+    /**
      * Organisation id, or "unassigned", whose domains are shown.
      */
     public ?string $expandedKey = null;
@@ -39,7 +46,10 @@ new #[Layout('layouts.app')] class extends Component
         $service = app(DomainHealthService::class);
         $search = trim($this->search);
 
-        $domains = Domain::visibleTo($user)->orderBy('fqdn')->get();
+        $domains = Domain::visibleTo($user)
+            ->unless($this->showInactive, fn ($query) => $query->where('is_active', true))
+            ->orderBy('fqdn')
+            ->get();
         $health = $service->forDomains($domains, $this->days);
 
         $organisations = Organisation::visibleTo($user)
@@ -111,6 +121,11 @@ new #[Layout('layouts.app')] class extends Component
                 <label class="inline-flex items-center gap-2 pb-2 text-sm text-gray-700 dark:text-gray-300">
                     <input wire:model.live="needsAttention" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
                     {{ __('Only needing attention') }}
+                </label>
+
+                <label class="inline-flex items-center gap-2 pb-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input wire:model.live="showInactive" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                    {{ __('Show inactive domains') }}
                 </label>
 
                 <a href="{{ route('public.overview', ['days' => $days]) }}" target="_blank" rel="noopener" class="ml-auto pb-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Open wallboard') }}</a>
