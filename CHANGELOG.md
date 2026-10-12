@@ -22,6 +22,7 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 ### Changed
 
 - The Overview page hides inactive domains by default; they are left out of the domain lists, tiles and organisation totals. Tick "Show inactive domains" to include them again (kept in the URL like the other filters).
+- The "New sending source" alert now fires once per source name instead of once per IP address. A source is named as on the Dashboard: the ASN organisation, else the reverse-DNS hostname, else the IP. A known service sending from a new IP no longer fires it. The alert lists the source, up to 10 of its IPs and the IP count, and waits until the IP lookup for the report has run. Alerts that already fired per IP stay as they are.
 - A domain is no longer flagged "No reports" when reports are only expected now and then. It gets a grey note instead: "Rarely sends mail" when, over the last 90 days, reports arrived on fewer than a quarter of the days (needs 30 days of history), or "No mail seen" when the DMARC record sends reports here but none have arrived yet.
 - "Report authorisation missing" is now only flagged for report addresses that reach this app: the domain of `DMARC_RUA_ADDRESS` or of an active ingestion mailbox. Missing authorisations for other report services the domain also uses no longer count as a problem, although the Domains page and the export still list them.
 

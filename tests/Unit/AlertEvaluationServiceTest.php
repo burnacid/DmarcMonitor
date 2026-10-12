@@ -191,10 +191,14 @@ class AlertEvaluationServiceTest extends TestCase
         $this->assertEquals('spf_pass_pct', AlertEvent::first()->details['metric']);
     }
 
-    public function test_new_source_detected_rule_fires_once_per_new_ip(): void
+    /**
+     * A domain with one known source (Known Mail Inc) before the window, and
+     * a fresh report inside the window; returns that report and the rule.
+     *
+     * @return array{AggregateReport, AlertRule}
+     */
+    private function newSourceScenario(): array
     {
-        Mail::fake();
-
         $org = Organisation::factory()->create();
         $domain = Domain::factory()->create(['organisation_id' => $org->id]);
 
@@ -203,7 +207,7 @@ class AlertEvaluationServiceTest extends TestCase
             'date_range_begin' => now()->subDays(10),
             'created_at' => now()->subDays(10),
         ]);
-        AggregateReportRecord::factory()->create([
+        AggregateReportRecord::factory()->enriched('Known Mail Inc')->create([
             'aggregate_report_id' => $baselineReport->id,
             'source_ip' => '203.0.113.1',
         ]);
@@ -212,14 +216,6 @@ class AlertEvaluationServiceTest extends TestCase
             'domain_id' => $domain->id,
             'date_range_begin' => now()->subHours(1),
         ]);
-        AggregateReportRecord::factory()->create([
-            'aggregate_report_id' => $recentReport->id,
-            'source_ip' => '203.0.113.1',
-        ]);
-        AggregateReportRecord::factory()->create([
-            'aggregate_report_id' => $recentReport->id,
-            'source_ip' => '198.51.100.9',
-        ]);
 
         $rule = AlertRule::factory()->create([
             'organisation_id' => $org->id,
@@ -227,12 +223,61 @@ class AlertEvaluationServiceTest extends TestCase
             'threshold_percent' => null,
         ]);
 
+        return [$recentReport, $rule];
+    }
+
+    public function test_new_source_detected_rule_fires_once_per_new_source_name(): void
+    {
+        Mail::fake();
+        [$recentReport, $rule] = $this->newSourceScenario();
+
+        // A new IP of an already-known source is not a new source.
+        AggregateReportRecord::factory()->enriched('Known Mail Inc')->create(['aggregate_report_id' => $recentReport->id, 'source_ip' => '203.0.113.2']);
+        AggregateReportRecord::factory()->enriched('New Sender LLC')->create(['aggregate_report_id' => $recentReport->id, 'source_ip' => '198.51.100.9']);
+        AggregateReportRecord::factory()->enriched('New Sender LLC')->create(['aggregate_report_id' => $recentReport->id, 'source_ip' => '198.51.100.8']);
+
         $service = app(AlertEvaluationService::class);
         $service->evaluate($rule);
         $service->evaluate($rule);
 
         $this->assertDatabaseCount('alert_events', 1);
-        $this->assertEquals('198.51.100.9', AlertEvent::first()->details['source_ip']);
+        $details = AlertEvent::first()->details;
+        $this->assertSame('New Sender LLC', $details['source']);
+        $this->assertSame(['198.51.100.8', '198.51.100.9'], $details['source_ips']);
+        $this->assertSame(2, $details['ip_count']);
+    }
+
+    public function test_new_source_detected_rule_waits_for_enrichment(): void
+    {
+        Mail::fake();
+        [$recentReport, $rule] = $this->newSourceScenario();
+        $record = AggregateReportRecord::factory()->create(['aggregate_report_id' => $recentReport->id, 'source_ip' => '198.51.100.9']);
+
+        $service = app(AlertEvaluationService::class);
+        $service->evaluate($rule);
+
+        $this->assertDatabaseCount('alert_events', 0);
+
+        $record->update(['asn_org' => 'New Sender LLC', 'enriched_at' => now()]);
+        $service->evaluate($rule);
+
+        $this->assertDatabaseCount('alert_events', 1);
+        $this->assertSame('New Sender LLC', AlertEvent::first()->details['source']);
+    }
+
+    public function test_new_source_name_falls_back_to_hostname_then_ip(): void
+    {
+        Mail::fake();
+        [$recentReport, $rule] = $this->newSourceScenario();
+        AggregateReportRecord::factory()->enriched(ptrHostname: 'mail.unknown-host.test')->create(['aggregate_report_id' => $recentReport->id, 'source_ip' => '198.51.100.9']);
+        AggregateReportRecord::factory()->enriched()->create(['aggregate_report_id' => $recentReport->id, 'source_ip' => '198.51.100.7']);
+
+        app(AlertEvaluationService::class)->evaluate($rule);
+
+        $this->assertEqualsCanonicalizing(
+            ['mail.unknown-host.test', '198.51.100.7'],
+            AlertEvent::all()->pluck('details.source')->all(),
+        );
     }
 
     public function test_new_domain_discovered_rule_fires_once_per_inactive_domain(): void

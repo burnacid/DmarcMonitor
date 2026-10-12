@@ -11,6 +11,9 @@ use Illuminate\Support\Carbon;
 
 class AlertEvaluationService
 {
+    /** Most IPs listed on a "new sending source" alert; ip_count has the total. */
+    private const int MAX_LISTED_SOURCE_IPS = 10;
+
     public function __construct(
         private readonly DmarcMetricsService $metrics,
         private readonly AlertNotifier $notifier,
@@ -90,15 +93,20 @@ class AlertEvaluationService
         ]);
     }
 
+    /**
+     * Fires once per sending source (named as on the Dashboard: ASN
+     * organisation, PTR hostname or IP) that wasn't seen for the domain
+     * before the lookback window, however many IPs it uses.
+     */
     private function checkNewSources(AlertRule $rule, Domain $domain): void
     {
         $windowStart = $this->windowStart($rule->lookback_window);
 
-        $known = $this->metrics->sourceIpsBefore($domain->id, $windowStart, 'created_at');
-        $seen = $this->metrics->sourceIpsBetween($domain->id, $windowStart, now(), 'created_at');
+        $known = $this->metrics->sourceNamesBefore($domain->id, $windowStart, 'created_at')->flip();
+        $candidates = $this->metrics->newSourceCandidates($domain->id, $windowStart, now(), 'created_at');
 
-        foreach ($seen->diff($known) as $ip) {
-            $dedupKey = hash('sha256', "{$rule->id}:{$domain->id}:new_source:{$ip}");
+        foreach ($candidates->reject(fn (array $ips, string $name) => $known->has($name)) as $name => $ips) {
+            $dedupKey = hash('sha256', "{$rule->id}:{$domain->id}:new_source_name:{$name}");
 
             if (AlertEvent::where('dedup_key', $dedupKey)->exists()) {
                 continue;
@@ -108,7 +116,12 @@ class AlertEvaluationService
                 'alert_rule_id' => $rule->id,
                 'domain_id' => $domain->id,
                 'fired_at' => now(),
-                'details' => ['source_ip' => $ip, 'window' => $rule->lookback_window],
+                'details' => [
+                    'source' => $name,
+                    'source_ips' => array_slice($ips, 0, self::MAX_LISTED_SOURCE_IPS),
+                    'ip_count' => count($ips),
+                    'window' => $rule->lookback_window,
+                ],
                 'dedup_key' => $dedupKey,
             ]);
 

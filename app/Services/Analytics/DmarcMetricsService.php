@@ -304,38 +304,54 @@ class DmarcMetricsService
     }
 
     /**
-     * Distinct source IPs already seen for a domain before the given cutoff —
-     * the baseline used by the "new sending source" alert to detect newly
-     * appearing IPs. Matched against ingestion time (see summary()'s
-     * $dateColumn note) so late-arriving reports aren't missed.
+     * Distinct source names already seen for a domain before the given
+     * cutoff — the baseline used by the "new sending source" alert. Matched
+     * against ingestion time (see summary()'s $dateColumn note) so
+     * late-arriving reports aren't missed.
      *
      * @return Collection<int, string>
      */
-    public function sourceIpsBefore(int $domainId, CarbonInterface $before, string $dateColumn = 'date_range_begin'): Collection
+    public function sourceNamesBefore(int $domainId, CarbonInterface $before, string $dateColumn = 'date_range_begin'): Collection
     {
         return AggregateReportRecord::query()
             ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
             ->where('aggregate_reports.domain_id', $domainId)
             ->where("aggregate_reports.{$dateColumn}", '<', $before)
             ->distinct()
-            ->pluck('aggregate_report_records.source_ip');
+            ->selectRaw($this->sourceNameSql().' as source_name')
+            ->pluck('source_name');
     }
 
     /**
-     * Distinct source IPs seen for a domain within the given window. Matched
-     * against ingestion time (see summary()'s $dateColumn note) so
-     * late-arriving reports aren't missed.
+     * Source names seen for a domain within the given window, each with the
+     * distinct IPs behind it. Only enriched records count, so a source isn't
+     * reported under its bare IP before its name is known; unenriched ones
+     * become candidates once the enrichment job has run.
      *
-     * @return Collection<int, string>
+     * @return Collection<string, list<string>>
      */
-    public function sourceIpsBetween(int $domainId, CarbonInterface $from, CarbonInterface $to, string $dateColumn = 'date_range_begin'): Collection
+    public function newSourceCandidates(int $domainId, CarbonInterface $from, CarbonInterface $to, string $dateColumn = 'date_range_begin'): Collection
     {
         return AggregateReportRecord::query()
             ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
             ->where('aggregate_reports.domain_id', $domainId)
             ->whereBetween("aggregate_reports.{$dateColumn}", [$from, $to])
+            ->whereNotNull('aggregate_report_records.enriched_at')
             ->distinct()
-            ->pluck('aggregate_report_records.source_ip');
+            ->selectRaw($this->sourceNameSql().' as source_name')
+            ->addSelect('aggregate_report_records.source_ip')
+            ->get()
+            ->groupBy('source_name')
+            ->map(fn (Collection $rows) => $rows->pluck('source_ip')->sort()->values()->all());
+    }
+
+    /**
+     * A source's display name, as groupedSourceBreakdown() labels it: the ASN
+     * organisation, else the PTR hostname, else the bare IP.
+     */
+    private function sourceNameSql(): string
+    {
+        return 'COALESCE(aggregate_report_records.asn_org, aggregate_report_records.ptr_hostname, aggregate_report_records.source_ip)';
     }
 
     private function baseQuery(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, string $dateColumn = 'date_range_begin')
