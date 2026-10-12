@@ -92,6 +92,7 @@ class UserRoleTest extends TestCase
             ->call('create')
             ->set('name', 'New Person')
             ->set('email', 'new-person@example.com')
+            ->set('sendInvite', false)
             ->set('password', 'password123')
             ->set('role', 'editor')
             ->call('save');

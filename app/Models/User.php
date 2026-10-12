@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Notifications\UserInvitation;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -10,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Password;
 use Laravel\Passkeys\Contracts\PasskeyUser;
 use Laravel\Passkeys\PasskeyAuthenticatable;
 
@@ -47,6 +49,24 @@ class User extends Authenticatable implements PasskeyUser
     public function recoveryCodes(): array
     {
         return $this->two_factor_recovery_codes ?? [];
+    }
+
+    /**
+     * Mails the user a link to choose their own password. Any earlier
+     * invitation link stops working.
+     */
+    public function sendInvitation(): void
+    {
+        $this->notify(new UserInvitation(Password::broker('invites')->createToken($this)));
+    }
+
+    /**
+     * Invited users stay unverified until they've set a password from the
+     * invitation link.
+     */
+    public function isInvitePending(): bool
+    {
+        return $this->email_verified_at === null;
     }
 
     public function isAdmin(): bool

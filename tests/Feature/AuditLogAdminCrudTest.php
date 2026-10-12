@@ -67,6 +67,7 @@ class AuditLogAdminCrudTest extends TestCase
             ->call('create')
             ->set('name', 'New User')
             ->set('email', 'new-user@example.com')
+            ->set('sendInvite', false)
             ->set('password', 'password123')
             ->call('save');
 

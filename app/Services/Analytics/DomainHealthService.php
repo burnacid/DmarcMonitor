@@ -5,6 +5,7 @@ namespace App\Services\Analytics;
 use App\Models\AggregateReport;
 use App\Models\AlertEvent;
 use App\Models\Domain;
+use App\Models\Organisation;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
@@ -210,6 +211,49 @@ class DomainHealthService
             'open_alerts' => $rows->sum('open_alerts'),
             'last_report_at' => $rows->pluck('last_report_at')->filter()->max(),
         ];
+    }
+
+    /**
+     * Health rows grouped per organisation with a roll-up each, worst first:
+     * most domains with issues, then lowest pass rate, then name.
+     *
+     * @param  Collection<int, array<string, mixed>>  $health  From forDomains().
+     * @param  Collection<int, Organisation>  $organisations  Already limited to what the viewer may see.
+     * @return Collection<int, array{key: string, organisation: ?Organisation, name: string, domains: Collection<int, array<string, mixed>>, summary: array<string, mixed>}>
+     */
+    public function organisationGroups(Collection $health, Collection $organisations, bool $includeUnassigned, bool $needsAttentionOnly = false): Collection
+    {
+        $healthByOrganisation = $health->groupBy(fn (array $row) => $row['domain']->organisation_id ?? 'unassigned');
+
+        $groups = $organisations->map(fn (Organisation $organisation) => [
+            'key' => (string) $organisation->id,
+            'organisation' => $organisation,
+            'name' => $organisation->name,
+            'domains' => $healthByOrganisation->get($organisation->id, collect())->values(),
+        ]);
+
+        if ($includeUnassigned && $healthByOrganisation->has('unassigned')) {
+            $groups->push([
+                'key' => 'unassigned',
+                'organisation' => null,
+                'name' => __('Unassigned domains'),
+                'domains' => $healthByOrganisation->get('unassigned')->values(),
+            ]);
+        }
+
+        return $groups
+            ->map(fn (array $group) => $group + ['summary' => $this->rollUp($group['domains'])])
+            ->when($needsAttentionOnly, fn (Collection $groups) => $groups->filter(fn (array $group) => $group['summary']['domains_with_issues'] > 0))
+            ->sort(fn (array $a, array $b) => [
+                -$a['summary']['domains_with_issues'],
+                $a['summary']['dmarc_pass_pct'] ?? 101,
+                $a['name'],
+            ] <=> [
+                -$b['summary']['domains_with_issues'],
+                $b['summary']['dmarc_pass_pct'] ?? 101,
+                $b['name'],
+            ])
+            ->values();
     }
 
     /**
