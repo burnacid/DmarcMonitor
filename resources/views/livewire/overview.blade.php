@@ -112,6 +112,8 @@ new #[Layout('layouts.app')] class extends Component
                     <input wire:model.live="needsAttention" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
                     {{ __('Only needing attention') }}
                 </label>
+
+                <a href="{{ route('public.overview', ['days' => $days]) }}" target="_blank" rel="noopener" class="ml-auto pb-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Open wallboard') }}</a>
             </div>
 
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">

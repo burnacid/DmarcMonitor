@@ -8,6 +8,7 @@ use App\Models\AlertEvent;
 use App\Models\DashboardAllowedIp;
 use App\Models\Domain;
 use App\Models\Organisation;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
@@ -92,8 +93,28 @@ class PublicOverviewTest extends TestCase
         $this->getWall('203.0.113.7')->assertForbidden();
     }
 
-    public function test_page_is_unavailable_while_the_list_is_empty(): void
+    public function test_guests_are_forbidden_while_the_list_is_empty(): void
     {
         $this->getWall('127.0.0.1')->assertForbidden();
+    }
+
+    public function test_logged_in_users_can_open_it_from_any_ip_limited_to_their_organisations(): void
+    {
+        $own = Organisation::factory()->create(['name' => 'Own Org']);
+        $other = Organisation::factory()->create(['name' => 'Other Org']);
+        Domain::factory()->create(['organisation_id' => $own->id, 'fqdn' => 'own-broken.test', 'dmarc_status' => 'missing']);
+        $otherDomain = Domain::factory()->create(['organisation_id' => $other->id, 'fqdn' => 'other-broken.test', 'dmarc_status' => 'missing']);
+        AlertEvent::factory()->create(['domain_id' => $otherDomain->id]);
+        $viewer = User::factory()->viewer()->create();
+        $viewer->organisations()->attach($own->id);
+
+        $response = $this->actingAs($viewer)->withServerVariables(['REMOTE_ADDR' => '203.0.113.99'])
+            ->get(route('public.overview'))
+            ->assertOk()
+            ->assertSee('own-broken.test')
+            ->assertDontSee('Other Org')
+            ->assertDontSee('other-broken.test');
+
+        $this->assertSame(0, $response->viewData('alertCount'));
     }
 }
