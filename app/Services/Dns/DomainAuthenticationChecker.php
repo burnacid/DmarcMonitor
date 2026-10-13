@@ -10,6 +10,9 @@ use Throwable;
 
 class DomainAuthenticationChecker
 {
+    /** The most DNS lookups an SPF record may take to evaluate (RFC 7208 §4.6.4). */
+    public const int SPF_MAX_LOOKUPS = 10;
+
     /**
      * @var callable(string): array<int, string>
      */
@@ -129,16 +132,70 @@ class DomainAuthenticationChecker
     }
 
     /**
-     * @return array{spf_status: string, spf_record: ?string}
+     * A record that needs more than ten DNS lookups to evaluate makes
+     * receivers return a permerror (RFC 7208 §4.6.4), so SPF fails for
+     * every message even though the record is published.
+     *
+     * @return array{spf_status: string, spf_record: ?string, spf_lookup_count: ?int}
      */
     private function checkSpf(string $fqdn): array
     {
-        $record = $this->firstMatching($fqdn, fn (string $txt) => str_starts_with(strtolower($txt), 'v=spf1'));
+        $record = $this->spfRecord($fqdn);
+
+        if ($record === null) {
+            return ['spf_status' => 'missing', 'spf_record' => null, 'spf_lookup_count' => null];
+        }
+
+        $lookups = 0;
+        $this->countSpfLookups($record, $lookups, 0);
 
         return [
-            'spf_status' => $record !== null ? 'valid' : 'missing',
+            'spf_status' => $lookups > self::SPF_MAX_LOOKUPS ? 'too_many_lookups' : 'valid',
             'spf_record' => $record,
+            'spf_lookup_count' => $lookups,
         ];
+    }
+
+    private function spfRecord(string $hostname): ?string
+    {
+        return $this->firstMatching($hostname, fn (string $txt) => (bool) preg_match('/^v=spf1(\s|$)/i', $txt));
+    }
+
+    /**
+     * Counts the include, a, mx, ptr, exists and redirect terms that each
+     * cost a DNS lookup, following include: and redirect= into the records
+     * they point at. Stops descending once the limit is exceeded, since the
+     * exact count past that point no longer matters.
+     */
+    private function countSpfLookups(string $record, int &$lookups, int $depth): void
+    {
+        $terms = array_map(
+            fn (string $term) => ltrim(strtolower($term), '+-~?'),
+            preg_split('/\s+/', trim($record)),
+        );
+        $hasAllMechanism = in_array('all', $terms, true);
+
+        foreach ($terms as $term) {
+            if (preg_match('/^(include:|redirect=)(.+)$/', $term, $matches)) {
+                if ($matches[1] === 'redirect=' && $hasAllMechanism) {
+                    continue;
+                }
+
+                $lookups++;
+
+                if ($lookups > self::SPF_MAX_LOOKUPS || $depth >= self::SPF_MAX_LOOKUPS || str_contains($matches[2], '%')) {
+                    continue;
+                }
+
+                $nested = $this->spfRecord($matches[2]);
+
+                if ($nested !== null) {
+                    $this->countSpfLookups($nested, $lookups, $depth + 1);
+                }
+            } elseif (preg_match('/^(a|mx|ptr|exists)([:\/]|$)/', $term)) {
+                $lookups++;
+            }
+        }
     }
 
     /**

@@ -16,7 +16,7 @@ class Domain extends Model
 
     protected $fillable = [
         'organisation_id', 'fqdn', 'is_active', 'notes',
-        'dmarc_status', 'dmarc_record', 'dmarc_report_authorizations', 'spf_status', 'spf_record',
+        'dmarc_status', 'dmarc_record', 'dmarc_report_authorizations', 'spf_status', 'spf_record', 'spf_lookup_count',
         'dkim_status', 'dkim_selector', 'dkim_record', 'dkim_selectors', 'dns_checked_at',
     ];
 

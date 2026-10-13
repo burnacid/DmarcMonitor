@@ -154,6 +154,19 @@ class DomainHealthServiceTest extends TestCase
         $this->assertSame('critical', $health['pass_status']);
     }
 
+    public function test_an_spf_record_over_the_lookup_limit_is_an_issue_and_blocks_readiness(): void
+    {
+        config(['dmarc.rua_address' => 'dmarc@msp.test']);
+        $domain = $this->healthyDomain(attributes: ['spf_status' => 'too_many_lookups', 'spf_lookup_count' => 12]);
+        $this->addReport($domain, 150, begin: now()->subDays(20));
+        $this->addReport($domain, 100);
+
+        $health = $this->health($domain);
+
+        $this->assertSame(['spf_too_many_lookups'], $health['issues']);
+        $this->assertFalse($health['readiness']['ready']);
+    }
+
     public function test_missing_report_authorisation_is_an_issue_only_for_addresses_in_the_record(): void
     {
         config(['dmarc.rua_address' => 'dmarc@msp.test']);

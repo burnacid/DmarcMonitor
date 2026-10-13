@@ -76,6 +76,46 @@ class DomainAuthenticationCheckerTest extends TestCase
         $this->assertNull($result['spf_record']);
     }
 
+    public function test_it_counts_spf_lookups_through_nested_includes(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+
+        $result = $this->checker([
+            'example.com' => ['v=spf1 a mx ip4:192.0.2.1 include:_spf.vendor.test -all'],
+            '_spf.vendor.test' => ['v=spf1 include:_netblocks.vendor.test exists:%{i}.check.vendor.test ~all'],
+            '_netblocks.vendor.test' => ['v=spf1 ip4:198.51.100.0/24 ~all'],
+        ])->check($domain);
+
+        $this->assertEquals('valid', $result['spf_status']);
+        $this->assertSame(5, $result['spf_lookup_count']);
+    }
+
+    public function test_it_flags_an_spf_record_needing_more_than_ten_lookups(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+        $includes = collect(range(1, 6))->map(fn (int $i) => "include:_spf{$i}.vendor.test")->implode(' ');
+
+        $result = $this->checker(array_merge(
+            ['example.com' => ["v=spf1 mx {$includes} ~all"]],
+            collect(range(1, 6))->mapWithKeys(fn (int $i) => ["_spf{$i}.vendor.test" => ['v=spf1 a ~all']])->all(),
+        ))->check($domain);
+
+        $this->assertEquals('too_many_lookups', $result['spf_status']);
+        $this->assertGreaterThan(10, $result['spf_lookup_count']);
+    }
+
+    public function test_an_spf_include_loop_is_flagged_instead_of_recursing_forever(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+
+        $result = $this->checker([
+            'example.com' => ['v=spf1 include:loop.vendor.test -all'],
+            'loop.vendor.test' => ['v=spf1 include:example.com -all'],
+        ])->check($domain);
+
+        $this->assertEquals('too_many_lookups', $result['spf_status']);
+    }
+
     public function test_dkim_is_unknown_when_no_selector_has_ever_been_seen(): void
     {
         $domain = Domain::factory()->create(['fqdn' => 'example.com']);

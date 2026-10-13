@@ -17,6 +17,7 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
   - Inactive domains are left out completely.
   - Refreshes every 5 minutes, shows the report branding logo and the app name, and has its own dark mode button.
   - Logged-in users can always open it (limited to their own organisations), for example from the new "Open wallboard" link on the Overview page. Without logging in, it opens only from IP addresses and ranges on the allowlist under Settings > Public Dashboard (admins only); with an empty list, only logged-in users can open it. Behind a reverse proxy, set `TRUSTED_PROXIES` so the visitor's real IP is checked.
+- **SPF lookup limit check**: the DNS check now counts the DNS lookups an SPF record needs (`include`, `a`, `mx`, `ptr`, `exists` and `redirect`, through nested includes). Receivers allow at most 10; above that SPF fails for all mail. Such a domain gets a red "Too many lookups" SPF badge and the issue "SPF exceeds 10 DNS lookups", and no longer counts as ready for a stricter DMARC policy. The Domains page shows the lookup count under the SPF badge. Existing domains get their count at the next DNS check.
 - **Activate or deactivate domains from the list**: click the Active/Inactive badge on the Domains page to switch a domain on or off without opening it.
 
 ### Changed

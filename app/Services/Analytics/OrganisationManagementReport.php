@@ -21,7 +21,7 @@ class OrganisationManagementReport
     public const int MAX_ACTIONS = 5;
 
     /** Issues that become actions, in priority order. */
-    private const array ACTION_ISSUES = ['dmarc_missing', 'no_reports', 'low_pass_rate', 'spf_missing', 'dkim_missing'];
+    private const array ACTION_ISSUES = ['dmarc_missing', 'no_reports', 'low_pass_rate', 'spf_missing', 'spf_too_many_lookups', 'dkim_missing'];
 
     public function __construct(
         private DmarcMetricsService $metrics,
@@ -258,6 +258,7 @@ class OrganisationManagementReport
             'no_reports' => __('No recent DMARC reports for :domain — check the reporting address.', ['domain' => $fqdn]),
             'low_pass_rate' => __('Review the senders failing DMARC for :domain.', ['domain' => $fqdn]),
             'spf_missing' => __('Publish an SPF record for :domain.', ['domain' => $fqdn]),
+            'spf_too_many_lookups' => __('Reduce the DNS lookups in the SPF record for :domain to 10 or fewer.', ['domain' => $fqdn]),
             'dkim_missing' => __('Set up DKIM signing for :domain.', ['domain' => $fqdn]),
             default => DomainHealthService::issueLabel($issue).': '.$fqdn,
         };

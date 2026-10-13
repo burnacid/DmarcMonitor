@@ -52,7 +52,7 @@ class DomainHealthService
 
     public const float READINESS_PASS_FOR_REJECT = 99.0;
 
-    public const array ISSUES = ['no_reports', 'dmarc_missing', 'spf_missing', 'dkim_missing', 'low_pass_rate', 'open_alerts', 'not_reporting_here', 'report_auth_missing'];
+    public const array ISSUES = ['no_reports', 'dmarc_missing', 'spf_missing', 'spf_too_many_lookups', 'dkim_missing', 'low_pass_rate', 'open_alerts', 'not_reporting_here', 'report_auth_missing'];
 
     /** Worth knowing, but not a reason for a domain to need attention. */
     public const array REMARKS = ['rarely_sends', 'no_mail_seen'];
@@ -74,6 +74,7 @@ class DomainHealthService
             'no_reports' => __('No recent reports'),
             'dmarc_missing' => __('DMARC missing'),
             'spf_missing' => __('SPF missing'),
+            'spf_too_many_lookups' => __('SPF exceeds 10 DNS lookups'),
             'dkim_missing' => __('DKIM missing'),
             'low_pass_rate' => __('Low pass rate'),
             'open_alerts' => __('Open alerts'),
@@ -280,6 +281,10 @@ class DomainHealthService
             $issues[] = 'spf_missing';
         }
 
+        if ($domain->spf_status === 'too_many_lookups') {
+            $issues[] = 'spf_too_many_lookups';
+        }
+
         if ($domain->dkim_status === 'missing') {
             $issues[] = 'dkim_missing';
         }
@@ -403,7 +408,7 @@ class DomainHealthService
                 'passed' => $summary['total'] > 0 && $summary['dmarc_pass_pct'] >= $requiredPass,
             ],
             [
-                'label' => __('SPF record published'),
+                'label' => __('SPF record published within the lookup limit'),
                 'passed' => $domain->spf_status === 'valid',
             ],
             [

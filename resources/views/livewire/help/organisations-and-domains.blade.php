@@ -58,6 +58,7 @@ new #[Layout('layouts.app')] class extends Component
                 <ul class="list-disc list-inside space-y-1">
                     <li>{{ __('No recent reports — no report has arrived for :days days (newly added domains get :grace days\' grace).', ['days' => \App\Services\Analytics\DomainHealthService::NO_REPORTS_DAYS, 'grace' => \App\Services\Analytics\DomainHealthService::NEW_DOMAIN_GRACE_DAYS]) }}</li>
                     <li>{{ __('DMARC missing, SPF missing, DKIM missing — the record was not found at the last DNS check.') }}</li>
+                    <li>{{ __('SPF exceeds 10 DNS lookups — the SPF record needs more DNS lookups than receivers allow, so SPF fails for all mail.') }}</li>
                     <li>{{ __('Low pass rate — the DMARC pass rate is below :pct% (only with at least :messages messages in the period).', ['pct' => \App\Services\Analytics\DomainHealthService::PASS_GOOD, 'messages' => \App\Services\Analytics\DomainHealthService::MIN_VOLUME_FOR_PASS_RATE]) }}</li>
                     <li>{{ __('Open alerts — the domain has alert events that are not resolved yet.') }}</li>
                     <li>{{ __('Reports sent elsewhere — the domain\'s DMARC record does not send aggregate reports to this app\'s address (DMARC_RUA_ADDRESS) or to any active ingestion mailbox.') }}</li>
