@@ -167,6 +167,17 @@ class DomainHealthServiceTest extends TestCase
         $this->assertFalse($health['readiness']['ready']);
     }
 
+    public function test_spf_record_problems_are_issues(): void
+    {
+        $brokenSplit = $this->healthyDomain(attributes: ['spf_status' => 'broken_split']);
+        $tooLong = $this->healthyDomain(attributes: ['spf_record' => 'v=spf1 '.str_repeat('ip4:192.0.2.1 ', 32).'-all']);
+        $justShortEnough = $this->healthyDomain(attributes: ['spf_record' => str_pad('v=spf1 -all', 450, ' ', STR_PAD_LEFT)]);
+
+        $this->assertContains('spf_broken_split', $this->health($brokenSplit)['issues']);
+        $this->assertContains('spf_too_long', $this->health($tooLong)['issues']);
+        $this->assertNotContains('spf_too_long', $this->health($justShortEnough)['issues']);
+    }
+
     public function test_missing_report_authorisation_is_an_issue_only_for_addresses_in_the_record(): void
     {
         config(['dmarc.rua_address' => 'dmarc@msp.test']);

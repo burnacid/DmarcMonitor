@@ -104,6 +104,29 @@ class DomainAuthenticationCheckerTest extends TestCase
         $this->assertGreaterThan(10, $result['spf_lookup_count']);
     }
 
+    public function test_a_split_spf_record_is_joined_and_valid_when_split_inside_a_term(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+
+        $result = $this->checker([
+            'example.com' => [['v=spf1 include:_spf.goo', 'gle.com include:spf.protection.outlook.com ', 'include:mail.test -all']],
+        ])->check($domain);
+
+        $this->assertEquals('valid', $result['spf_status']);
+        $this->assertSame('v=spf1 include:_spf.google.com include:spf.protection.outlook.com include:mail.test -all', $result['spf_record']);
+    }
+
+    public function test_it_flags_a_split_spf_record_that_glues_two_terms_together(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+
+        $result = $this->checker([
+            'example.com' => [['v=spf1 include:_spf.google.com', 'include:spf.protection.outlook.com -all']],
+        ])->check($domain);
+
+        $this->assertEquals('broken_split', $result['spf_status']);
+    }
+
     public function test_an_spf_include_loop_is_flagged_instead_of_recursing_forever(): void
     {
         $domain = Domain::factory()->create(['fqdn' => 'example.com']);

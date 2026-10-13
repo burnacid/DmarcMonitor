@@ -14,14 +14,22 @@ class DomainAuthenticationChecker
     public const int SPF_MAX_LOOKUPS = 10;
 
     /**
-     * @var callable(string): array<int, string>
+     * Above this an SPF record risks not fitting in a 512-byte UDP DNS
+     * answer (RFC 7208 §3.4), and some receivers fail to fetch it.
+     */
+    public const int SPF_MAX_RECOMMENDED_LENGTH = 450;
+
+    /**
+     * @var callable(string): array<int, string|list<string>>
      */
     private $txtResolver;
 
     /**
-     * @param  (callable(string): array<int, string>)|null  $txtResolver  Defaults to a real
-     *                                                                    dns_get_record() TXT lookup;
-     *                                                                    injectable so tests never hit real DNS.
+     * @param  (callable(string): array<int, string|list<string>>)|null  $txtResolver  Defaults to a real
+     *                                                                                 dns_get_record() TXT lookup;
+     *                                                                                 injectable so tests never hit real DNS.
+     *                                                                                 A record is a string, or the list of
+     *                                                                                 strings it was split into.
      */
     public function __construct(?callable $txtResolver = null)
     {
@@ -29,8 +37,8 @@ class DomainAuthenticationChecker
             $records = @dns_get_record($hostname, DNS_TXT) ?: [];
 
             return collect($records)
-                ->map(fn (array $record) => $record['txt'] ?? implode('', $record['entries'] ?? []))
-                ->filter()
+                ->map(fn (array $record) => $record['entries'] ?? [$record['txt'] ?? ''])
+                ->filter(fn (array $strings) => implode('', $strings) !== '')
                 ->values()
                 ->all();
         };
@@ -132,33 +140,65 @@ class DomainAuthenticationChecker
     }
 
     /**
-     * A record that needs more than ten DNS lookups to evaluate makes
-     * receivers return a permerror (RFC 7208 §4.6.4), so SPF fails for
-     * every message even though the record is published.
+     * Both problems make receivers return a permerror, so SPF fails for every
+     * message even though the record is published: a record split into
+     * strings that glue two terms together when joined, and a record that
+     * needs more than ten DNS lookups to evaluate (RFC 7208 §4.6.4).
      *
      * @return array{spf_status: string, spf_record: ?string, spf_lookup_count: ?int}
      */
     private function checkSpf(string $fqdn): array
     {
-        $record = $this->spfRecord($fqdn);
+        $strings = $this->firstMatchingStrings($fqdn, $this->isSpfRecord(...));
 
-        if ($record === null) {
+        if ($strings === null) {
             return ['spf_status' => 'missing', 'spf_record' => null, 'spf_lookup_count' => null];
         }
 
+        $record = implode('', $strings);
         $lookups = 0;
         $this->countSpfLookups($record, $lookups, 0);
 
         return [
-            'spf_status' => $lookups > self::SPF_MAX_LOOKUPS ? 'too_many_lookups' : 'valid',
+            'spf_status' => match (true) {
+                $this->hasBrokenSplit($strings) => 'broken_split',
+                $lookups > self::SPF_MAX_LOOKUPS => 'too_many_lookups',
+                default => 'valid',
+            },
             'spf_record' => $record,
             'spf_lookup_count' => $lookups,
         ];
     }
 
+    private function isSpfRecord(string $txt): bool
+    {
+        return (bool) preg_match('/^v=spf1(\s|$)/i', $txt);
+    }
+
     private function spfRecord(string $hostname): ?string
     {
-        return $this->firstMatching($hostname, fn (string $txt) => (bool) preg_match('/^v=spf1(\s|$)/i', $txt));
+        return $this->firstMatching($hostname, $this->isSpfRecord(...));
+    }
+
+    /**
+     * Receivers join a split record's strings without adding spaces, so a
+     * string that ends mid-term followed by one that starts a new term
+     * (e.g. "…include:a.test" "include:b.test") becomes one broken term.
+     *
+     * @param  list<string>  $strings
+     */
+    private function hasBrokenSplit(array $strings): bool
+    {
+        for ($i = 1; $i < count($strings); $i++) {
+            $previousEndsMidTerm = $strings[$i - 1] !== '' && ! ctype_space(substr($strings[$i - 1], -1));
+            $startsNewTerm = (bool) preg_match('/^[+\-~?]?(all|a|mx|ptr|include|exists|ip4|ip6|redirect|exp)([:\/=\s]|$)/i', $strings[$i]);
+
+            if ($previousEndsMidTerm && $startsNewTerm) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -251,6 +291,20 @@ class DomainAuthenticationChecker
      */
     private function firstMatching(string $hostname, callable $matches): ?string
     {
+        $strings = $this->firstMatchingStrings($hostname, $matches);
+
+        return $strings !== null ? implode('', $strings) : null;
+    }
+
+    /**
+     * Like firstMatching(), but returns the record as the separate strings
+     * it was published as (a TXT record over 255 characters is split).
+     *
+     * @param  callable(string): bool  $matches
+     * @return list<string>|null
+     */
+    private function firstMatchingStrings(string $hostname, callable $matches): ?array
+    {
         try {
             $records = ($this->txtResolver)($hostname);
         } catch (Throwable $e) {
@@ -260,8 +314,10 @@ class DomainAuthenticationChecker
         }
 
         foreach ($records as $record) {
-            if ($matches($record)) {
-                return $record;
+            $strings = array_values((array) $record);
+
+            if ($matches(implode('', $strings))) {
+                return $strings;
             }
         }
 

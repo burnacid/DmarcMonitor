@@ -2,6 +2,16 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
+## [Unreleased]
+
+### Added
+
+- **SPF record checks**: the DNS check now flags SPF records that receivers can't evaluate, or may fail to fetch. Existing domains are checked at their next DNS check.
+  - **DNS lookup limit**: counts the DNS lookups the record needs (`include`, `a`, `mx`, `ptr`, `exists` and `redirect`, through nested includes). Receivers allow at most 10; above that SPF fails for all mail. The domain gets a red "Too many lookups" SPF badge and the issue "SPF exceeds 10 DNS lookups". The Domains page shows the lookup count under the SPF badge.
+  - **Broken split**: a TXT string holds at most 255 characters, so a longer record is split into several strings, which receivers join without adding spaces. When a string ends right before the next term starts (e.g. `"…include:a.example" "include:b.example"`), the two terms are glued together and SPF fails for all mail. The domain gets a red "Broken split" SPF badge and the issue "SPF record split incorrectly".
+  - **Record length**: a record over 450 characters gets the issue "SPF record too long", as its DNS answer may not fit in a single UDP packet and some receivers fail to fetch it.
+  - A domain with too many lookups or a broken split no longer counts as ready for a stricter DMARC policy.
+
 ## [1.3.0]
 
 ### Added
@@ -16,8 +26,6 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
   - Panels for the newest open alerts and the top failing sending sources. Use the 7, 30 or 90-day buttons to pick the period.
   - Inactive domains are left out completely.
   - Refreshes every 5 minutes, shows the report branding logo and the app name, and has its own dark mode button.
-  - Logged-in users can always open it (limited to their own organisations), for example from the new "Open wallboard" link on the Overview page. Without logging in, it opens only from IP addresses and ranges on the allowlist under Settings > Public Dashboard (admins only); with an empty list, only logged-in users can open it. Behind a reverse proxy, set `TRUSTED_PROXIES` so the visitor's real IP is checked.
-- **SPF lookup limit check**: the DNS check now counts the DNS lookups an SPF record needs (`include`, `a`, `mx`, `ptr`, `exists` and `redirect`, through nested includes). Receivers allow at most 10; above that SPF fails for all mail. Such a domain gets a red "Too many lookups" SPF badge and the issue "SPF exceeds 10 DNS lookups", and no longer counts as ready for a stricter DMARC policy. The Domains page shows the lookup count under the SPF badge. Existing domains get their count at the next DNS check.
   - Switched off by default: an admin enables (or disables) it under Settings > Public Dashboard. While disabled, `/wall` returns a 404 for everyone and the "Open wallboard" link is hidden.
   - While enabled, logged-in users can always open it (limited to their own organisations), for example from the new "Open wallboard" link on the Overview page. Without logging in, it opens only from IP addresses and ranges on the allowlist under Settings > Public Dashboard (admins only); with an empty list, only logged-in users can open it. Behind a reverse proxy, set `TRUSTED_PROXIES` so the visitor's real IP is checked.
 - **Activate or deactivate domains from the list**: click the Active/Inactive badge on the Domains page to switch a domain on or off without opening it.

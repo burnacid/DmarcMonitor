@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Dns\DomainAuthenticationChecker;
 use App\Support\DmarcRecord;
 use Database\Factories\DomainFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -45,6 +46,11 @@ class Domain extends Model
         }
 
         return [];
+    }
+
+    public function spfRecordTooLong(): bool
+    {
+        return strlen((string) $this->spf_record) > DomainAuthenticationChecker::SPF_MAX_RECOMMENDED_LENGTH;
     }
 
     /**
