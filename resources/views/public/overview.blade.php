@@ -49,7 +49,7 @@
                                 ])>{{ $label }}</a>
                             @endforeach
                         </div>
-                        <span>{{ __('Updated :time', ['time' => now()->format('H:i')]) }}</span>
+                        <span>{!! __('Updated :time', ['time' => '<time id="updated-at" datetime="'.e(now()->toIso8601String()).'">'.e(now()->format('H:i')).'</time>']) !!}</span>
                         <button
                             type="button"
                             id="theme-toggle"
@@ -193,6 +193,10 @@
         </div>
 
         <script nonce="{{ app('csp-nonce') }}">
+            // The server renders UTC; show the time in the wall screen's own timezone.
+            const updatedAt = document.getElementById('updated-at');
+            updatedAt.textContent = new Date(updatedAt.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
             document.getElementById('theme-toggle').addEventListener('click', () => {
                 const isDark = ! document.documentElement.classList.contains('dark');
                 localStorage.theme = isDark ? 'dark' : 'light';

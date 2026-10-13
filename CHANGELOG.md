@@ -12,6 +12,14 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
   - **Record length**: a record over 450 characters gets the issue "SPF record too long", as its DNS answer may not fit in a single UDP packet and some receivers fail to fetch it.
   - A domain with too many lookups or a broken split no longer counts as ready for a stricter DMARC policy.
 
+### Changed
+
+- The domain of an alert now links to the Dashboard filtered on that domain, on the Alert Events page and in alert emails. The "View Dashboard" button in alert emails opens that filtered view too.
+
+### Fixed
+
+- The "Updated" time on the wallboard showed UTC. It now shows the time in the wall screen's own timezone.
+
 ## [1.3.0]
 
 ### Added

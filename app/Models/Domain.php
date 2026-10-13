@@ -48,6 +48,18 @@ class Domain extends Model
         return [];
     }
 
+    /**
+     * The Dashboard filtered on this domain. The organisation is passed along
+     * because the Dashboard only lists the selected organisation's domains.
+     */
+    public function dashboardUrl(): string
+    {
+        return route('dashboard', array_filter([
+            'organisation' => $this->organisation_id,
+            'domain' => $this->id,
+        ]));
+    }
+
     public function spfRecordTooLong(): bool
     {
         return strlen((string) $this->spf_record) > DomainAuthenticationChecker::SPF_MAX_RECOMMENDED_LENGTH;

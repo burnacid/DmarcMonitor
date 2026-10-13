@@ -1,7 +1,7 @@
 <x-mail::message>
 # {{ __('DMARC Alert Triggered') }}
 
-**{{ __('Domain') }}:** {{ $event->domain->fqdn }}
+**{{ __('Domain') }}:** [{{ $event->domain->fqdn }}]({{ $event->domain->dashboardUrl() }})
 **{{ __('Rule') }}:** {{ str_replace('_', ' ', $event->alertRule->type) }}
 **{{ __('Fired at') }}:** {{ $event->fired_at->format('Y-m-d H:i') }}
 
@@ -15,7 +15,7 @@
 </x-mail::table>
 @endif
 
-<x-mail::button :url="route('dashboard')">
+<x-mail::button :url="$event->domain->dashboardUrl()">
 {{ __('View Dashboard') }}
 </x-mail::button>
 
