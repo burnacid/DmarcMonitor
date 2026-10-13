@@ -707,6 +707,8 @@ new #[Layout('layouts.app')] class extends Component
                                                         @endforeach
                                                     </ul>
                                                 @endif
+
+                                                <x-record-history :entries="$domain->recordHistories->where('type', \App\Models\DomainRecordHistory::TYPE_DMARC)" />
                                             </div>
                                             <div>
                                                 <h4 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('SPF') }}</h4>
@@ -720,6 +722,8 @@ new #[Layout('layouts.app')] class extends Component
                                                 @if ($domain->spfRecordTooLong())
                                                     <p class="mt-2 text-xs text-amber-700 dark:text-amber-400">{{ __('This record is :length characters long. Above :max the DNS answer may not fit in a single UDP packet and some receivers fail to fetch it.', ['length' => strlen($domain->spf_record), 'max' => \App\Services\Dns\DomainAuthenticationChecker::SPF_MAX_RECOMMENDED_LENGTH]) }}</p>
                                                 @endif
+
+                                                <x-record-history :entries="$domain->recordHistories->where('type', \App\Models\DomainRecordHistory::TYPE_SPF)" />
                                             </div>
                                             <div>
                                                 <h4 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('DKIM') }}</h4>

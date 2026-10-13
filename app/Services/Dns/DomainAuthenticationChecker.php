@@ -4,6 +4,7 @@ namespace App\Services\Dns;
 
 use App\Models\AggregateReportRecord;
 use App\Models\Domain;
+use App\Models\DomainRecordHistory;
 use App\Support\DmarcRecord;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -63,9 +64,23 @@ class DomainAuthenticationChecker
         );
     }
 
+    /**
+     * A DMARC or SPF record that changed (or disappeared) since the last
+     * check is kept in the domain's record history.
+     */
     public function checkAndStore(Domain $domain): Domain
     {
-        $domain->update($this->check($domain));
+        $result = $this->check($domain);
+
+        foreach ([DomainRecordHistory::TYPE_DMARC => 'dmarc_record', DomainRecordHistory::TYPE_SPF => 'spf_record'] as $type => $column) {
+            $previousRecord = $domain->{$column};
+
+            if ($previousRecord !== null && $previousRecord !== $result[$column]) {
+                $domain->recordHistories()->create(['type' => $type, 'record' => $previousRecord]);
+            }
+        }
+
+        $domain->update($result);
 
         return $domain->refresh();
     }

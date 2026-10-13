@@ -9,7 +9,8 @@ return [
     | How many days of aggregate report data (and resolved alert events) to
     | keep before the `dmarc:cleanup` command prunes them. Measured from each
     | report's date_range_begin (not when it was ingested) for reports, and
-    | from resolved_at for alert events. IMAP and Microsoft 365 accounts with
+    | from resolved_at for alert events. Previous DMARC and SPF records are
+    | kept until this long after they were replaced. IMAP and Microsoft 365 accounts with
     | "delete old messages" enabled also have messages received before this
     | cutoff deleted from their inbox, processed and failed folders. Set to
     | null to disable cleanup.

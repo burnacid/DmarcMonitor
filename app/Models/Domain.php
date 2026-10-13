@@ -214,6 +214,14 @@ class Domain extends Model
         return $this->hasMany(ForensicReport::class);
     }
 
+    /**
+     * The DMARC and SPF records this domain published before, newest first.
+     */
+    public function recordHistories()
+    {
+        return $this->hasMany(DomainRecordHistory::class)->latest()->latest('id');
+    }
+
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         $organisationIds = $user->scopedOrganisationIds();

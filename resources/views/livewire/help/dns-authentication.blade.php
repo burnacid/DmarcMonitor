@@ -74,6 +74,7 @@ new #[Layout('layouts.app')] class extends Component
                         <span>{{ __('This domain has never had a DNS check run.') }}</span>
                     </li>
                 </ul>
+                <p>{{ __('When a DNS check finds that the DMARC or SPF record has changed or been removed, the old record is kept. Expand a domain to see its "Previous records" under the current one, each with the date it was replaced. They are deleted after the data retention period (DATA_RETENTION_DAYS).') }}</p>
             </div>
 
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-4 text-sm text-gray-600 dark:text-gray-300">

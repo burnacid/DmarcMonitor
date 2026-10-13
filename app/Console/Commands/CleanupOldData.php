@@ -6,6 +6,7 @@ use App\Models\AggregateReport;
 use App\Models\AlertEvent;
 use App\Models\AuditLog;
 use App\Models\Domain;
+use App\Models\DomainRecordHistory;
 use App\Models\ImapAccount;
 use App\Models\Microsoft365MailAccount;
 use App\Services\Graph\GraphIngestionService;
@@ -19,7 +20,7 @@ use Symfony\Component\Finder\Finder;
 use Throwable;
 
 #[Signature('dmarc:cleanup')]
-#[Description('Prune aggregate reports, resolved alert events, trashed domains and (where enabled) mailbox messages older than the configured retention period')]
+#[Description('Prune aggregate reports, resolved alert events, trashed domains, previous DMARC/SPF records and (where enabled) mailbox messages older than the configured retention period')]
 class CleanupOldData extends Command
 {
     /**
@@ -64,6 +65,12 @@ class CleanupOldData extends Command
         $auditLogs->delete();
 
         $this->info("Deleted {$auditLogCount} audit log entries older than {$days} days.");
+
+        $recordHistories = DomainRecordHistory::where('created_at', '<', $cutoff);
+        $recordHistoryCount = $recordHistories->count();
+        $recordHistories->delete();
+
+        $this->info("Deleted {$recordHistoryCount} previous DMARC/SPF record(s) older than {$days} days.");
 
         $messageCount = $this->pruneOldMailboxMessages($cutoff);
         $this->info("Deleted {$messageCount} mailbox message(s) older than {$days} days.");

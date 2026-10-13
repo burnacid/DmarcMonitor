@@ -254,6 +254,41 @@ class DomainAuthenticationCheckerTest extends TestCase
         $this->assertNotNull($domain->fresh()->dns_checked_at);
     }
 
+    public function test_check_and_store_keeps_a_changed_or_removed_record_in_the_history(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+
+        $this->checker([
+            '_dmarc.example.com' => ['v=DMARC1; p=none'],
+            'example.com' => ['v=spf1 -all'],
+        ])->checkAndStore($domain);
+
+        $this->assertDatabaseCount('domain_record_histories', 0);
+
+        $this->checker([
+            '_dmarc.example.com' => ['v=DMARC1; p=reject'],
+        ])->checkAndStore($domain);
+
+        $this->assertSame(
+            [['type' => 'dmarc', 'record' => 'v=DMARC1; p=none'], ['type' => 'spf', 'record' => 'v=spf1 -all']],
+            $domain->recordHistories()->reorder('type')->get(['type', 'record'])->map->only(['type', 'record'])->all(),
+        );
+    }
+
+    public function test_check_and_store_adds_no_history_when_the_records_are_unchanged(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+        $checker = $this->checker([
+            '_dmarc.example.com' => ['v=DMARC1; p=reject'],
+            'example.com' => ['v=spf1 -all'],
+        ]);
+
+        $checker->checkAndStore($domain);
+        $checker->checkAndStore($domain);
+
+        $this->assertDatabaseCount('domain_record_histories', 0);
+    }
+
     public function test_it_checks_the_authorisation_record_of_each_external_report_domain(): void
     {
         config(['dmarc.rua_address' => null]);
