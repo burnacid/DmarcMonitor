@@ -81,6 +81,7 @@ class DmarcRecordExportTest extends TestCase
         $this->domain('a.test', null, ['organisation_id' => $orgA->id]);
         $this->domain('b.test', null, ['organisation_id' => $orgB->id]);
         $user = User::factory()->editor()->create();
+        $user->update(['all_organisations' => false]);
         $user->organisations()->attach($orgA->id);
 
         $content = $this->actingAs($user)->get(route('admin.domains.dmarc-records'))->streamedContent();

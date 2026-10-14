@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Domain;
+use App\Support\CsvRow;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -26,14 +27,14 @@ class DmarcRecordExportController extends Controller
                 fputcsv($handle, ['Domain', 'Organisation', 'Host', 'Type', 'Value', 'Current Record']);
 
                 foreach ($records as $record) {
-                    fputcsv($handle, [
+                    fputcsv($handle, CsvRow::safe([
                         $record['domain'],
                         $record['organisation'],
                         $record['host'],
                         'TXT',
                         $record['value'],
                         $record['current'],
-                    ]);
+                    ]));
                 }
 
                 fclose($handle);

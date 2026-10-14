@@ -42,6 +42,7 @@ class OrganisationScopingTest extends TestCase
         AggregateReport::factory()->create(['domain_id' => $domainB->id, 'org_name' => 'Report B']);
 
         $user = User::factory()->create();
+        $user->update(['all_organisations' => false]);
         $user->organisations()->attach($orgA->id);
 
         Volt::actingAs($user)->test('reports.index')
@@ -60,6 +61,7 @@ class OrganisationScopingTest extends TestCase
         $reportB = AggregateReport::factory()->create(['domain_id' => $domainB->id]);
 
         $user = User::factory()->create();
+        $user->update(['all_organisations' => false]);
         $user->organisations()->attach($orgA->id);
 
         $this->actingAs($user)->get(route('reports.show', $reportB))->assertNotFound();
@@ -72,6 +74,7 @@ class OrganisationScopingTest extends TestCase
         $orgB = Organisation::factory()->create(['name' => 'Org B']);
 
         $editor = User::factory()->editor()->create();
+        $editor->update(['all_organisations' => false]);
         $editor->organisations()->attach($orgA->id);
 
         Volt::actingAs($editor)->test('admin.domains')
@@ -89,6 +92,7 @@ class OrganisationScopingTest extends TestCase
         $orgA = Organisation::factory()->create(['name' => 'Org A']);
 
         $editor = User::factory()->editor()->create();
+        $editor->update(['all_organisations' => false]);
         $editor->organisations()->attach($orgA->id);
 
         Volt::actingAs($editor)->test('admin.domains')
@@ -106,6 +110,7 @@ class OrganisationScopingTest extends TestCase
         $orgA = Organisation::factory()->create(['name' => 'Org A']);
 
         $editor = User::factory()->editor()->create();
+        $editor->update(['all_organisations' => false]);
         $editor->organisations()->attach($orgA->id);
 
         Volt::actingAs($editor)->test('admin.domains')
@@ -123,6 +128,7 @@ class OrganisationScopingTest extends TestCase
         $orgA = Organisation::factory()->create(['name' => 'Org A']);
 
         $editor = User::factory()->editor()->create();
+        $editor->update(['all_organisations' => false]);
         $editor->organisations()->attach($orgA->id);
 
         Volt::actingAs($editor)->test('admin.organisations')
@@ -150,6 +156,7 @@ class OrganisationScopingTest extends TestCase
 
         Volt::actingAs($admin)->test('admin.users')
             ->call('edit', $target->id)
+            ->set('all_organisations', false)
             ->set('organisation_ids', [$orgA->id])
             ->call('save');
 
@@ -158,9 +165,77 @@ class OrganisationScopingTest extends TestCase
 
         Volt::actingAs($admin)->test('admin.users')
             ->call('edit', $target->id)
-            ->set('organisation_ids', [])
+            ->set('all_organisations', true)
             ->call('save');
 
         $this->assertFalse($target->fresh()->hasOrganisationScope());
+        $this->assertCount(0, $target->fresh()->organisations);
+    }
+
+    public function test_a_restricted_user_needs_at_least_one_organisation(): void
+    {
+        $admin = User::factory()->create();
+        Organisation::factory()->create();
+        $target = User::factory()->viewer()->create();
+
+        Volt::actingAs($admin)->test('admin.users')
+            ->call('edit', $target->id)
+            ->set('all_organisations', false)
+            ->set('organisation_ids', [])
+            ->call('save')
+            ->assertHasErrors(['organisation_ids']);
+
+        $this->assertFalse($target->fresh()->hasOrganisationScope());
+    }
+
+    public function test_deleting_a_users_only_organisation_does_not_widen_their_access(): void
+    {
+        $orgA = Organisation::factory()->create(['name' => 'Org A']);
+        $orgB = Organisation::factory()->create(['name' => 'Org B']);
+        Domain::factory()->create(['organisation_id' => $orgB->id, 'fqdn' => 'b.example.com']);
+        AggregateReport::factory()->create(['domain_id' => Domain::factory()->create(['organisation_id' => $orgB->id])->id, 'org_name' => 'Report B']);
+
+        $editor = User::factory()->editor()->scopedTo($orgA)->create();
+
+        Volt::actingAs($editor)->test('admin.organisations')->call('delete', $orgA->id);
+
+        $editor->refresh();
+        $this->assertTrue($editor->hasOrganisationScope());
+        $this->assertSame([], $editor->scopedOrganisationIds());
+
+        Volt::actingAs($editor)->test('reports.index')
+            ->assertDontSee('Report B')
+            ->assertDontSee('b.example.com');
+        $this->actingAs($editor)->get(route('organisations.report-pdf', $orgB))->assertNotFound();
+    }
+
+    public function test_the_last_admin_with_access_to_all_organisations_keeps_it(): void
+    {
+        $admin = User::factory()->create();
+        $orgA = Organisation::factory()->create();
+
+        Volt::actingAs($admin)->test('admin.users')
+            ->call('edit', $admin->id)
+            ->set('all_organisations', false)
+            ->set('organisation_ids', [$orgA->id])
+            ->call('save')
+            ->assertHasErrors(['all_organisations']);
+
+        $this->assertFalse($admin->fresh()->hasOrganisationScope());
+    }
+
+    public function test_the_migration_keeps_full_access_for_existing_users_without_organisations(): void
+    {
+        $orgA = Organisation::factory()->create();
+        $unscoped = User::factory()->create(['all_organisations' => false]);
+        $scoped = User::factory()->create(['all_organisations' => false]);
+        $scoped->organisations()->attach($orgA->id);
+
+        $migration = require database_path('migrations/2026_10_14_182158_add_all_organisations_to_users_table.php');
+        $migration->down();
+        $migration->up();
+
+        $this->assertFalse($unscoped->fresh()->hasOrganisationScope());
+        $this->assertTrue($scoped->fresh()->hasOrganisationScope());
     }
 }

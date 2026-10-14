@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Password;
 use Laravel\Passkeys\Contracts\PasskeyUser;
 use Laravel\Passkeys\PasskeyAuthenticatable;
 
-#[Fillable(['name', 'email', 'password', 'role'])]
+#[Fillable(['name', 'email', 'password', 'role', 'all_organisations'])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
 class User extends Authenticatable implements PasskeyUser
 {
@@ -35,6 +35,7 @@ class User extends Authenticatable implements PasskeyUser
             'two_factor_secret' => 'encrypted',
             'two_factor_recovery_codes' => 'encrypted:array',
             'two_factor_confirmed_at' => 'datetime',
+            'all_organisations' => 'boolean',
         ];
     }
 
@@ -99,17 +100,19 @@ class User extends Authenticatable implements PasskeyUser
     }
 
     /**
-     * Whether this user is restricted to specific organisations. A user with
-     * no organisations assigned is unscoped and can access everything.
+     * Whether this user is restricted to specific organisations. Access to
+     * every organisation has to be granted explicitly (all_organisations), so
+     * a restricted user without organisations sees nothing rather than
+     * everything.
      */
     public function hasOrganisationScope(): bool
     {
-        return $this->organisations()->exists();
+        return ! $this->all_organisations;
     }
 
     /**
-     * The organisation IDs this user is restricted to, or null if the user
-     * is unscoped (full access to all organisations).
+     * The organisation IDs this user is restricted to (possibly none), or
+     * null if the user has access to all organisations.
      *
      * @return array<int>|null
      */

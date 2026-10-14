@@ -89,6 +89,7 @@ new #[Layout('layouts.app')] class extends Component
 
         return [
             'isEnabled' => PublicDashboardSetting::isEnabled(),
+            'trustsAnyProxy' => trim((string) config('app.trusted_proxies')) === '*',
             'allowedIps' => DashboardAllowedIp::orderBy('address')->get(),
             'currentIp' => $currentIp,
             'currentIpAllowed' => DashboardAllowedIp::allows($currentIp),
@@ -128,6 +129,12 @@ new #[Layout('layouts.app')] class extends Component
                     @endif
                 </p>
             </div>
+
+            @if ($trustsAnyProxy && $allowedIps->isNotEmpty())
+                <div class="rounded-md bg-amber-50 dark:bg-amber-950 p-4 text-sm text-amber-800 dark:text-amber-200">
+                    {{ __('TRUSTED_PROXIES is set to "*", so the X-Forwarded-For header of every request is believed. Anyone who can reach the app without going through your reverse proxy can pretend to come from an allowed address. Set TRUSTED_PROXIES to the address of your proxy (or the Docker network range) instead.') }}
+                </div>
+            @endif
 
             <div class="flex justify-end">
                 <x-primary-button wire:click="create">{{ __('Add address') }}</x-primary-button>

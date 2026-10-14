@@ -46,6 +46,7 @@ class DashboardSourcesExportTest extends TestCase
         $domainB = Domain::factory()->create(['organisation_id' => $orgB->id]);
 
         $user = User::factory()->create();
+        $user->update(['all_organisations' => false]);
         $user->organisations()->attach($orgA->id);
 
         $this->actingAs($user)
@@ -59,6 +60,7 @@ class DashboardSourcesExportTest extends TestCase
         $orgB = Organisation::factory()->create();
 
         $user = User::factory()->create();
+        $user->update(['all_organisations' => false]);
         $user->organisations()->attach($orgA->id);
 
         $this->actingAs($user)

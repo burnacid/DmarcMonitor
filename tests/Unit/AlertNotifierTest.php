@@ -7,6 +7,7 @@ use App\Models\AlertEvent;
 use App\Models\AlertRule;
 use App\Models\Domain;
 use App\Services\Alerts\AlertNotifier;
+use App\Support\OutboundUrl;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -63,5 +64,47 @@ class AlertNotifierTest extends TestCase
 
         Mail::assertQueued(AlertTriggered::class);
         $this->assertEquals(['in_app', 'email'], $event->fresh()->notified_channels);
+    }
+
+    public function test_a_webhook_whose_host_now_resolves_to_a_private_address_is_not_sent(): void
+    {
+        Http::fake();
+        $this->app->instance(OutboundUrl::class, new OutboundUrl(fn (string $host) => ['10.0.0.5']));
+
+        $domain = Domain::factory()->create();
+        $rule = AlertRule::factory()->create([
+            'organisation_id' => $domain->organisation_id,
+            'channels' => ['webhook'],
+            'notify_emails' => null,
+            'webhook_url' => 'https://hooks.example.com/dmarc',
+        ]);
+        $event = $this->event($rule, $domain);
+
+        app(AlertNotifier::class)->notify($event, $rule);
+
+        Http::assertNothingSent();
+        $this->assertEquals([], $event->fresh()->notified_channels);
+    }
+
+    public function test_a_webhook_redirect_is_not_followed(): void
+    {
+        Http::fake([
+            'https://hooks.example.com/*' => Http::response('', 302, ['Location' => 'http://169.254.169.254/latest/meta-data/']),
+            '*' => Http::response('metadata'),
+        ]);
+
+        $domain = Domain::factory()->create();
+        $rule = AlertRule::factory()->create([
+            'organisation_id' => $domain->organisation_id,
+            'channels' => ['webhook'],
+            'notify_emails' => null,
+            'webhook_url' => 'https://hooks.example.com/dmarc',
+        ]);
+        $event = $this->event($rule, $domain);
+
+        app(AlertNotifier::class)->notify($event, $rule);
+
+        Http::assertSentCount(1);
+        $this->assertEquals([], $event->fresh()->notified_channels);
     }
 }

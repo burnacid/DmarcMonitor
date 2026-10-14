@@ -71,6 +71,7 @@ class ReportAuthorizationExportTest extends TestCase
         $this->domainWithAuthorizations('a.test', ['burnacid.com' => false], ['organisation_id' => $orgA->id]);
         $this->domainWithAuthorizations('b.test', ['burnacid.com' => false], ['organisation_id' => $orgB->id]);
         $user = User::factory()->editor()->create();
+        $user->update(['all_organisations' => false]);
         $user->organisations()->attach($orgA->id);
 
         $content = $this->actingAs($user)->get(route('admin.domains.report-authorizations'))->streamedContent();

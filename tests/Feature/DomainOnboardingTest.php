@@ -55,6 +55,7 @@ class DomainOnboardingTest extends TestCase
         $own = Organisation::factory()->create();
         $other = Organisation::factory()->create();
         $user = User::factory()->create();
+        $user->update(['all_organisations' => false]);
         $user->organisations()->attach($own->id);
 
         Volt::actingAs($user)->test('admin.domains')
