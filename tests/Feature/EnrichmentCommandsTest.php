@@ -57,13 +57,15 @@ class EnrichmentCommandsTest extends TestCase
     public function test_backfill_command_uses_cache_to_avoid_redundant_dns_lookups(): void
     {
         $calls = 0;
-        $this->app->bind(IpEnrichmentService::class, fn () => new IpEnrichmentService(
-            function (string $ip) use (&$calls) {
+        // A full closure, not fn(): arrow functions capture by value, so the
+        // inner reference would count into a copy of $calls.
+        $this->app->bind(IpEnrichmentService::class, function () use (&$calls) {
+            return new IpEnrichmentService(function (string $ip) use (&$calls) {
                 $calls++;
 
                 return 'mail.example.com';
-            }
-        ));
+            });
+        });
 
         // Pre-seed the cache for one of the two IPs.
         IpEnrichmentCache::create([
