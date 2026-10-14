@@ -8,7 +8,9 @@
     it (Major / Minor / Revision — writes the new version back, commits and
     tags it) or rebuild the existing version as-is. The tag is annotated with
     that version's section of CHANGELOG.md; if there is no such section, an
-    [Unreleased] section is renamed to the new version in the same commit. Either way, after
+    [Unreleased] section is renamed to the new version in the same commit.
+    After pushing, it can create a GitHub release for the tag with the same
+    notes (via the gh CLI, or GITHUB_TOKEN/GH_TOKEN when gh isn't installed). Either way, after
     confirmation it can merge to main and builds & pushes the image as
     burnacid/dmarc-monitor:<version> and :latest.
 
@@ -44,6 +46,54 @@ function Confirm-Step {
 
     $answer = Read-Host "$Message [y/N]"
     return $answer -match '^(y|yes)$'
+}
+
+# Creates a GitHub release for an already pushed tag, with the changelog
+# section as its notes. Uses the gh CLI when installed (and logged in),
+# otherwise the GitHub REST API with a token from GITHUB_TOKEN or GH_TOKEN.
+function New-GitHubRelease {
+    param(
+        [Parameter(Mandatory)][string]$Version,
+        [string]$Notes
+    )
+
+    $body = if ($Notes) { $Notes } else { "Version $Version" }
+
+    if (Get-Command 'gh' -ErrorAction SilentlyContinue) {
+        $notesFile = [IO.Path]::GetTempFileName()
+        try {
+            [IO.File]::WriteAllText($notesFile, $body, (New-Object System.Text.UTF8Encoding($false)))
+            Invoke-Native -Exe 'gh' -Arguments @('release', 'create', $Version, '--verify-tag', '--title', $Version, '--notes-file', $notesFile)
+        } finally {
+            Remove-Item -Path $notesFile -Force -ErrorAction SilentlyContinue
+        }
+
+        Write-Host "Created GitHub release $Version." -ForegroundColor Green
+
+        return
+    }
+
+    $token = if ($env:GITHUB_TOKEN) { $env:GITHUB_TOKEN } else { $env:GH_TOKEN }
+    if (-not $token) {
+        throw 'Neither the gh CLI (winget install GitHub.cli, then gh auth login) nor a GITHUB_TOKEN/GH_TOKEN environment variable is available.'
+    }
+
+    $remoteUrl = (git remote get-url origin).Trim()
+    if ($remoteUrl -notmatch 'github\.com[:/](?<owner>[^/]+)/(?<repo>[^/]+?)(\.git)?$') {
+        throw "origin ($remoteUrl) is not a GitHub repository."
+    }
+
+    $response = Invoke-RestMethod -Method Post `
+        -Uri "https://api.github.com/repos/$($Matches.owner)/$($Matches.repo)/releases" `
+        -Headers @{
+            Authorization = "Bearer $token"
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+        } `
+        -ContentType 'application/json; charset=utf-8' `
+        -Body ([Text.Encoding]::UTF8.GetBytes((@{ tag_name = $Version; name = $Version; body = $body } | ConvertTo-Json)))
+
+    Write-Host "Created GitHub release $Version`: $($response.html_url)" -ForegroundColor Green
 }
 
 # Returns the body of the "## [<Heading>]" section of the changelog (up to the
@@ -219,8 +269,19 @@ if ($doBump.StartsWith('B')) {
         Invoke-Native -Exe 'git' -Arguments @('push', 'origin', $currentBranch)
         Invoke-Native -Exe 'git' -Arguments @('push', 'origin', $newVersion)
         Write-Host 'Pushed.' -ForegroundColor Green
+
+        if (Confirm-Step "Create GitHub release $newVersion from the tag?") {
+            try {
+                New-GitHubRelease -Version $newVersion -Notes $releaseNotes
+            } catch {
+                Write-Host "Creating the GitHub release failed: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host 'The tag is pushed; create the release manually on GitHub.' -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host 'Skipped GitHub release.' -ForegroundColor Yellow
+        }
     } else {
-        Write-Host 'Skipped push; remember to push the commit and tag manually.' -ForegroundColor Yellow
+        Write-Host 'Skipped push (and GitHub release); remember to push the commit and tag manually.' -ForegroundColor Yellow
     }
 } else {
     $newVersion = $currentVersion
