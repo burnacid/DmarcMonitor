@@ -4,6 +4,14 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 
 ## [Unreleased]
 
+### Added
+
+- **Warning when a mailbox keeps failing**: when an active IMAP account or Microsoft 365 mailbox fails three polls in a row (about 15 minutes), for example because its password expired or access was revoked, every admin gets one email. The mailbox page shows a red banner with the error, the account's status shows "Failing", and the Settings menu shows a red count. Admins get one more email once the mailbox works again. Before, a failing mailbox only showed "Error" on its own page, so reports could stop arriving unnoticed.
+
+### Changed
+
+- Faster dashboard, overview, alerts and cleanup on large databases: aggregate reports are now indexed on the period they cover and on when they were received, and forensic reports on their arrival date. The indexes are added by the database migration when the container starts.
+
 ### Security
 
 - **Organisation access is now explicit.** Users have an "Access to all organisations" setting. Without it they see only the organisations picked for them, and at least one must be picked. Before, a user without organisations could see everything, so deleting a client's organisation gave that client's users access to all data, and an editor restricted to one organisation could gain full access by deleting it. Existing users without organisations get "Access to all organisations" on upgrade, so nobody's access changes. The Users page shows each user's access, and the last admin with access to all organisations keeps it.

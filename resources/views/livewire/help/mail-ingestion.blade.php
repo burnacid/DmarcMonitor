@@ -43,6 +43,7 @@ new #[Layout('layouts.app')] class extends Component
                 </ul>
                 <p>
                     {{ __('Each account shows Last polled and, if something went wrong, Last error, so you can see at a glance whether ingestion for a mailbox is healthy.') }}
+                    {{ __('When an active IMAP account or Microsoft 365 mailbox fails three polls in a row (about 15 minutes), it counts as failing: every admin gets one email, the mailbox page shows a red banner, and the Settings menu shows a red count. Once a poll succeeds again, admins get one more email and the warning disappears. A single failed poll, for example a short network problem, doesn\'t trigger anything.') }}
                 </p>
             </div>
 
