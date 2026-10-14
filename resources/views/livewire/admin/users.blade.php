@@ -32,6 +32,12 @@ new #[Layout('layouts.app')] class extends Component
      */
     public bool $sendInvite = true;
 
+    /**
+     * Access to every organisation, including ones added later. Without it
+     * the user only sees the organisations selected below.
+     */
+    public bool $all_organisations = false;
+
     /** @var array<int> */
     public array $organisation_ids = [];
 
@@ -40,10 +46,22 @@ new #[Layout('layouts.app')] class extends Component
         return $user->role === 'admin' && User::where('role', 'admin')->count() <= 1;
     }
 
+    /**
+     * The last admin with access to all organisations must keep it, or no one
+     * could see unassigned domains or grant that access again.
+     */
+    private function isLastFullAccessAdmin(User $user): bool
+    {
+        return $user->role === 'admin'
+            && $user->all_organisations
+            && User::where('role', 'admin')->where('all_organisations', true)->count() <= 1;
+    }
+
     public function create(): void
     {
         $this->reset(['editingId', 'name', 'email', 'password', 'organisation_ids', 'sendInvite']);
         $this->role = 'viewer';
+        $this->all_organisations = ! Organisation::exists();
         $this->dispatch('open-modal', 'user-form');
     }
 
@@ -55,6 +73,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->email = $user->email;
         $this->password = '';
         $this->role = $user->role;
+        $this->all_organisations = $user->all_organisations;
         $this->organisation_ids = $user->organisations()->pluck('organisations.id')->all();
         $this->dispatch('open-modal', 'user-form');
     }
@@ -66,12 +85,21 @@ new #[Layout('layouts.app')] class extends Component
             'email' => 'required|email|max:255|unique:users,email,'.$this->editingId,
             'password' => ($this->editingId || $this->sendInvite ? 'nullable' : 'required').'|string|min:8',
             'role' => 'required|in:'.implode(',', self::ROLES),
-            'organisation_ids' => 'array',
+            'all_organisations' => 'boolean',
+            'organisation_ids' => $this->all_organisations ? 'array' : 'array|min:1',
             'organisation_ids.*' => 'exists:organisations,id',
+        ], [
+            'organisation_ids.min' => __('Pick at least one organisation, or give access to all organisations.'),
         ]);
 
-        $organisationIds = $validated['organisation_ids'] ?? [];
+        $organisationIds = $validated['all_organisations'] ? [] : ($validated['organisation_ids'] ?? []);
         unset($validated['organisation_ids']);
+
+        if ($this->editingId && ! $validated['all_organisations'] && $this->isLastFullAccessAdmin(User::findOrFail($this->editingId))) {
+            $this->addError('all_organisations', __('At least one admin needs access to all organisations.'));
+
+            return;
+        }
 
         if ($this->editingId && $validated['role'] !== 'admin') {
             $existing = User::findOrFail($this->editingId);
@@ -114,7 +142,7 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         $this->dispatch('close-modal', 'user-form');
-        $this->reset(['editingId', 'name', 'email', 'password', 'organisation_ids']);
+        $this->reset(['editingId', 'name', 'email', 'password', 'organisation_ids', 'all_organisations']);
     }
 
     public function resendInvite(int $id): void
@@ -171,7 +199,7 @@ new #[Layout('layouts.app')] class extends Component
     public function with(): array
     {
         return [
-            'users' => User::orderBy('name')->paginate(15),
+            'users' => User::with('organisations:id,name')->orderBy('name')->paginate(15),
             'roles' => self::ROLES,
             'organisations' => Organisation::orderBy('name')->get(),
         ];
@@ -209,6 +237,7 @@ new #[Layout('layouts.app')] class extends Component
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Email') }}</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Verified') }}</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Role') }}</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Access') }}</th>
                             <th class="px-6 py-3"></th>
                         </tr>
                     </thead>
@@ -232,6 +261,15 @@ new #[Layout('layouts.app')] class extends Component
                                 <td data-label="{{ __('Role') }}" class="px-6 py-4 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                     <span class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">{{ ucfirst($user->role) }}</span>
                                 </td>
+                                <td data-label="{{ __('Access') }}" class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
+                                    @if ($user->all_organisations)
+                                        {{ __('All organisations') }}
+                                    @elseif ($user->organisations->isEmpty())
+                                        <span class="text-red-600 dark:text-red-400">{{ __('No organisations') }}</span>
+                                    @else
+                                        {{ $user->organisations->pluck('name')->join(', ') }}
+                                    @endif
+                                </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm space-x-3 max-md:px-0 max-md:py-0 max-md:pt-1 max-md:space-x-0 max-md:flex max-md:flex-wrap max-md:gap-3">
                                     <button wire:click="edit({{ $user->id }})" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Edit') }}</button>
                                     @if ($user->isInvitePending())
@@ -244,7 +282,7 @@ new #[Layout('layouts.app')] class extends Component
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="5" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No users yet.') }}</td>
+                                <td colspan="6" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No users yet.') }}</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -303,15 +341,26 @@ new #[Layout('layouts.app')] class extends Component
             </div>
 
             <div class="mt-6">
-                <x-input-label for="organisation_ids" :value="__('Restrict to organisations')" />
-                <select wire:model="organisation_ids" id="organisation_ids" multiple size="4" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
-                    @foreach ($organisations as $organisation)
-                        <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
-                    @endforeach
-                </select>
-                <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ __('Leave empty for unrestricted access to all organisations.') }}</p>
-                <x-input-error :messages="$errors->get('organisation_ids')" class="mt-2" />
+                <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input wire:model.live="all_organisations" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                    {{ __('Access to all organisations') }}
+                </label>
+                <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ __('Includes unassigned domains and organisations added later.') }}</p>
+                <x-input-error :messages="$errors->get('all_organisations')" class="mt-2" />
             </div>
+
+            @unless ($all_organisations)
+                <div class="mt-6">
+                    <x-input-label for="organisation_ids" :value="__('Organisations')" />
+                    <select wire:model="organisation_ids" id="organisation_ids" multiple size="4" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
+                        @foreach ($organisations as $organisation)
+                            <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
+                        @endforeach
+                    </select>
+                    <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ __('The user only sees these organisations. If an organisation is deleted, the user loses access to it.') }}</p>
+                    <x-input-error :messages="$errors->get('organisation_ids')" class="mt-2" />
+                </div>
+            @endunless
 
             <div class="mt-6 flex justify-end space-x-3">
                 <x-secondary-button type="button" x-on:click="show = false">{{ __('Cancel') }}</x-secondary-button>

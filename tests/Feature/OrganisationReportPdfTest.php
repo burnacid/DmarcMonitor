@@ -37,6 +37,7 @@ class OrganisationReportPdfTest extends TestCase
         $orgB = Organisation::factory()->create();
 
         $user = User::factory()->create();
+        $user->update(['all_organisations' => false]);
         $user->organisations()->attach($orgA->id);
 
         $this->actingAs($user)
@@ -49,6 +50,7 @@ class OrganisationReportPdfTest extends TestCase
         $org = Organisation::factory()->create();
 
         $user = User::factory()->create();
+        $user->update(['all_organisations' => false]);
         $user->organisations()->attach($org->id);
 
         $this->actingAs($user)
@@ -130,6 +132,7 @@ class OrganisationReportPdfTest extends TestCase
         $orgB = Organisation::factory()->create();
 
         $user = User::factory()->create(['role' => 'editor']);
+        $user->update(['all_organisations' => false]);
         $user->organisations()->attach($orgA->id);
 
         Volt::actingAs($user)->test('admin.organisations')

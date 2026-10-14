@@ -10,6 +10,7 @@ use App\Models\Organisation;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Volt\Volt;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class AlertRuleCrudTest extends TestCase
@@ -74,6 +75,62 @@ class AlertRuleCrudTest extends TestCase
             ->assertHasErrors(['webhook_url']);
     }
 
+    #[DataProvider('internalWebhookProvider')]
+    public function test_a_webhook_to_an_internal_address_is_rejected(string $url): void
+    {
+        $user = User::factory()->create();
+
+        Volt::actingAs($user)->test('admin.alert-rules')
+            ->call('create')
+            ->set('type', 'new_source_detected')
+            ->set('channels', ['webhook'])
+            ->set('webhook_url', $url)
+            ->call('save')
+            ->assertHasErrors(['webhook_url']);
+
+        $this->assertDatabaseCount('alert_rules', 0);
+    }
+
+    public static function internalWebhookProvider(): array
+    {
+        return [
+            'loopback' => ['http://127.0.0.1/hook'],
+            'cloud metadata' => ['http://169.254.169.254/latest/meta-data/'],
+            'private network' => ['https://192.168.1.10/hook'],
+            'ipv6 loopback' => ['http://[::1]/hook'],
+            'not http' => ['ftp://hooks.example.com/hook'],
+        ];
+    }
+
+    public function test_a_webhook_to_a_public_address_is_saved(): void
+    {
+        $user = User::factory()->create();
+
+        Volt::actingAs($user)->test('admin.alert-rules')
+            ->call('create')
+            ->set('type', 'new_source_detected')
+            ->set('channels', ['webhook'])
+            ->set('webhook_url', 'https://hooks.example.com/dmarc')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('alert_rules', ['webhook_url' => 'https://hooks.example.com/dmarc']);
+    }
+
+    public function test_internal_webhooks_are_allowed_when_private_networks_are_enabled(): void
+    {
+        config(['dmarc.webhooks.allow_private_networks' => true]);
+        $user = User::factory()->create();
+
+        Volt::actingAs($user)->test('admin.alert-rules')
+            ->call('create')
+            ->set('type', 'new_source_detected')
+            ->set('channels', ['webhook'])
+            ->set('webhook_url', 'http://192.168.1.10:5678/webhook/dmarc')
+            ->call('save')
+            ->assertHasNoErrors();
+    }
+
     public function test_at_least_one_email_is_required_when_the_email_channel_is_enabled(): void
     {
         $user = User::factory()->create();
@@ -126,6 +183,7 @@ class AlertRuleCrudTest extends TestCase
     {
         $org = Organisation::factory()->create();
         $editor = User::factory()->editor()->create();
+        $editor->update(['all_organisations' => false]);
         $editor->organisations()->attach($org->id);
 
         Volt::actingAs($editor)->test('admin.alert-rules')
@@ -143,6 +201,7 @@ class AlertRuleCrudTest extends TestCase
     {
         $org = Organisation::factory()->create();
         $editor = User::factory()->editor()->create();
+        $editor->update(['all_organisations' => false]);
         $editor->organisations()->attach($org->id);
 
         Volt::actingAs($editor)->test('admin.alert-rules')

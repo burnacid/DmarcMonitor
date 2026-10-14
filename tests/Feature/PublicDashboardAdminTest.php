@@ -20,6 +20,18 @@ class PublicDashboardAdminTest extends TestCase
         $this->actingAs(User::factory()->create())->get(route('admin.public-dashboard'))->assertOk();
     }
 
+    public function test_it_warns_when_any_proxy_is_trusted_while_an_allowlist_is_in_use(): void
+    {
+        $admin = User::factory()->create();
+        DashboardAllowedIp::factory()->create(['address' => '203.0.113.7']);
+
+        config(['app.trusted_proxies' => '10.0.0.2']);
+        Volt::actingAs($admin)->test('admin.public-dashboard')->assertDontSee('TRUSTED_PROXIES is set to');
+
+        config(['app.trusted_proxies' => '*']);
+        Volt::actingAs($admin)->test('admin.public-dashboard')->assertSee('TRUSTED_PROXIES is set to');
+    }
+
     public function test_admin_can_enable_and_disable_the_dashboard(): void
     {
         $admin = User::factory()->create();

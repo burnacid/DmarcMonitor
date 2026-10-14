@@ -143,7 +143,7 @@ There is no `.env` file in the image: every setting is a container environment v
 | Variable | Default | Description |
 | --- | --- | --- |
 | `RUN_MIGRATIONS` | `true` | Run `migrate --force` on start (web and all-in-one roles). Set `false` on additional replicas. |
-| `TRUSTED_PROXIES` | unset | Comma-separated proxy addresses, or `*`, whose `X-Forwarded-*` headers are trusted. Set it when a reverse proxy terminates HTTPS, otherwise generated links use `http://`. |
+| `TRUSTED_PROXIES` | unset | Comma-separated proxy addresses or ranges whose `X-Forwarded-*` headers are trusted. Set it when a reverse proxy terminates HTTPS, otherwise generated links use `http://`. Use the proxy's address (or the Docker network range) rather than `*`: with `*`, anyone who can reach the container directly can fake their IP and get past the wallboard's IP allowlist. |
 | `DMARC_SMTP_ENABLED` | `false` | Start the SMTP listener. |
 | `DMARC_SMTP_PUBLISHED_PORT` | `2525` | Host port for the `smtp` service in `compose.split.yaml` only (a compose variable, not read by the app). |
 
@@ -217,6 +217,8 @@ There is no `.env` file in the image: every setting is a container environment v
 | --- | --- | --- |
 | `DATA_RETENTION_DAYS` | `400` | Days of report data, resolved alert events, trashed domains, previous DMARC/SPF records and audit logs to keep. Mailboxes with "Delete messages older than the retention period" turned on are also cleaned up. |
 | `DMARC_RUA_ADDRESS` | unset | The report mailbox clients publish in their DMARC `rua` tag. Pre-filled by the DMARC record generator; domains whose record includes neither it nor the address of an active ingestion mailbox are flagged "Reports sent elsewhere". |
+| `DMARC_MAX_REPORT_BYTES` | `26214400` (25 MB) | Largest size an aggregate report may have after decompression. Larger (or crafted) gzip/zip files are rejected instead of being unpacked into memory. |
+| `DMARC_WEBHOOK_ALLOW_PRIVATE` | `false` | Alert webhooks may only go to public http(s) addresses. Set to `true` when a webhook has to reach a host on your own network, such as an n8n or Teams relay on the LAN. |
 | `DMARC_EML_IMPORT_PATH` | `/app/storage/app/dmarc-eml` | Base folder of the local `.eml`/`.msg` import: files are read from `inbox/` and moved to `processed/` or `failed/` inside it. |
 | `MAXMIND_LICENSE_KEY` | unset | MaxMind licence key; enables the weekly GeoLite2 download. Without it reverse DNS still works. |
 | `MAXMIND_ASN_DB_PATH` | `/app/storage/app/geoip/GeoLite2-ASN.mmdb` | Path of the GeoLite2 ASN database. |

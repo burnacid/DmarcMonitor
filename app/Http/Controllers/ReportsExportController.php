@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AggregateReportRecord;
+use App\Support\CsvRow;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -43,7 +44,7 @@ class ReportsExportController extends Controller
                     foreach ($records as $record) {
                         $report = $record->aggregateReport;
 
-                        fputcsv($handle, [
+                        fputcsv($handle, CsvRow::safe([
                             $report->domain?->fqdn,
                             $report->org_name,
                             $report->report_id,
@@ -60,7 +61,7 @@ class ReportsExportController extends Controller
                             $record->ptr_hostname,
                             $record->asn_org,
                             $record->country,
-                        ]);
+                        ]));
                     }
                 });
 

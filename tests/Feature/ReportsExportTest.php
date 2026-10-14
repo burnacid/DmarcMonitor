@@ -44,6 +44,18 @@ class ReportsExportTest extends TestCase
         );
     }
 
+    public function test_export_neutralises_values_that_a_spreadsheet_would_run_as_a_formula(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+        $report = AggregateReport::factory()->create(['domain_id' => $domain->id, 'org_name' => '=HYPERLINK("http://attacker.example","Click")']);
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id]);
+
+        $rows = $this->csvRows($this->actingAs($user)->get(route('reports.export')));
+
+        $this->assertSame('\'=HYPERLINK("http://attacker.example","Click")', $rows[1][1]);
+    }
+
     public function test_export_applies_the_same_filters_as_the_reports_list(): void
     {
         $user = User::factory()->create();
@@ -73,6 +85,7 @@ class ReportsExportTest extends TestCase
         AggregateReportRecord::factory()->create(['aggregate_report_id' => $reportB->id]);
 
         $user = User::factory()->create();
+        $user->update(['all_organisations' => false]);
         $user->organisations()->attach($orgA->id);
 
         // Crafting a domain_id filter for org B's domain should still yield nothing.

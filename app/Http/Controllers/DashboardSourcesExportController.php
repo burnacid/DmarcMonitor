@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Domain;
 use App\Services\Analytics\DmarcMetricsService;
+use App\Support\CsvRow;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -43,7 +44,7 @@ class DashboardSourcesExportController extends Controller
             ]);
 
             foreach ($service->groupedSourceBreakdown($domainId, $from, $to, $organisationId, $allowedDomainIds) as $group) {
-                fputcsv($handle, [
+                fputcsv($handle, CsvRow::safe([
                     $group['domain'],
                     $group['label'],
                     $group['ip_count'],
@@ -52,7 +53,7 @@ class DashboardSourcesExportController extends Controller
                     $group['spf_pass_pct'],
                     $group['dkim_pass_pct'],
                     $group['enforced'],
-                ]);
+                ]));
             }
 
             fclose($handle);

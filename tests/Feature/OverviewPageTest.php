@@ -73,6 +73,7 @@ class OverviewPageTest extends TestCase
         Domain::factory()->create(['organisation_id' => $other->id]);
         Domain::factory()->create(['organisation_id' => null]);
         $user = User::factory()->create();
+        $user->update(['all_organisations' => false]);
         $user->organisations()->attach($own->id);
 
         Volt::actingAs($user)->test('overview')
@@ -86,6 +87,7 @@ class OverviewPageTest extends TestCase
         $own = Organisation::factory()->create();
         $other = Organisation::factory()->create();
         $user = User::factory()->create();
+        $user->update(['all_organisations' => false]);
         $user->organisations()->attach($own->id);
 
         Livewire::withQueryParams(['organisation' => $own->id, 'days' => 90])->actingAs($user)->test('dashboard')

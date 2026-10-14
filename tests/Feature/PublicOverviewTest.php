@@ -40,6 +40,16 @@ class PublicOverviewTest extends TestCase
         $this->actingAs(User::factory()->create())->get(route('public.overview'))->assertNotFound();
     }
 
+    public function test_a_spoofed_forwarded_for_header_does_not_pass_the_allowlist_without_trusted_proxies(): void
+    {
+        DashboardAllowedIp::factory()->create(['address' => '203.0.113.7']);
+
+        $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.99'])
+            ->withHeader('X-Forwarded-For', '203.0.113.7')
+            ->get(route('public.overview'))
+            ->assertForbidden();
+    }
+
     public function test_it_is_disabled_until_an_admin_enables_it(): void
     {
         PublicDashboardSetting::query()->delete();
@@ -139,6 +149,7 @@ class PublicOverviewTest extends TestCase
         $otherDomain = Domain::factory()->create(['organisation_id' => $other->id, 'fqdn' => 'other-broken.test', 'dmarc_status' => 'missing']);
         AlertEvent::factory()->create(['domain_id' => $otherDomain->id]);
         $viewer = User::factory()->viewer()->create();
+        $viewer->update(['all_organisations' => false]);
         $viewer->organisations()->attach($own->id);
 
         $response = $this->actingAs($viewer)->withServerVariables(['REMOTE_ADDR' => '203.0.113.99'])

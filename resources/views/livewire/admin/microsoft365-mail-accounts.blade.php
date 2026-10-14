@@ -224,6 +224,7 @@ new #[Layout('layouts.app')] class extends Component
         $user = auth()->user();
 
         return [
+            'failingAccounts' => Microsoft365MailAccount::visibleTo($user)->failing()->orderBy('label')->get(),
             'accounts' => Microsoft365MailAccount::visibleTo($user)->withCount('domains')->orderBy('label')->paginate(15),
             'retentionDays' => config('dmarc.retention_days'),
             'domains' => Domain::visibleTo($user)->orderBy('fqdn')->get(),
@@ -254,6 +255,22 @@ new #[Layout('layouts.app')] class extends Component
                 <x-primary-button wire:click="create">{{ __('New Mailbox') }}</x-primary-button>
             </div>
 
+            @if ($failingAccounts->isNotEmpty())
+                <div class="mb-4 rounded-md bg-red-50 dark:bg-red-950 p-4 text-sm text-red-800 dark:text-red-200 space-y-1">
+                    <p class="font-medium">{{ trans_choice('{1} This mailbox keeps failing, so no reports are collected from it:|[2,*] These mailboxes keep failing, so no reports are collected from them:', $failingAccounts->count()) }}</p>
+                    <ul class="list-disc pl-5 space-y-1">
+                        @foreach ($failingAccounts as $failingAccount)
+                            <li>
+                                <span class="font-medium">{{ $failingAccount->label }}</span>
+                                — {{ __(':count failed polls in a row', ['count' => $failingAccount->consecutive_failures]) }}@if ($failingAccount->failure_notified_at), {{ __('since :time', ['time' => $failingAccount->failure_notified_at->diffForHumans()]) }}@endif:
+                                <span class="break-all">{{ $failingAccount->last_error }}</span>
+                            </li>
+                        @endforeach
+                    </ul>
+                    <p>{{ __('Admins have been emailed. Check the credentials with Edit and Test; the warning clears after the next successful poll.') }}</p>
+                </div>
+            @endif
+
             @if ($testResult)
                 <div class="mb-4 rounded-md bg-white dark:bg-gray-800 shadow-sm p-4 text-sm {{ $testResultIsError ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400' }}">
                     {{ $testResult }}
@@ -280,7 +297,9 @@ new #[Layout('layouts.app')] class extends Component
                                 <td data-label="{{ __('Domains') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $account->domains_count }}</td>
                                 <td data-label="{{ __('Last Polled') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $account->last_polled_at?->diffForHumans() ?? '—' }}</td>
                                 <td data-label="{{ __('Status') }}" class="px-6 py-4 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
-                                    @if ($account->last_error)
+                                    @if ($account->isFailing())
+                                        <span class="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900 px-2 py-0.5 text-xs font-medium text-red-800 dark:text-red-200" title="{{ $account->last_error }}">{{ __('Failing') }}</span>
+                                    @elseif ($account->last_error)
                                         <span class="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900 px-2 py-0.5 text-xs font-medium text-red-800 dark:text-red-200" title="{{ $account->last_error }}">{{ __('Error') }}</span>
                                     @elseif ($account->is_active)
                                         <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">{{ __('Active') }}</span>
