@@ -11,6 +11,7 @@ use App\Models\Organisation;
 use App\Models\PublicDashboardSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
@@ -101,6 +102,14 @@ class PublicOverviewTest extends TestCase
         $sources = $this->getWall()->assertOk()->viewData('failingSources');
 
         $this->assertSame(['198.51.100.1'], $sources->pluck('ips')->flatten(1)->pluck('source_ip')->all());
+    }
+
+    public function test_the_updated_time_carries_its_timezone_for_the_browser_to_convert(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-13 14:05:00', 'UTC'));
+        DashboardAllowedIp::factory()->create(['address' => '203.0.113.7']);
+
+        $this->getWall()->assertOk()->assertSee('<time id="updated-at" datetime="2026-10-13T14:05:00+00:00">14:05</time>', false);
     }
 
     public function test_cidr_ranges_are_matched(): void

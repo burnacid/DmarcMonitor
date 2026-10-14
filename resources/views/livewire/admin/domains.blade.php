@@ -460,6 +460,7 @@ new #[Layout('layouts.app')] class extends Component
         return match ($status) {
             'valid' => 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200',
             'weak', 'unknown' => 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200',
+            'too_many_lookups', 'broken_split' => 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200',
             'missing' => 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
             default => 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500',
         };
@@ -470,6 +471,8 @@ new #[Layout('layouts.app')] class extends Component
         return match ($status) {
             'valid' => __('Valid'),
             'weak' => __('Weak'),
+            'too_many_lookups' => __('Too many lookups'),
+            'broken_split' => __('Broken split'),
             'missing' => __('Missing'),
             'unknown' => __('Unknown'),
             default => __('Not checked'),
@@ -645,7 +648,12 @@ new #[Layout('layouts.app')] class extends Component
                                     </span>
                                 </td>
                                 <td data-label="{{ __('SPF') }}" class="px-6 py-4 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
-                                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $this->authStatusBadgeClass($domain->spf_status) }}">{{ $this->authStatusLabel($domain->spf_status) }}</span>
+                                    <span class="max-md:text-right">
+                                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $this->authStatusBadgeClass($domain->spf_status) }}">{{ $this->authStatusLabel($domain->spf_status) }}</span>
+                                        @if ($domain->spf_lookup_count !== null)
+                                            <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{{ __(':count/:max lookups', ['count' => $domain->spf_lookup_count, 'max' => \App\Services\Dns\DomainAuthenticationChecker::SPF_MAX_LOOKUPS]) }}</div>
+                                        @endif
+                                    </span>
                                 </td>
                                 <td data-label="{{ __('DKIM') }}" class="px-6 py-4 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                     <span class="max-md:text-right">
@@ -699,11 +707,23 @@ new #[Layout('layouts.app')] class extends Component
                                                         @endforeach
                                                     </ul>
                                                 @endif
+
+                                                <x-record-history :entries="$domain->recordHistories->where('type', \App\Models\DomainRecordHistory::TYPE_DMARC)" />
                                             </div>
                                             <div>
                                                 <h4 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('SPF') }}</h4>
                                                 <span class="mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $this->authStatusBadgeClass($domain->spf_status) }}">{{ $this->authStatusLabel($domain->spf_status) }}</span>
                                                 <p class="mt-2 text-xs font-mono break-all text-gray-600 dark:text-gray-300">{{ $domain->spf_record ?: __('No record found.') }}</p>
+                                                @if ($domain->spf_status === 'broken_split')
+                                                    <p class="mt-2 text-xs text-red-700 dark:text-red-400">{{ __('This record is split into strings that receivers join without a space, gluing two terms together, so SPF fails. End each string with a space or split it inside a term.') }}</p>
+                                                @elseif ($domain->spf_status === 'too_many_lookups')
+                                                    <p class="mt-2 text-xs text-red-700 dark:text-red-400">{{ __('This record needs :count DNS lookups; receivers stop at :max and treat SPF as failed. Flatten or remove includes.', ['count' => $domain->spf_lookup_count, 'max' => \App\Services\Dns\DomainAuthenticationChecker::SPF_MAX_LOOKUPS]) }}</p>
+                                                @endif
+                                                @if ($domain->spfRecordTooLong())
+                                                    <p class="mt-2 text-xs text-amber-700 dark:text-amber-400">{{ __('This record is :length characters long. Above :max the DNS answer may not fit in a single UDP packet and some receivers fail to fetch it.', ['length' => strlen($domain->spf_record), 'max' => \App\Services\Dns\DomainAuthenticationChecker::SPF_MAX_RECOMMENDED_LENGTH]) }}</p>
+                                                @endif
+
+                                                <x-record-history :entries="$domain->recordHistories->where('type', \App\Models\DomainRecordHistory::TYPE_SPF)" />
                                             </div>
                                             <div>
                                                 <h4 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('DKIM') }}</h4>

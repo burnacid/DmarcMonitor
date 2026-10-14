@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Dns\DomainAuthenticationChecker;
 use App\Support\DmarcRecord;
 use Database\Factories\DomainFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -16,7 +17,7 @@ class Domain extends Model
 
     protected $fillable = [
         'organisation_id', 'fqdn', 'is_active', 'notes',
-        'dmarc_status', 'dmarc_record', 'dmarc_report_authorizations', 'spf_status', 'spf_record',
+        'dmarc_status', 'dmarc_record', 'dmarc_report_authorizations', 'spf_status', 'spf_record', 'spf_lookup_count',
         'dkim_status', 'dkim_selector', 'dkim_record', 'dkim_selectors', 'dns_checked_at',
     ];
 
@@ -45,6 +46,23 @@ class Domain extends Model
         }
 
         return [];
+    }
+
+    /**
+     * The Dashboard filtered on this domain. The organisation is passed along
+     * because the Dashboard only lists the selected organisation's domains.
+     */
+    public function dashboardUrl(): string
+    {
+        return route('dashboard', array_filter([
+            'organisation' => $this->organisation_id,
+            'domain' => $this->id,
+        ]));
+    }
+
+    public function spfRecordTooLong(): bool
+    {
+        return strlen((string) $this->spf_record) > DomainAuthenticationChecker::SPF_MAX_RECOMMENDED_LENGTH;
     }
 
     /**
@@ -194,6 +212,14 @@ class Domain extends Model
     public function forensicReports()
     {
         return $this->hasMany(ForensicReport::class);
+    }
+
+    /**
+     * The DMARC and SPF records this domain published before, newest first.
+     */
+    public function recordHistories()
+    {
+        return $this->hasMany(DomainRecordHistory::class)->latest()->latest('id');
     }
 
     public function scopeVisibleTo(Builder $query, User $user): Builder

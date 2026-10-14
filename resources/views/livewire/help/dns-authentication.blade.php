@@ -58,6 +58,14 @@ new #[Layout('layouts.app')] class extends Component
                         <span>{{ __('No record was found in DNS for this mechanism.') }}</span>
                     </li>
                     <li class="flex items-start gap-2">
+                        <span class="mt-0.5 inline-flex items-center rounded-full bg-red-100 dark:bg-red-900 px-2 py-0.5 text-xs font-medium text-red-800 dark:text-red-200 shrink-0">{{ __('Too many lookups') }}</span>
+                        <span>{{ __('The SPF record needs more than :max DNS lookups (include, a, mx, ptr, exists and redirect, counted through nested includes). Receivers then return a permanent error and SPF fails for all mail.', ['max' => \App\Services\Dns\DomainAuthenticationChecker::SPF_MAX_LOOKUPS]) }}</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="mt-0.5 inline-flex items-center rounded-full bg-red-100 dark:bg-red-900 px-2 py-0.5 text-xs font-medium text-red-800 dark:text-red-200 shrink-0">{{ __('Broken split') }}</span>
+                        <span>{{ __('A TXT string holds at most 255 characters, so a longer SPF record is split into several strings. Receivers join them without adding spaces; when a string ends right before the next term starts (e.g. "…include:a.example" "include:b.example"), the two terms are glued together and SPF fails for all mail.') }}</span>
+                    </li>
+                    <li class="flex items-start gap-2">
                         <span class="mt-0.5 inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200 shrink-0">{{ __('Unknown') }}</span>
                         <span>{{ __('For DKIM specifically: no selector has been seen yet, so we don\'t know where to look in DNS. Once an aggregate report mentions a selector for this domain, a DNS lookup for it becomes possible.') }}</span>
                     </li>
@@ -66,6 +74,7 @@ new #[Layout('layouts.app')] class extends Component
                         <span>{{ __('This domain has never had a DNS check run.') }}</span>
                     </li>
                 </ul>
+                <p>{{ __('When a DNS check finds that the DMARC or SPF record has changed or been removed, the old record is kept. Expand a domain to see its "Previous records" under the current one, each with the date it was replaced. They are deleted after the data retention period (DATA_RETENTION_DAYS).') }}</p>
             </div>
 
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-4 text-sm text-gray-600 dark:text-gray-300">

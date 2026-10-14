@@ -6,7 +6,9 @@
 .DESCRIPTION
     Reads the current version from the VERSION file and asks whether to bump
     it (Major / Minor / Revision — writes the new version back, commits and
-    tags it) or rebuild the existing version as-is. Either way, after
+    tags it) or rebuild the existing version as-is. The tag is annotated with
+    that version's section of CHANGELOG.md; if there is no such section, an
+    [Unreleased] section is renamed to the new version in the same commit. Either way, after
     confirmation it can merge to main and builds & pushes the image as
     burnacid/dmarc-monitor:<version> and :latest.
 
@@ -21,6 +23,7 @@ $ErrorActionPreference = 'Stop'
 Set-Location -Path $PSScriptRoot
 
 $versionFile = Join-Path $PSScriptRoot 'VERSION'
+$changelogFile = Join-Path $PSScriptRoot 'CHANGELOG.md'
 $imageName = 'burnacid/dmarc-monitor'
 
 function Invoke-Native {
@@ -41,6 +44,43 @@ function Confirm-Step {
 
     $answer = Read-Host "$Message [y/N]"
     return $answer -match '^(y|yes)$'
+}
+
+# Returns the body of the "## [<Heading>]" section of the changelog (up to the
+# next "## " heading), or $null when there is no such section.
+function Get-ChangelogSection {
+    param(
+        [Parameter(Mandatory)][string]$Content,
+        [Parameter(Mandatory)][string]$Heading
+    )
+
+    $lines = $Content -split "`r?`n"
+    $start = -1
+
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match "^##\s+\[$([regex]::Escape($Heading))\]\s*$") {
+            $start = $i + 1
+            break
+        }
+    }
+
+    if ($start -lt 0) {
+        return $null
+    }
+
+    $end = $lines.Count
+    for ($i = $start; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match '^##\s') {
+            $end = $i
+            break
+        }
+    }
+
+    if ($end -le $start) {
+        return ''
+    }
+
+    return ($lines[$start..($end - 1)] -join "`n").Trim()
 }
 
 # --- Preconditions ----------------------------------------------------------
@@ -97,6 +137,48 @@ if ($doBump.StartsWith('B')) {
 
     $newVersion = "$major.$minor.$revision"
 
+    # --- Find the release notes in the changelog -------------------------------
+
+    # Read and written as UTF-8 without BOM explicitly: Windows PowerShell's
+    # Get-Content/Set-Content would otherwise use the ANSI code page.
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    $changelogContent = if (Test-Path $changelogFile) { [IO.File]::ReadAllText($changelogFile, $utf8NoBom) } else { $null }
+    $releaseNotes = $null
+    $renameUnreleased = $false
+
+    if ($null -eq $changelogContent) {
+        Write-Host "No CHANGELOG.md found; the tag will have no release notes." -ForegroundColor Yellow
+    } else {
+        $releaseNotes = Get-ChangelogSection -Content $changelogContent -Heading $newVersion
+        $unreleasedNotes = Get-ChangelogSection -Content $changelogContent -Heading 'Unreleased'
+
+        if ($null -eq $releaseNotes -and $null -ne $unreleasedNotes) {
+            # The [Unreleased] section becomes this version's section.
+            $releaseNotes = $unreleasedNotes
+            $renameUnreleased = $true
+            Write-Host "CHANGELOG.md: [Unreleased] will be renamed to [$newVersion]." -ForegroundColor Cyan
+        } elseif ($null -ne $releaseNotes -and $null -ne $unreleasedNotes) {
+            Write-Host "CHANGELOG.md already has a [$newVersion] section; [Unreleased] is left as it is." -ForegroundColor Yellow
+        } elseif ($null -eq $releaseNotes) {
+            Write-Host "CHANGELOG.md has no [$newVersion] or [Unreleased] section." -ForegroundColor Yellow
+        }
+
+        if (-not $releaseNotes) {
+            $releaseNotes = $null
+            if (-not (Confirm-Step "Continue without release notes in the tag?")) {
+                Write-Host 'Aborted.' -ForegroundColor Yellow
+                exit 1
+            }
+        }
+    }
+
+    if ($releaseNotes) {
+        Write-Host ''
+        Write-Host "Release notes for ${newVersion}:" -ForegroundColor Cyan
+        Write-Host $releaseNotes
+        Write-Host ''
+    }
+
     if (-not (Confirm-Step "Bump version $currentVersion -> $newVersion, commit, tag, then build & push docker image?")) {
         Write-Host 'Aborted.' -ForegroundColor Yellow
         exit 1
@@ -106,10 +188,30 @@ if ($doBump.StartsWith('B')) {
 
     Set-Content -Path $versionFile -Value $newVersion -NoNewline
     Add-Content -Path $versionFile -Value ''
-
     Invoke-Native -Exe 'git' -Arguments @('add', 'VERSION')
+
+    if ($renameUnreleased) {
+        $renamedChangelog = [regex]::Replace($changelogContent, '(?m)^##[ \t]+\[Unreleased\][ \t]*(?=\r?$)', "## [$newVersion]", 1)
+        [IO.File]::WriteAllText($changelogFile, $renamedChangelog, $utf8NoBom)
+        Invoke-Native -Exe 'git' -Arguments @('add', 'CHANGELOG.md')
+    }
+
     Invoke-Native -Exe 'git' -Arguments @('commit', '-m', "Bump version to $newVersion")
-    Invoke-Native -Exe 'git' -Arguments @('tag', $newVersion)
+
+    if ($releaseNotes) {
+        # Annotated tag carrying the release notes. --cleanup=whitespace keeps
+        # the "### Added" style headings, which the default mode would strip
+        # as comment lines.
+        $tagMessageFile = [IO.Path]::GetTempFileName()
+        try {
+            [IO.File]::WriteAllText($tagMessageFile, "Version $newVersion`n`n$releaseNotes`n", $utf8NoBom)
+            Invoke-Native -Exe 'git' -Arguments @('tag', '-a', $newVersion, '-F', $tagMessageFile, '--cleanup=whitespace')
+        } finally {
+            Remove-Item -Path $tagMessageFile -Force -ErrorAction SilentlyContinue
+        }
+    } else {
+        Invoke-Native -Exe 'git' -Arguments @('tag', '-a', $newVersion, '-m', "Version $newVersion")
+    }
 
     Write-Host "Committed and tagged $newVersion." -ForegroundColor Green
 

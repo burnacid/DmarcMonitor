@@ -76,6 +76,69 @@ class DomainAuthenticationCheckerTest extends TestCase
         $this->assertNull($result['spf_record']);
     }
 
+    public function test_it_counts_spf_lookups_through_nested_includes(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+
+        $result = $this->checker([
+            'example.com' => ['v=spf1 a mx ip4:192.0.2.1 include:_spf.vendor.test -all'],
+            '_spf.vendor.test' => ['v=spf1 include:_netblocks.vendor.test exists:%{i}.check.vendor.test ~all'],
+            '_netblocks.vendor.test' => ['v=spf1 ip4:198.51.100.0/24 ~all'],
+        ])->check($domain);
+
+        $this->assertEquals('valid', $result['spf_status']);
+        $this->assertSame(5, $result['spf_lookup_count']);
+    }
+
+    public function test_it_flags_an_spf_record_needing_more_than_ten_lookups(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+        $includes = collect(range(1, 6))->map(fn (int $i) => "include:_spf{$i}.vendor.test")->implode(' ');
+
+        $result = $this->checker(array_merge(
+            ['example.com' => ["v=spf1 mx {$includes} ~all"]],
+            collect(range(1, 6))->mapWithKeys(fn (int $i) => ["_spf{$i}.vendor.test" => ['v=spf1 a ~all']])->all(),
+        ))->check($domain);
+
+        $this->assertEquals('too_many_lookups', $result['spf_status']);
+        $this->assertGreaterThan(10, $result['spf_lookup_count']);
+    }
+
+    public function test_a_split_spf_record_is_joined_and_valid_when_split_inside_a_term(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+
+        $result = $this->checker([
+            'example.com' => [['v=spf1 include:_spf.goo', 'gle.com include:spf.protection.outlook.com ', 'include:mail.test -all']],
+        ])->check($domain);
+
+        $this->assertEquals('valid', $result['spf_status']);
+        $this->assertSame('v=spf1 include:_spf.google.com include:spf.protection.outlook.com include:mail.test -all', $result['spf_record']);
+    }
+
+    public function test_it_flags_a_split_spf_record_that_glues_two_terms_together(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+
+        $result = $this->checker([
+            'example.com' => [['v=spf1 include:_spf.google.com', 'include:spf.protection.outlook.com -all']],
+        ])->check($domain);
+
+        $this->assertEquals('broken_split', $result['spf_status']);
+    }
+
+    public function test_an_spf_include_loop_is_flagged_instead_of_recursing_forever(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+
+        $result = $this->checker([
+            'example.com' => ['v=spf1 include:loop.vendor.test -all'],
+            'loop.vendor.test' => ['v=spf1 include:example.com -all'],
+        ])->check($domain);
+
+        $this->assertEquals('too_many_lookups', $result['spf_status']);
+    }
+
     public function test_dkim_is_unknown_when_no_selector_has_ever_been_seen(): void
     {
         $domain = Domain::factory()->create(['fqdn' => 'example.com']);
@@ -189,6 +252,41 @@ class DomainAuthenticationCheckerTest extends TestCase
             'dkim_status' => 'unknown',
         ]);
         $this->assertNotNull($domain->fresh()->dns_checked_at);
+    }
+
+    public function test_check_and_store_keeps_a_changed_or_removed_record_in_the_history(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+
+        $this->checker([
+            '_dmarc.example.com' => ['v=DMARC1; p=none'],
+            'example.com' => ['v=spf1 -all'],
+        ])->checkAndStore($domain);
+
+        $this->assertDatabaseCount('domain_record_histories', 0);
+
+        $this->checker([
+            '_dmarc.example.com' => ['v=DMARC1; p=reject'],
+        ])->checkAndStore($domain);
+
+        $this->assertSame(
+            [['type' => 'dmarc', 'record' => 'v=DMARC1; p=none'], ['type' => 'spf', 'record' => 'v=spf1 -all']],
+            $domain->recordHistories()->reorder('type')->get(['type', 'record'])->map->only(['type', 'record'])->all(),
+        );
+    }
+
+    public function test_check_and_store_adds_no_history_when_the_records_are_unchanged(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+        $checker = $this->checker([
+            '_dmarc.example.com' => ['v=DMARC1; p=reject'],
+            'example.com' => ['v=spf1 -all'],
+        ]);
+
+        $checker->checkAndStore($domain);
+        $checker->checkAndStore($domain);
+
+        $this->assertDatabaseCount('domain_record_histories', 0);
     }
 
     public function test_it_checks_the_authorisation_record_of_each_external_report_domain(): void

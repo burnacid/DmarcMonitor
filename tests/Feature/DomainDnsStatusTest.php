@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AggregateReport;
 use App\Models\AggregateReportRecord;
 use App\Models\Domain;
+use App\Models\DomainRecordHistory;
 use App\Models\User;
 use App\Services\Dns\DomainAuthenticationChecker;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -91,6 +92,22 @@ class DomainDnsStatusTest extends TestCase
 
         $component->call('toggleExpand', $domain->id)
             ->assertDontSee('v=DKIM1; k=rsa; p=abc123');
+    }
+
+    public function test_expanding_a_domain_shows_its_previous_dmarc_and_spf_records(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::factory()->create(['dmarc_record' => 'v=DMARC1; p=reject']);
+        DomainRecordHistory::factory()->create(['domain_id' => $domain->id, 'record' => 'v=DMARC1; p=quarantine']);
+        DomainRecordHistory::factory()->spf()->create(['domain_id' => $domain->id, 'record' => 'v=spf1 include:old.example.com -all']);
+
+        Volt::actingAs($user)->test('admin.domains')
+            ->assertDontSee('v=DMARC1; p=quarantine')
+            ->call('toggleExpand', $domain->id)
+            ->assertSee('Previous records')
+            ->assertSee('v=DMARC1; p=quarantine')
+            ->assertSee('v=spf1 include:old.example.com -all')
+            ->assertSee('Until '.now()->toFormattedDateString());
     }
 
     public function test_expanded_domain_lists_all_dkim_selectors_seen_in_aggregate_reports(): void

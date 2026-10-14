@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Mail\AlertTriggered;
 use App\Models\AlertEvent;
 use App\Models\AlertRule;
 use App\Models\Domain;
@@ -170,5 +171,22 @@ class AlertRuleCrudTest extends TestCase
             ->call('resolve', $event->id);
 
         $this->assertNotNull($event->fresh()->resolved_at);
+    }
+
+    public function test_the_alert_domain_links_to_the_dashboard_filtered_on_that_domain(): void
+    {
+        $domain = Domain::factory()->create();
+        $event = AlertEvent::create([
+            'alert_rule_id' => AlertRule::factory()->create(['organisation_id' => $domain->organisation_id])->id,
+            'domain_id' => $domain->id,
+            'fired_at' => now(),
+            'dedup_key' => 'test-dedup-key',
+        ]);
+        $dashboardUrl = route('dashboard', ['organisation' => $domain->organisation_id, 'domain' => $domain->id]);
+
+        Volt::actingAs(User::factory()->create())->test('admin.alert-events')
+            ->assertSeeHtml('href="'.e($dashboardUrl).'"');
+
+        (new AlertTriggered($event))->assertSeeInHtml(e($dashboardUrl), false);
     }
 }

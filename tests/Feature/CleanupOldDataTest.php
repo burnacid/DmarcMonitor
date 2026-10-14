@@ -8,6 +8,7 @@ use App\Models\AlertEvent;
 use App\Models\AlertRule;
 use App\Models\AuditLog;
 use App\Models\Domain;
+use App\Models\DomainRecordHistory;
 use App\Models\ImapAccount;
 use App\Models\Microsoft365MailAccount;
 use App\Services\Graph\GraphIngestionService;
@@ -162,6 +163,22 @@ class CleanupOldDataTest extends TestCase
 
         $this->assertDatabaseMissing('audit_logs', ['id' => $old->id]);
         $this->assertDatabaseHas('audit_logs', ['id' => $recent->id]);
+    }
+
+    public function test_prunes_previous_dns_records_past_retention(): void
+    {
+        config(['dmarc.retention_days' => 400]);
+
+        $old = DomainRecordHistory::factory()->create();
+        $old->forceFill(['created_at' => now()->subDays(401)])->saveQuietly();
+
+        $recent = DomainRecordHistory::factory()->spf()->create();
+        $recent->forceFill(['created_at' => now()->subDays(10)])->saveQuietly();
+
+        $this->artisan('dmarc:cleanup');
+
+        $this->assertDatabaseMissing('domain_record_histories', ['id' => $old->id]);
+        $this->assertDatabaseHas('domain_record_histories', ['id' => $recent->id]);
     }
 
     public function test_deletes_old_mailbox_messages_only_for_active_accounts_that_opted_in(): void

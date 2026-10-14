@@ -2,6 +2,25 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
+## [1.4.0]
+
+### Added
+
+- **DMARC and SPF record history**: when a DNS check finds that a domain's DMARC or SPF record has changed or been removed, the old record is kept. Expand a domain on the Domains page to see its previous records under the current one, each with the date it was replaced. They are deleted after the data retention period (`DATA_RETENTION_DAYS`). The history starts at the first change after this update.
+- **SPF record checks**: the DNS check now flags SPF records that receivers can't evaluate, or may fail to fetch. Existing domains are checked at their next DNS check.
+  - **DNS lookup limit**: counts the DNS lookups the record needs (`include`, `a`, `mx`, `ptr`, `exists` and `redirect`, through nested includes). Receivers allow at most 10; above that SPF fails for all mail. The domain gets a red "Too many lookups" SPF badge and the issue "SPF exceeds 10 DNS lookups". The Domains page shows the lookup count under the SPF badge.
+  - **Broken split**: a TXT string holds at most 255 characters, so a longer record is split into several strings, which receivers join without adding spaces. When a string ends right before the next term starts (e.g. `"…include:a.example" "include:b.example"`), the two terms are glued together and SPF fails for all mail. The domain gets a red "Broken split" SPF badge and the issue "SPF record split incorrectly".
+  - **Record length**: a record over 450 characters gets the issue "SPF record too long", as its DNS answer may not fit in a single UDP packet and some receivers fail to fetch it.
+  - A domain with too many lookups or a broken split no longer counts as ready for a stricter DMARC policy.
+
+### Changed
+
+- The domain of an alert now links to the Dashboard filtered on that domain, on the Alert Events page and in alert emails. The "View Dashboard" button in alert emails opens that filtered view too.
+
+### Fixed
+
+- The "Updated" time on the wallboard showed UTC. It now shows the time in the wall screen's own timezone.
+
 ## [1.3.0]
 
 ### Added
