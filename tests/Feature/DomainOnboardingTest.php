@@ -112,4 +112,19 @@ class DomainOnboardingTest extends TestCase
             ->assertSee('broken.test')
             ->assertDontSee('fine.test');
     }
+
+    public function test_hide_inactive_filter_leaves_out_inactive_domains(): void
+    {
+        $user = User::factory()->create();
+        Domain::factory()->create(['fqdn' => 'active.test', 'is_active' => true]);
+        Domain::factory()->create(['fqdn' => 'dormant.test', 'is_active' => false]);
+
+        Volt::actingAs($user)->test('admin.domains')
+            ->assertSee('dormant.test')
+            ->set('hideInactive', true)
+            ->assertSee('active.test')
+            ->assertDontSee('dormant.test')
+            ->call('clearFilters')
+            ->assertSet('hideInactive', false);
+    }
 }

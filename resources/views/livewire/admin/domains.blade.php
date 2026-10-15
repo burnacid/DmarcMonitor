@@ -31,6 +31,9 @@ new #[Layout('layouts.app')] class extends Component
     #[Url(as: 'attention')]
     public bool $needsAttention = false;
 
+    #[Url(as: 'hide_inactive')]
+    public bool $hideInactive = false;
+
     /**
      * Set by the organisations page's "Add domains" link (?bulk=1); consumed
      * in mount() and reset, so the modal doesn't reopen on refresh.
@@ -101,9 +104,14 @@ new #[Layout('layouts.app')] class extends Component
         $this->resetPage();
     }
 
+    public function updatedHideInactive(): void
+    {
+        $this->resetPage();
+    }
+
     public function clearFilters(): void
     {
-        $this->reset(['search', 'organisationFilter', 'needsAttention']);
+        $this->reset(['search', 'organisationFilter', 'needsAttention', 'hideInactive']);
         $this->resetPage();
     }
 
@@ -435,7 +443,8 @@ new #[Layout('layouts.app')] class extends Component
             ->with('organisation')
             ->when(trim($this->search) !== '', fn ($query) => $query->where('fqdn', 'like', '%'.trim($this->search).'%'))
             ->when($this->organisationFilter === 'unassigned', fn ($query) => $query->whereNull('organisation_id'))
-            ->when(ctype_digit($this->organisationFilter), fn ($query) => $query->where('organisation_id', (int) $this->organisationFilter));
+            ->when(ctype_digit($this->organisationFilter), fn ($query) => $query->where('organisation_id', (int) $this->organisationFilter))
+            ->when($this->hideInactive, fn ($query) => $query->where('is_active', true));
 
         $attentionHealth = null;
 
@@ -535,7 +544,12 @@ new #[Layout('layouts.app')] class extends Component
                     {{ __('Needs attention') }}
                 </label>
 
-                @if ($search !== '' || $organisationFilter !== '' || $needsAttention)
+                <label class="inline-flex items-center gap-2 pb-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input wire:model.live="hideInactive" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                    {{ __('Hide inactive') }}
+                </label>
+
+                @if ($search !== '' || $organisationFilter !== '' || $needsAttention || $hideInactive)
                     <button type="button" wire:click="clearFilters" class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 pb-2">{{ __('Clear filters') }}</button>
                 @endif
 
@@ -796,7 +810,7 @@ new #[Layout('layouts.app')] class extends Component
                             @endif
                         @empty
                             <tr>
-                                <td colspan="8" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ $search !== '' || $organisationFilter !== '' || $needsAttention ? __('No domains match your filters.') : __('No domains yet.') }}</td>
+                                <td colspan="8" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ $search !== '' || $organisationFilter !== '' || $needsAttention || $hideInactive ? __('No domains match your filters.') : __('No domains yet.') }}</td>
                             </tr>
                         @endforelse
                     </tbody>
