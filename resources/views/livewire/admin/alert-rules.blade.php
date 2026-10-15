@@ -2,6 +2,7 @@
 
 use App\Models\AlertRule;
 use App\Models\Organisation;
+use App\Rules\PublicWebhookUrl;
 use App\Support\AuditLogger;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -91,7 +92,7 @@ new #[Layout('layouts.app')] class extends Component
             'lookback_window' => ['required', 'regex:/^\d+[hd]$/'],
             'channels' => 'required|array|min:1',
             'channels.*' => 'in:email,webhook,in_app',
-            'webhook_url' => 'nullable|url',
+            'webhook_url' => ['nullable', 'url', new PublicWebhookUrl],
             'is_active' => 'boolean',
         ]);
 

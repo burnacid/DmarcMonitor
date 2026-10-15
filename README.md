@@ -2,6 +2,64 @@
 
 Collects and analyses DMARC reports for your domains. Aggregate (RUA) and forensic (RUF) reports are fetched from IMAP or Microsoft 365 mailboxes, imported from local `.eml`/`.msg` files, or received over a built-in SMTP listener. The app shows them per organisation and domain, enriches source IPs with reverse DNS and GeoIP/ASN data, checks your DMARC/SPF/DKIM DNS records, and sends alerts. Built with Laravel, Livewire and Volt.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark-dashboard.png">
+  <img alt="Dashboard with message volume, DMARC/SPF/DKIM pass rates, pass rate over time, why DMARC fails and the top failing sources" src="docs/screenshots/dashboard.png">
+</picture>
+
+## Screenshots
+
+All screenshots use made-up demo data.
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/overview.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark-overview.png"><img alt="Overview page" src="docs/screenshots/overview.png"></picture></a>
+      <p><b>Overview</b>: one row per organisation with message volume, DMARC pass rate, published policies, domains needing attention and open alerts.</p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/domains.png"><img alt="Domains page" src="docs/screenshots/domains.png"></a>
+      <p><b>Domains</b>: DMARC, SPF and DKIM status per domain, the next step towards p=reject, and flags such as too many SPF lookups, missing DKIM or missing report authorisation.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/domain-details.png"><img alt="Expanded domain with records and enforcement checklist" src="docs/screenshots/domain-details.png"></a>
+      <p><b>Domain details</b>: the published records, DKIM selectors seen in reports, report authorisation and the checklist for moving to a stricter policy.</p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/record-generator.png"><img alt="DMARC record generator" src="docs/screenshots/record-generator.png"></a>
+      <p><b>DMARC record generator</b>: builds the record to publish, plus the authorisation record the report domain needs.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/record-history.png"><img alt="Domain with previous DMARC records" src="docs/screenshots/record-history.png"></a>
+      <p><b>Record history</b>: earlier DMARC and SPF records, with the date each was replaced.</p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/report-detail.png"><img alt="Aggregate report detail" src="docs/screenshots/report-detail.png"></a>
+      <p><b>Aggregate report</b>: every record with source IP, reverse DNS, ASN organisation, country and SPF/DKIM results.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/alert-events.png"><img alt="Alert events" src="docs/screenshots/alert-events.png"></a>
+      <p><b>Alerts</b>: pass rate drops, SPF/DKIM failure spikes, new sending sources and newly discovered domains, by email, webhook or in the app.</p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/forensic-reports.png"><img alt="Forensic reports" src="docs/screenshots/forensic-reports.png"></a>
+      <p><b>Forensic reports</b>: per-message failure reports, filterable by domain, source IP, date and subject.</p>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
+      <a href="docs/screenshots/wallboard.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark-wallboard.png"><img alt="Wallboard" src="docs/screenshots/wallboard.png"></picture></a>
+      <p><b>Wallboard</b> (<code>/wall</code>): a read-only overview for wall screens, available to logged-in users or to an IP allowlist.</p>
+    </td>
+  </tr>
+</table>
+
 ## Running with Docker
 
 The app ships as a single container image, [`burnacid/dmarc-monitor`](https://hub.docker.com/r/burnacid/dmarc-monitor) on Docker Hub (FrankenPHP, PHP 8.4, `linux/amd64`), that runs the web app, the scheduler (mailbox polling, local file import, cleanup, queue) and, optionally, the SMTP listener. Tags: `latest` and version tags such as `1.0.0`.
@@ -85,7 +143,7 @@ There is no `.env` file in the image: every setting is a container environment v
 | Variable | Default | Description |
 | --- | --- | --- |
 | `RUN_MIGRATIONS` | `true` | Run `migrate --force` on start (web and all-in-one roles). Set `false` on additional replicas. |
-| `TRUSTED_PROXIES` | unset | Comma-separated proxy addresses, or `*`, whose `X-Forwarded-*` headers are trusted. Set it when a reverse proxy terminates HTTPS, otherwise generated links use `http://`. |
+| `TRUSTED_PROXIES` | unset | Comma-separated proxy addresses or ranges whose `X-Forwarded-*` headers are trusted. Set it when a reverse proxy terminates HTTPS, otherwise generated links use `http://`. Use the proxy's address (or the Docker network range) rather than `*`: with `*`, anyone who can reach the container directly can fake their IP and get past the wallboard's IP allowlist. |
 | `DMARC_SMTP_ENABLED` | `false` | Start the SMTP listener. |
 | `DMARC_SMTP_PUBLISHED_PORT` | `2525` | Host port for the `smtp` service in `compose.split.yaml` only (a compose variable, not read by the app). |
 
@@ -159,6 +217,8 @@ There is no `.env` file in the image: every setting is a container environment v
 | --- | --- | --- |
 | `DATA_RETENTION_DAYS` | `400` | Days of report data, resolved alert events, trashed domains, previous DMARC/SPF records and audit logs to keep. Mailboxes with "Delete messages older than the retention period" turned on are also cleaned up. |
 | `DMARC_RUA_ADDRESS` | unset | The report mailbox clients publish in their DMARC `rua` tag. Pre-filled by the DMARC record generator; domains whose record includes neither it nor the address of an active ingestion mailbox are flagged "Reports sent elsewhere". |
+| `DMARC_MAX_REPORT_BYTES` | `26214400` (25 MB) | Largest size an aggregate report may have after decompression. Larger (or crafted) gzip/zip files are rejected instead of being unpacked into memory. |
+| `DMARC_WEBHOOK_ALLOW_PRIVATE` | `false` | Alert webhooks may only go to public http(s) addresses. Set to `true` when a webhook has to reach a host on your own network, such as an n8n or Teams relay on the LAN. |
 | `DMARC_EML_IMPORT_PATH` | `/app/storage/app/dmarc-eml` | Base folder of the local `.eml`/`.msg` import: files are read from `inbox/` and moved to `processed/` or `failed/` inside it. |
 | `MAXMIND_LICENSE_KEY` | unset | MaxMind licence key; enables the weekly GeoLite2 download. Without it reverse DNS still works. |
 | `MAXMIND_ASN_DB_PATH` | `/app/storage/app/geoip/GeoLite2-ASN.mmdb` | Path of the GeoLite2 ASN database. |

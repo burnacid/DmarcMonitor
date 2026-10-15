@@ -113,6 +113,7 @@ class AdminCrudTest extends TestCase
     {
         $own = Organisation::factory()->create();
         $user = User::factory()->editor()->create();
+        $user->update(['all_organisations' => false]);
         $user->organisations()->attach($own->id);
         $domain = Domain::factory()->create(['organisation_id' => Organisation::factory()->create()->id, 'is_active' => true]);
 
@@ -161,6 +162,7 @@ class AdminCrudTest extends TestCase
         $globex = Organisation::create(['name' => 'Globex']);
         Domain::create(['fqdn' => 'globex.test', 'organisation_id' => $globex->id]);
         $user = User::factory()->create();
+        $user->update(['all_organisations' => false]);
         $user->organisations()->attach($acme->id);
 
         Volt::actingAs($user)->test('admin.domains')

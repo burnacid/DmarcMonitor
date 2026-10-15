@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Organisation;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -31,6 +32,7 @@ class UserFactory extends Factory
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
             'role' => 'admin',
+            'all_organisations' => true,
         ];
     }
 
@@ -52,5 +54,14 @@ class UserFactory extends Factory
     public function viewer(): static
     {
         return $this->state(fn (array $attributes) => ['role' => 'viewer']);
+    }
+
+    /**
+     * Restrict the user to the given organisations instead of all of them.
+     */
+    public function scopedTo(Organisation ...$organisations): static
+    {
+        return $this->state(fn (array $attributes) => ['all_organisations' => false])
+            ->afterCreating(fn (User $user) => $user->organisations()->attach(collect($organisations)->pluck('id')));
     }
 }

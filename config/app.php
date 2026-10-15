@@ -68,6 +68,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Trusted Proxies
+    |--------------------------------------------------------------------------
+    |
+    | Comma-separated proxy addresses (or "*") whose X-Forwarded-* headers are
+    | trusted. bootstrap/app.php applies it; it's repeated here so the app can
+    | warn when "*" weakens the wallboard's IP allowlist.
+    |
+    */
+
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

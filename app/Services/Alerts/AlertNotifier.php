@@ -5,6 +5,7 @@ namespace App\Services\Alerts;
 use App\Mail\AlertTriggered;
 use App\Models\AlertEvent;
 use App\Models\AlertRule;
+use App\Support\OutboundUrl;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -12,6 +13,8 @@ use Throwable;
 
 class AlertNotifier
 {
+    public function __construct(private readonly OutboundUrl $outboundUrl) {}
+
     public function notify(AlertEvent $event, AlertRule $rule): void
     {
         $channels = $rule->channels ?? [];
@@ -41,8 +44,17 @@ class AlertNotifier
 
     private function sendWebhook(string $url, AlertEvent $event): bool
     {
+        // Checked again at send time: the host's DNS may point somewhere else
+        // than when the rule was saved. Redirects aren't followed, so a public
+        // URL can't bounce the request to an internal one.
+        if (! $this->outboundUrl->isAllowed($url)) {
+            Log::warning("Alert webhook for event [{$event->id}] was not sent: [{$url}] is not a public http(s) address.");
+
+            return false;
+        }
+
         try {
-            $response = Http::timeout(5)->post($url, [
+            $response = Http::timeout(5)->withoutRedirecting()->post($url, [
                 'alert_rule_id' => $event->alert_rule_id,
                 'domain_id' => $event->domain_id,
                 'domain' => $event->domain->fqdn,

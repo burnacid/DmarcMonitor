@@ -2,7 +2,30 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
-## [Unreleased]
+## [1.4.1]
+
+### Added
+
+- **Warning when a mailbox keeps failing**: when an active IMAP account or Microsoft 365 mailbox fails three polls in a row (about 15 minutes), for example because its password expired or access was revoked, every admin gets one email. The mailbox page shows a red banner with the error, the account's status shows "Failing", and the Settings menu shows a red count. Admins get one more email once the mailbox works again. Before, a failing mailbox only showed "Error" on its own page, so reports could stop arriving unnoticed.
+
+### Changed
+
+- Faster dashboard, overview, alerts and cleanup on large databases: aggregate reports are now indexed on the period they cover and on when they were received, and forensic reports on their arrival date. The indexes are added by the database migration when the container starts.
+
+### Security
+
+- **Organisation access is now explicit.** Users have an "Access to all organisations" setting. Without it they see only the organisations picked for them, and at least one must be picked. Before, a user without organisations could see everything, so deleting a client's organisation gave that client's users access to all data, and an editor restricted to one organisation could gain full access by deleting it. Existing users without organisations get "Access to all organisations" on upgrade, so nobody's access changes. The Users page shows each user's access, and the last admin with access to all organisations keeps it.
+- **Oversized reports are rejected.** Anyone can mail the report address, and a small crafted gzip or zip file could expand until the server ran out of memory. Reports larger than `DMARC_MAX_REPORT_BYTES` (default 25 MB) after decompression are now counted as failed instead.
+- **CSV exports can no longer run formulas.** Values from incoming reports (such as the reporting organisation or a hostname) that start with `=`, `+`, `-` or `@` are exported with a leading `'`, so a crafted report can't put a working formula in Excel.
+- **Alert webhooks only go to public addresses.** A webhook to a loopback, private or link-local address (such as the cloud metadata service at `169.254.169.254`) is refused when the rule is saved and again when the alert is sent, and redirects are not followed.
+- **Warning for `TRUSTED_PROXIES=*`.** With `*`, anyone who can reach the container directly can fake their IP address and get past the wallboard's IP allowlist. The Public Dashboard page now warns about this when an allowlist is in use, and the example configuration suggests the proxy's address instead.
+
+### Upgrade notes
+
+- Webhooks to hosts on your own network (for example an n8n or Teams relay on the LAN) are now blocked. Set `DMARC_WEBHOOK_ALLOW_PRIVATE=true` to allow them.
+- If you use `TRUSTED_PROXIES=*`, change it to your reverse proxy's address or network range.
+
+## [1.4.0]
 
 ### Added
 

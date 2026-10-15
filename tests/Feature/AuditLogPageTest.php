@@ -57,6 +57,7 @@ class AuditLogPageTest extends TestCase
         $orgA = Organisation::factory()->create();
         $orgB = Organisation::factory()->create();
         $admin = User::factory()->create();
+        $admin->update(['all_organisations' => false]);
         $admin->organisations()->attach($orgA->id);
 
         AuditLog::create(['action' => 'domain.created', 'description' => 'Org A entry', 'organisation_id' => $orgA->id]);

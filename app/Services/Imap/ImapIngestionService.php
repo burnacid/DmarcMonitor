@@ -140,10 +140,10 @@ class ImapIngestionService
                 Log::warning("IMAP poll for account [{$account->label}] stopped early after a batch failure: {$chunkFailure}");
             }
 
-            $account->update(['last_polled_at' => now(), 'last_error' => $chunkFailure]);
+            $account->recordPollResult($chunkFailure);
         } catch (Throwable $e) {
             Log::warning("IMAP poll failed for account [{$account->label}]: {$e->getMessage()}");
-            $account->update(['last_polled_at' => now(), 'last_error' => $e->getMessage()]);
+            $account->recordPollResult($e->getMessage());
         } finally {
             try {
                 $client->disconnect();

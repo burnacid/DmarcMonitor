@@ -20,6 +20,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Maximum report size
+    |--------------------------------------------------------------------------
+    |
+    | The largest size, in bytes, an aggregate report may have after
+    | decompression. Anyone can mail the report address, so this stops a small
+    | crafted gzip or zip file from expanding until memory runs out. Real
+    | reports are rarely more than a few megabytes.
+    |
+    */
+    'max_report_bytes' => (int) env('DMARC_MAX_REPORT_BYTES', 25 * 1024 * 1024),
+
+    /*
+    |--------------------------------------------------------------------------
     | Report address
     |--------------------------------------------------------------------------
     |
@@ -43,6 +56,21 @@ return [
     |
     */
     'eml_import_path' => env('DMARC_EML_IMPORT_PATH', storage_path('app/dmarc-eml')),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Alert webhooks
+    |--------------------------------------------------------------------------
+    |
+    | Alert webhooks may only go to public http(s) addresses, so an alert rule
+    | can't be used to reach internal services or the cloud metadata endpoint.
+    | Set DMARC_WEBHOOK_ALLOW_PRIVATE=true when webhooks have to reach a host
+    | on your own network (for example an n8n or Teams relay on the LAN).
+    |
+    */
+    'webhooks' => [
+        'allow_private_networks' => (bool) env('DMARC_WEBHOOK_ALLOW_PRIVATE', false),
+    ],
 
     /*
     |--------------------------------------------------------------------------

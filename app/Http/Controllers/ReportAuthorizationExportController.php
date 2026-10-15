@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Domain;
+use App\Support\CsvRow;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -26,14 +27,14 @@ class ReportAuthorizationExportController extends Controller
                 fputcsv($handle, ['Receiving Domain', 'Host', 'Type', 'Value', 'Client Domain', 'In DMARC Record']);
 
                 foreach ($records as $record) {
-                    fputcsv($handle, [
+                    fputcsv($handle, CsvRow::safe([
                         $record['report_domain'],
                         $record['host'],
                         'TXT',
                         'v=DMARC1',
                         $record['client_domain'],
                         $record['in_record'] ? 'yes' : 'no',
-                    ]);
+                    ]));
                 }
 
                 fclose($handle);

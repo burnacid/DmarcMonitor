@@ -38,6 +38,13 @@ new #[Layout('layouts.app')] class extends Component
             </div>
 
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-4 text-sm text-gray-600 dark:text-gray-300">
+                <h3 id="organisation-access" class="text-base font-medium text-gray-900 dark:text-gray-100">{{ __('Organisation access') }}</h3>
+                <p>
+                    {{ __('Besides a role, every user has organisation access. "Access to all organisations" covers every organisation, unassigned domains and organisations added later. Without it, the user only sees the organisations picked for them (at least one), whatever their role. If such an organisation is deleted, the user simply loses access to it. The Users page shows each user\'s access, and at least one admin always keeps access to all organisations.') }}
+                </p>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-4 text-sm text-gray-600 dark:text-gray-300">
                 <h3 id="invitations" class="text-base font-medium text-gray-900 dark:text-gray-100">{{ __('Inviting users') }}</h3>
                 <p>
                     {{ __('When an admin creates a user under Settings > Users, an invitation is mailed by default. The link lets the user choose their own password and stays valid for 7 days; until it is used the user shows as "Invite pending" and cannot sign in. Use "Resend invite" to send a fresh link, which replaces the old one. Untick the invitation option to set a password yourself instead.') }}
