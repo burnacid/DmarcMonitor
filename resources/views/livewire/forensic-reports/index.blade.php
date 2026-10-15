@@ -70,12 +70,7 @@ new #[Layout('layouts.app')] class extends Component
             <div class="flex flex-wrap items-end gap-3">
                 <div>
                     <x-input-label for="domain_id" :value="__('Domain')" />
-                    <select wire:model.live="domain_id" id="domain_id" class="mt-1 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
-                        <option value="">{{ __('All domains') }}</option>
-                        @foreach ($domains as $domain)
-                            <option value="{{ $domain->id }}">{{ $domain->fqdn }}</option>
-                        @endforeach
-                    </select>
+                    <x-searchable-select wire:model.live="domain_id" id="domain_id" :options="$domains->pluck('fqdn', 'id')" :placeholder="__('All domains')" class="mt-1" />
                 </div>
 
                 <div>

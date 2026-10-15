@@ -521,15 +521,13 @@ new #[Layout('layouts.app')] class extends Component
 
                 <div>
                     <x-input-label for="organisation_filter" :value="__('Organisation')" />
-                    <select wire:model.live="organisationFilter" id="organisation_filter" class="mt-1 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
-                        <option value="">{{ __('All organisations') }}</option>
-                        @unless ($organisationScoped)
-                            <option value="unassigned">{{ __('— Unassigned —') }}</option>
-                        @endunless
-                        @foreach ($organisations as $organisation)
-                            <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
-                        @endforeach
-                    </select>
+                    <x-searchable-select
+                        wire:model.live="organisationFilter"
+                        id="organisation_filter"
+                        :options="($organisationScoped ? [] : ['unassigned' => __('— Unassigned —')]) + $organisations->pluck('name', 'id')->all()"
+                        :placeholder="__('All organisations')"
+                        class="mt-1"
+                    />
                 </div>
 
                 <label class="inline-flex items-center gap-2 pb-2 text-sm text-gray-700 dark:text-gray-300">
@@ -811,7 +809,7 @@ new #[Layout('layouts.app')] class extends Component
         </div>
     </div>
 
-    <x-modal name="domain-form" focusable>
+    <x-modal name="domain-form" overflow-visible focusable>
         <form wire:submit="save" class="p-6">
             <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">
                 {{ $editingId ? __('Edit Domain') : __('New Domain') }}
@@ -825,16 +823,14 @@ new #[Layout('layouts.app')] class extends Component
 
             <div class="mt-6">
                 <x-input-label for="organisation_id" :value="__('Organisation')" />
-                <select wire:model="organisation_id" id="organisation_id" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
-                    @if ($organisationScoped)
-                        <option value="" disabled>{{ __('— Select organisation —') }}</option>
-                    @else
-                        <option value="">{{ __('— Unassigned —') }}</option>
-                    @endif
-                    @foreach ($organisations as $organisation)
-                        <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
-                    @endforeach
-                </select>
+                <x-searchable-select
+                    wire:model="organisation_id"
+                    id="organisation_id"
+                    :options="$organisations->pluck('name', 'id')"
+                    :placeholder="$organisationScoped ? __('— Select organisation —') : __('— Unassigned —')"
+                    :placeholder-selectable="! $organisationScoped"
+                    class="mt-1"
+                />
                 <x-input-error :messages="$errors->get('organisation_id')" class="mt-2" />
             </div>
 
@@ -856,7 +852,7 @@ new #[Layout('layouts.app')] class extends Component
         </form>
     </x-modal>
 
-    <x-modal name="domain-bulk-form" :show="$openBulkOnLoad" focusable>
+    <x-modal name="domain-bulk-form" :show="$openBulkOnLoad" overflow-visible focusable>
         <form wire:submit="saveBulk" class="p-6">
             <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ __('Bulk add domains') }}</h2>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ __('One domain per line, or separated by commas or spaces. Pasted URLs and wildcards are tidied up; domains that already exist are skipped.') }}</p>
@@ -869,16 +865,14 @@ new #[Layout('layouts.app')] class extends Component
 
             <div class="mt-6">
                 <x-input-label for="bulk_organisation_id" :value="__('Organisation')" />
-                <select wire:model="bulkOrganisationId" id="bulk_organisation_id" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
-                    @if ($organisationScoped)
-                        <option value="" disabled>{{ __('— Select organisation —') }}</option>
-                    @else
-                        <option value="">{{ __('— Unassigned —') }}</option>
-                    @endif
-                    @foreach ($organisations as $organisation)
-                        <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
-                    @endforeach
-                </select>
+                <x-searchable-select
+                    wire:model="bulkOrganisationId"
+                    id="bulk_organisation_id"
+                    :options="$organisations->pluck('name', 'id')"
+                    :placeholder="$organisationScoped ? __('— Select organisation —') : __('— Unassigned —')"
+                    :placeholder-selectable="! $organisationScoped"
+                    class="mt-1"
+                />
                 <x-input-error :messages="$errors->get('bulkOrganisationId')" class="mt-2" />
             </div>
 

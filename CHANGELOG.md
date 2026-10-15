@@ -16,6 +16,7 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 ### Changed
 
 - The domain of an alert now links to the Dashboard filtered on that domain, on the Alert Events page and in alert emails. The "View Dashboard" button in alert emails opens that filtered view too.
+- The organisation and domain dropdowns now have a search box: type to filter the list, then pick with the mouse or the arrow keys and Enter. This applies to the filters on the Dashboard, Reports, Forensic Reports and Domains pages, and to the organisation field when adding or editing domains, bulk adding domains and editing alert rules.
 
 ### Fixed
 

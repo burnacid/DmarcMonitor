@@ -188,19 +188,9 @@ new #[Layout('layouts.app')] class extends Component
 
             {{-- Filters --}}
             <div class="flex flex-wrap items-center gap-3">
-                <select wire:model.live="organisationId" class="border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
-                    <option value="">{{ __('All organisations') }}</option>
-                    @foreach ($organisations as $organisation)
-                        <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
-                    @endforeach
-                </select>
+                <x-searchable-select wire:model.live="organisationId" :options="$organisations->pluck('name', 'id')" :placeholder="__('All organisations')" />
 
-                <select wire:model.live="domainId" wire:key="domain-filter-{{ $organisationId ?? 'all' }}" class="border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
-                    <option value="">{{ __('All domains') }}</option>
-                    @foreach ($domains as $domain)
-                        <option value="{{ $domain->id }}">{{ $domain->fqdn }}</option>
-                    @endforeach
-                </select>
+                <x-searchable-select wire:model.live="domainId" wire:key="domain-filter-{{ $organisationId ?? 'all' }}" :options="$domains->pluck('fqdn', 'id')" :placeholder="__('All domains')" />
 
                 <div class="inline-flex rounded-md shadow-sm" role="group">
                     @foreach ([7 => '7d', 30 => '30d', 90 => '90d'] as $value => $label)
