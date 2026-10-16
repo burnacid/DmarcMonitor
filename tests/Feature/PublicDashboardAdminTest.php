@@ -49,6 +49,24 @@ class PublicDashboardAdminTest extends TestCase
         $this->assertSame(1, PublicDashboardSetting::count());
     }
 
+    public function test_admin_can_toggle_auto_scrolling(): void
+    {
+        $admin = User::factory()->create();
+
+        $this->assertTrue(PublicDashboardSetting::autoScrolls());
+
+        Volt::actingAs($admin)->test('admin.public-dashboard')->call('toggleAutoScroll');
+
+        $this->assertFalse(PublicDashboardSetting::autoScrolls());
+        $this->assertDatabaseHas('audit_logs', ['action' => 'public_dashboard.auto_scroll_disabled', 'user_id' => $admin->id]);
+
+        Volt::actingAs($admin)->test('admin.public-dashboard')->call('toggleAutoScroll');
+
+        $this->assertTrue(PublicDashboardSetting::autoScrolls());
+        $this->assertFalse(PublicDashboardSetting::isEnabled());
+        $this->assertSame(1, PublicDashboardSetting::count());
+    }
+
     public function test_admin_can_add_and_remove_addresses(): void
     {
         $admin = User::factory()->create();

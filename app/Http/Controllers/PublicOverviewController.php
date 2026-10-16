@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AlertEvent;
 use App\Models\Domain;
 use App\Models\Organisation;
+use App\Models\PublicDashboardSetting;
 use App\Models\ReportBranding;
 use App\Services\Analytics\DmarcMetricsService;
 use App\Services\Analytics\DomainHealthService;
@@ -75,6 +76,7 @@ class PublicOverviewController extends Controller
             'alertCount' => $openAlerts->count(),
             'failingSources' => $metrics->topFailingSources($sourceGroups, limit: self::FAILING_SOURCE_LIMIT),
             'logo' => ReportBranding::current()?->logoDataUri(forPdf: false),
+            'autoScroll' => PublicDashboardSetting::autoScrolls(),
         ]);
     }
 }

@@ -7,7 +7,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Whether the wallboard (/wall) is switched on. Only a single row is ever
+ * Whether the wallboard (/wall) is switched on, and whether its organisations
+ * panel scrolls by itself when it overflows. Only a single row is ever
  * stored; managed under Settings > Public Dashboard. Off until an admin
  * enables it.
  */
@@ -16,7 +17,7 @@ class PublicDashboardSetting extends Model
     /** @use HasFactory<PublicDashboardSettingFactory> */
     use HasFactory;
 
-    protected $fillable = ['is_enabled'];
+    protected $fillable = ['is_enabled', 'auto_scroll'];
 
     /**
      * @return array<string, string>
@@ -25,6 +26,7 @@ class PublicDashboardSetting extends Model
     {
         return [
             'is_enabled' => 'boolean',
+            'auto_scroll' => 'boolean',
         ];
     }
 
@@ -42,6 +44,19 @@ class PublicDashboardSetting extends Model
     {
         $setting = static::current() ?? new self;
         $setting->fill(['is_enabled' => $isEnabled])->save();
+
+        return $setting;
+    }
+
+    public static function autoScrolls(): bool
+    {
+        return static::current()?->auto_scroll ?? true;
+    }
+
+    public static function setAutoScroll(bool $autoScroll): self
+    {
+        $setting = static::current() ?? new self;
+        $setting->fill(['auto_scroll' => $autoScroll])->save();
 
         return $setting;
     }

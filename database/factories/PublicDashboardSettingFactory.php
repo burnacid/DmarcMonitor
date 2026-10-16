@@ -19,6 +19,7 @@ class PublicDashboardSettingFactory extends Factory
     {
         return [
             'is_enabled' => true,
+            'auto_scroll' => true,
         ];
     }
 

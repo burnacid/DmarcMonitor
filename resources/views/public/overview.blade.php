@@ -95,7 +95,7 @@
                             <span>{{ __('Organisations') }}</span>
                             <span class="text-xs font-normal text-gray-400 dark:text-gray-500">{{ trans_choice(':count needs attention|:count need attention', $problemGroups->count()) }}</span>
                         </h2>
-                        <div class="flex-1 lg:min-h-0 lg:overflow-hidden divide-y divide-gray-100 dark:divide-gray-700">
+                        <div @if ($autoScroll) id="organisations-scroll" @endif class="flex-1 lg:min-h-0 lg:overflow-hidden divide-y divide-gray-100 dark:divide-gray-700">
                             @foreach ($problemGroups as $group)
                                 <div class="px-4 py-2">
                                     <div class="flex items-center justify-between gap-2 text-sm">
@@ -202,6 +202,46 @@
                 localStorage.theme = isDark ? 'dark' : 'light';
                 document.documentElement.classList.toggle('dark', isDark);
             });
+
+            // Slowly scroll the organisations panel when it overflows: pause at the top,
+            // glide to the bottom, pause, then jump back to the top and start over.
+            const organisations = document.getElementById('organisations-scroll');
+
+            if (organisations && ! window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                const pixelsPerSecond = 20;
+                const pauseMs = 4000;
+                let position = 0;
+                let pausedUntil = performance.now() + pauseMs;
+                let previous = null;
+
+                const step = (now) => {
+                    const elapsed = previous === null ? 0 : now - previous;
+                    previous = now;
+                    const maxScroll = organisations.scrollHeight - organisations.clientHeight;
+
+                    if (maxScroll <= 0) {
+                        position = 0;
+                        organisations.scrollTop = 0;
+                    } else if (now >= pausedUntil) {
+                        if (position >= maxScroll) {
+                            position = 0;
+                            pausedUntil = now + pauseMs;
+                        } else {
+                            position = Math.min(maxScroll, position + pixelsPerSecond * elapsed / 1000);
+
+                            if (position >= maxScroll) {
+                                pausedUntil = now + pauseMs;
+                            }
+                        }
+
+                        organisations.scrollTop = position;
+                    }
+
+                    requestAnimationFrame(step);
+                };
+
+                requestAnimationFrame(step);
+            }
         </script>
     </body>
 </html>
