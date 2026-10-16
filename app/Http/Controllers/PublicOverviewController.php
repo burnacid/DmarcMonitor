@@ -30,7 +30,9 @@ class PublicOverviewController extends Controller
 
     public function __invoke(Request $request, DomainHealthService $healthService, DmarcMetricsService $metrics): View
     {
-        $days = in_array($request->integer('days'), [7, 30, 90], true) ? $request->integer('days') : 30;
+        $days = in_array($request->integer('days'), PublicDashboardSetting::DAY_RANGES, true)
+            ? $request->integer('days')
+            : PublicDashboardSetting::defaultDays();
 
         // Guests (allowlisted IPs) see everything; a logged-in user only what
         // their organisation scope allows, as on the Overview page.

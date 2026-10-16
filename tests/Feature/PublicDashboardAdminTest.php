@@ -67,6 +67,22 @@ class PublicDashboardAdminTest extends TestCase
         $this->assertSame(1, PublicDashboardSetting::count());
     }
 
+    public function test_admin_can_set_the_default_range(): void
+    {
+        $admin = User::factory()->create();
+
+        $this->assertSame(30, PublicDashboardSetting::defaultDays());
+
+        Volt::actingAs($admin)->test('admin.public-dashboard')->call('setDefaultDays', 90);
+
+        $this->assertSame(90, PublicDashboardSetting::defaultDays());
+        $this->assertDatabaseHas('audit_logs', ['action' => 'public_dashboard.default_days_changed', 'user_id' => $admin->id]);
+
+        Volt::actingAs($admin)->test('admin.public-dashboard')->call('setDefaultDays', 45);
+
+        $this->assertSame(90, PublicDashboardSetting::defaultDays());
+    }
+
     public function test_admin_can_add_and_remove_addresses(): void
     {
         $admin = User::factory()->create();

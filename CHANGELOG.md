@@ -16,6 +16,7 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 
   A record over 255 characters is shown split into strings that receivers join correctly. Nothing is changed in DNS: copy the record and publish it yourself.
 - **Auto-scrolling wallboard**: when the organisations on the wallboard don't fit on the screen, the panel now scrolls slowly to the bottom and starts again from the top, pausing at both ends. Turn it off under Settings > Public Dashboard ("Auto-scroll organisations"); it is on by default.
+- **Default wallboard range**: choose under Settings > Public Dashboard whether the wallboard shows 7, 30 or 90 days when opened without a range in its address (30 days by default). The 7d/30d/90d buttons on the wallboard itself still work as before.
 
 ### Changed
 

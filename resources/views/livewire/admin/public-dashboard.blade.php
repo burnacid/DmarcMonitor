@@ -94,6 +94,21 @@ new #[Layout('layouts.app')] class extends Component
         );
     }
 
+    public function setDefaultDays(int $days): void
+    {
+        if (! in_array($days, PublicDashboardSetting::DAY_RANGES, true)) {
+            return;
+        }
+
+        $setting = PublicDashboardSetting::setDefaultDays($days);
+
+        AuditLogger::record(
+            action: 'public_dashboard.default_days_changed',
+            description: 'Set the default range of the public dashboard to '.$days.' days',
+            subject: $setting,
+        );
+    }
+
     public function with(): array
     {
         $currentIp = request()->ip();
@@ -101,6 +116,7 @@ new #[Layout('layouts.app')] class extends Component
         return [
             'isEnabled' => PublicDashboardSetting::isEnabled(),
             'autoScroll' => PublicDashboardSetting::autoScrolls(),
+            'defaultDays' => PublicDashboardSetting::defaultDays(),
             'trustsAnyProxy' => trim((string) config('app.trusted_proxies')) === '*',
             'allowedIps' => DashboardAllowedIp::orderBy('address')->get(),
             'currentIp' => $currentIp,
@@ -136,6 +152,19 @@ new #[Layout('layouts.app')] class extends Component
                     @endif
                     <button type="button" wire:click="toggleAutoScroll" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ $autoScroll ? __('Turn off') : __('Turn on') }}</button>
                     <span class="text-xs text-gray-400 dark:text-gray-500">{{ __('Slowly scrolls the organisations panel when it does not fit on the screen.') }}</span>
+                </p>
+                <p class="flex flex-wrap items-center gap-2">
+                    <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('Default range') }}:</span>
+                    <span class="inline-flex rounded-md shadow-sm" role="group">
+                        @foreach (PublicDashboardSetting::DAY_RANGES as $value)
+                            <button type="button" wire:click="setDefaultDays({{ $value }})" @class([
+                                'px-3 py-1 text-xs font-medium border first:rounded-l-md last:rounded-r-md -ml-px first:ml-0',
+                                'bg-indigo-600 text-white border-indigo-600' => $defaultDays === $value,
+                                'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700' => $defaultDays !== $value,
+                            ])>{{ $value }}d</button>
+                        @endforeach
+                    </span>
+                    <span class="text-xs text-gray-400 dark:text-gray-500">{{ __('Shown when the wallboard address does not pick a range.') }}</span>
                 </p>
                 <p>
                     <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('URL') }}:</span>
