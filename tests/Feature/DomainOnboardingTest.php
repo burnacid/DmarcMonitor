@@ -20,7 +20,7 @@ class DomainOnboardingTest extends TestCase
     {
         parent::setUp();
 
-        $this->app->instance(DomainAuthenticationChecker::class, new DomainAuthenticationChecker(fn () => ['v=DMARC1; p=none', 'v=spf1 -all']));
+        $this->app->instance(DomainAuthenticationChecker::class, new DomainAuthenticationChecker(fn () => ['v=DMARC1; p=none', 'v=spf1 -all'], fn () => []));
     }
 
     public function test_bulk_add_creates_new_domains_and_reports_what_it_skipped(): void

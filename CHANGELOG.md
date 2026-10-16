@@ -15,11 +15,13 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
   - for a record over the limit, a combined fix that brings it within 10 lookups.
 
   A record over 255 characters is shown split into strings that receivers join correctly. Nothing is changed in DNS: copy the record and publish it yourself.
+- **Mail provider detection**: the DNS check now recognises Microsoft 365, Google Workspace, Proton Mail, Fastmail and iCloud Mail from a domain's MX records. An icon next to the domain name on the Domains page shows the detected provider. The DKIM selectors that provider signs with (for example `selector1` and `selector2` for Microsoft 365, `google` for Google Workspace) are checked even before an aggregate report has shown them. Expand a domain to see each expected `<selector>._domainkey` record marked as found or missing. When DKIM works but one of the expected selectors is missing, the domain gets a "DKIM selector missing" issue.
 - **Auto-scrolling wallboard**: when the organisations on the wallboard don't fit on the screen, the panel now scrolls slowly to the bottom and starts again from the top, pausing at both ends. Turn it off under Settings > Public Dashboard ("Auto-scroll organisations"); it is on by default.
 - **Default wallboard range**: choose under Settings > Public Dashboard whether the wallboard shows 7, 30 or 90 days when opened without a range in its address (30 days by default). The 7d/30d/90d buttons on the wallboard itself still work as before.
 
 ### Changed
 
+- DKIM for a domain whose mail provider was detected but whose expected selectors don't resolve now shows "Missing" instead of "Unknown", even before any aggregate report has arrived.
 - The "Previous records" history of a domain's DMARC and SPF records is now collapsed: click it to show the older records.
 - The SPF lookup count now uses the same evaluation as the SPF editor. It gives the exact number of lookups where it used to stop just past 10, and an include that loops back to the domain counts as too many lookups.
 - The "new sending source" alert now names sources by their ASN organisation. A source whose IP has no ASN is only reported, by its hostname or IP, once 24 hours have passed without an ASN turning up for that IP.
