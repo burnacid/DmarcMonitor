@@ -14,6 +14,9 @@ class AlertEvaluationService
     /** Most IPs listed on a "new sending source" alert; ip_count has the total. */
     private const int MAX_LISTED_SOURCE_IPS = 10;
 
+    /** How long a source without an ASN waits for one before it's reported by hostname or IP. */
+    private const int UNRESOLVED_SOURCE_GRACE_HOURS = 24;
+
     public function __construct(
         private readonly DmarcMetricsService $metrics,
         private readonly AlertNotifier $notifier,
@@ -96,16 +99,25 @@ class AlertEvaluationService
     /**
      * Fires once per sending source (named as on the Dashboard: ASN
      * organisation, PTR hostname or IP) that wasn't seen for the domain
-     * before the lookback window, however many IPs it uses.
+     * before the lookback window, however many IPs it uses. Sources without
+     * an ASN are held back for UNRESOLVED_SOURCE_GRACE_HOURS — evaluated over
+     * the window shifted back by that much — and only reported under their
+     * hostname or IP if no ASN turned up for their IPs in the meantime.
      */
     private function checkNewSources(AlertRule $rule, Domain $domain): void
     {
         $windowStart = $this->windowStart($rule->lookback_window);
+        $graceWindowStart = $windowStart->copy()->subHours(self::UNRESOLVED_SOURCE_GRACE_HOURS);
 
-        $known = $this->metrics->sourceNamesBefore($domain->id, $windowStart, 'created_at')->flip();
-        $candidates = $this->metrics->newSourceCandidates($domain->id, $windowStart, now(), 'created_at');
+        $knownBeforeWindow = $this->metrics->sourceNamesBefore($domain->id, $windowStart, 'created_at')->flip();
+        $knownBeforeGraceWindow = $this->metrics->sourceNamesBefore($domain->id, $graceWindowStart, 'created_at')->flip();
 
-        foreach ($candidates->reject(fn (array $ips, string $name) => $known->has($name)) as $name => $ips) {
+        $resolved = $this->metrics->newSourceCandidates($domain->id, $windowStart, now(), 'created_at')
+            ->reject(fn (array $ips, string $name) => $knownBeforeWindow->has($name));
+        $unresolved = $this->metrics->newSourceCandidates($domain->id, $graceWindowStart, now()->subHours(self::UNRESOLVED_SOURCE_GRACE_HOURS), 'created_at', asnResolved: false)
+            ->reject(fn (array $ips, string $name) => $knownBeforeGraceWindow->has($name));
+
+        foreach ($resolved->union($unresolved) as $name => $ips) {
             $dedupKey = hash('sha256', "{$rule->id}:{$domain->id}:new_source_name:{$name}");
 
             if (AlertEvent::where('dedup_key', $dedupKey)->exists()) {
