@@ -6,6 +6,7 @@ use App\Models\AggregateReportRecord;
 use App\Models\Domain;
 use App\Models\DomainRecordHistory;
 use App\Support\DmarcRecord;
+use App\Support\SpfRecord;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -171,8 +172,7 @@ class DomainAuthenticationChecker
         }
 
         $record = implode('', $strings);
-        $lookups = 0;
-        $this->countSpfLookups($record, $lookups, 0);
+        $lookups = $this->spfAnalyzer()->analyze($record, $fqdn)['lookups'];
 
         return [
             'spf_status' => match (true) {
@@ -187,12 +187,18 @@ class DomainAuthenticationChecker
 
     private function isSpfRecord(string $txt): bool
     {
-        return (bool) preg_match('/^v=spf1(\s|$)/i', $txt);
+        return SpfRecord::isSpfRecord($txt);
     }
 
-    private function spfRecord(string $hostname): ?string
+    /**
+     * Counting lookups only needs the TXT records of the includes, so the
+     * analyzer gets no answers for the address lookups it would also make.
+     */
+    private function spfAnalyzer(): SpfAnalyzer
     {
-        return $this->firstMatching($hostname, $this->isSpfRecord(...));
+        return new SpfAnalyzer(fn (string $hostname, int $type): array => $type === DNS_TXT
+            ? array_map(fn (string|array $record) => implode('', (array) $record), ($this->txtResolver)($hostname))
+            : []);
     }
 
     /**
@@ -214,43 +220,6 @@ class DomainAuthenticationChecker
         }
 
         return false;
-    }
-
-    /**
-     * Counts the include, a, mx, ptr, exists and redirect terms that each
-     * cost a DNS lookup, following include: and redirect= into the records
-     * they point at. Stops descending once the limit is exceeded, since the
-     * exact count past that point no longer matters.
-     */
-    private function countSpfLookups(string $record, int &$lookups, int $depth): void
-    {
-        $terms = array_map(
-            fn (string $term) => ltrim(strtolower($term), '+-~?'),
-            preg_split('/\s+/', trim($record)),
-        );
-        $hasAllMechanism = in_array('all', $terms, true);
-
-        foreach ($terms as $term) {
-            if (preg_match('/^(include:|redirect=)(.+)$/', $term, $matches)) {
-                if ($matches[1] === 'redirect=' && $hasAllMechanism) {
-                    continue;
-                }
-
-                $lookups++;
-
-                if ($lookups > self::SPF_MAX_LOOKUPS || $depth >= self::SPF_MAX_LOOKUPS || str_contains($matches[2], '%')) {
-                    continue;
-                }
-
-                $nested = $this->spfRecord($matches[2]);
-
-                if ($nested !== null) {
-                    $this->countSpfLookups($nested, $lookups, $depth + 1);
-                }
-            } elseif (preg_match('/^(a|mx|ptr|exists)([:\/]|$)/', $term)) {
-                $lookups++;
-            }
-        }
     }
 
     /**

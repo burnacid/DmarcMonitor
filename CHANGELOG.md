@@ -7,8 +7,19 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 ### Added
 
 - **Hide inactive domains**: tick "Hide inactive" on the Domains page to leave out domains that are switched off. The setting is kept in the page address, so a bookmarked or refreshed page keeps it, and "Clear filters" turns it off again.
+- **SPF editor**: expand a domain and click "SPF editor" (or "Fix lookups" when the record needs more than 10 DNS lookups) to build or change its SPF record. The lookup count is shown as you type, and so is what each term costs, including the includes nested inside it. Add terms, add common sending services with one click, and choose how other senders are treated (`-all`/`~all`/`?all`). Suggestions give a complete replacement record that needs fewer lookups:
+  - remove duplicate, broken or `ptr` terms;
+  - remove includes that none of the source IPs in the last 90 days of aggregate reports belong to;
+  - replace `a`/`mx` with their addresses;
+  - flatten includes into their `ip4`/`ip6` ranges;
+  - for a record over the limit, a combined fix that brings it within 10 lookups.
+
+  A record over 255 characters is shown split into strings that receivers join correctly. Nothing is changed in DNS: copy the record and publish it yourself.
 
 ### Changed
+
+- The "Previous records" history of a domain's DMARC and SPF records is now collapsed: click it to show the older records.
+- The SPF lookup count now uses the same evaluation as the SPF editor. It gives the exact number of lookups where it used to stop just past 10, and an include that loops back to the domain counts as too many lookups.
 
 - The organisation and domain dropdowns now have a search box: type to filter the list, then pick with the mouse or the arrow keys and Enter. This applies to the filters on the Dashboard, Reports, Forensic Reports and Domains pages, and to the organisation field when adding or editing domains, bulk adding domains and editing alert rules.
 

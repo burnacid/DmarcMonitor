@@ -104,7 +104,7 @@ class DomainDnsStatusTest extends TestCase
         Volt::actingAs($user)->test('admin.domains')
             ->assertDontSee('v=DMARC1; p=quarantine')
             ->call('toggleExpand', $domain->id)
-            ->assertSee('Previous records')
+            ->assertSee('Previous records (1)')
             ->assertSee('v=DMARC1; p=quarantine')
             ->assertSee('v=spf1 include:old.example.com -all')
             ->assertSee('Until '.now()->toFormattedDateString());

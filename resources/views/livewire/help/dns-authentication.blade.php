@@ -74,7 +74,13 @@ new #[Layout('layouts.app')] class extends Component
                         <span>{{ __('This domain has never had a DNS check run.') }}</span>
                     </li>
                 </ul>
-                <p>{{ __('When a DNS check finds that the DMARC or SPF record has changed or been removed, the old record is kept. Expand a domain to see its "Previous records" under the current one, each with the date it was replaced. They are deleted after the data retention period (DATA_RETENTION_DAYS).') }}</p>
+                <p>{{ __('When a DNS check finds that the DMARC or SPF record has changed or been removed, the old record is kept. Expand a domain and open "Previous records" under the current one to see them, each with the date it was replaced. They are deleted after the data retention period (DATA_RETENTION_DAYS).') }}</p>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-4 text-sm text-gray-600 dark:text-gray-300">
+                <h3 id="spf-editor" class="text-base font-medium text-gray-900 dark:text-gray-100">{{ __('The SPF editor') }}</h3>
+                <p>{{ __('Expand a domain and click "SPF editor" (or "Fix lookups" when the record needs too many) to build or change its SPF record. Each term shows how many DNS lookups it costs, including the includes nested inside it, and the total is checked against the limit of :max as you type.', ['max' => \App\Services\Dns\DomainAuthenticationChecker::SPF_MAX_LOOKUPS]) }}</p>
+                <p>{{ __('Suggestions offer a complete replacement record: removing duplicate, broken or ptr terms, removing includes that none of the source IPs in the last 90 days of aggregate reports belongs to, and flattening includes into the ip4/ip6 ranges they resolve to now. Flattened ranges are a snapshot: providers change their addresses, so recheck a flattened record regularly. Nothing is changed in DNS; copy the record and publish it yourself.') }}</p>
             </div>
 
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-4 text-sm text-gray-600 dark:text-gray-300">
