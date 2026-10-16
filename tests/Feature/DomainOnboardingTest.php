@@ -20,7 +20,7 @@ class DomainOnboardingTest extends TestCase
     {
         parent::setUp();
 
-        $this->app->instance(DomainAuthenticationChecker::class, new DomainAuthenticationChecker(fn () => ['v=DMARC1; p=none', 'v=spf1 -all']));
+        $this->app->instance(DomainAuthenticationChecker::class, new DomainAuthenticationChecker(fn () => ['v=DMARC1; p=none', 'v=spf1 -all'], fn () => []));
     }
 
     public function test_bulk_add_creates_new_domains_and_reports_what_it_skipped(): void
@@ -111,5 +111,20 @@ class DomainOnboardingTest extends TestCase
             ->set('needsAttention', true)
             ->assertSee('broken.test')
             ->assertDontSee('fine.test');
+    }
+
+    public function test_hide_inactive_filter_leaves_out_inactive_domains(): void
+    {
+        $user = User::factory()->create();
+        Domain::factory()->create(['fqdn' => 'active.test', 'is_active' => true]);
+        Domain::factory()->create(['fqdn' => 'dormant.test', 'is_active' => false]);
+
+        Volt::actingAs($user)->test('admin.domains')
+            ->assertSee('dormant.test')
+            ->set('hideInactive', true)
+            ->assertSee('active.test')
+            ->assertDontSee('dormant.test')
+            ->call('clearFilters')
+            ->assertSet('hideInactive', false);
     }
 }

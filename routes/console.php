@@ -10,19 +10,19 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 ScheduledTaskTracker::attach(
-    Schedule::command('imap:poll')->everyFiveMinutes()->withoutOverlapping()->description('IMAP mailbox poll'),
+    Schedule::command('imap:poll')->everyFifteenMinutes()->withoutOverlapping()->description('IMAP mailbox poll'),
     'imap-poll',
 );
 ScheduledTaskTracker::attach(
-    Schedule::command('graph-mail:poll')->everyFiveMinutes()->withoutOverlapping()->description('Microsoft 365 mailbox poll'),
+    Schedule::command('graph-mail:poll')->everyFifteenMinutes()->withoutOverlapping()->description('Microsoft 365 mailbox poll'),
     'graph-mail-poll',
 );
 ScheduledTaskTracker::attach(
-    Schedule::command('dmarc:import-mail-files')->everyFiveMinutes()->withoutOverlapping()->description('Import local .eml/.msg reports'),
+    Schedule::command('dmarc:import-mail-files')->everyFifteenMinutes()->withoutOverlapping()->description('Import local .eml/.msg reports'),
     'import-mail-files',
 );
 ScheduledTaskTracker::attach(
-    Schedule::command('dmarc:evaluate-alerts')->everyFifteenMinutes()->withoutOverlapping()->description('Evaluate alert rules'),
+    Schedule::command('dmarc:evaluate-alerts')->hourly()->withoutOverlapping()->description('Evaluate alert rules'),
     'evaluate-alerts',
 );
 
@@ -30,7 +30,7 @@ ScheduledTaskTracker::attach(
 // (their own geoipupdate tool's default cadence) keeps ASN/country lookups
 // current without hammering the download endpoint. No-ops without a license key.
 ScheduledTaskTracker::attach(
-    Schedule::command('dmarc:update-geoip')->weekly()->withoutOverlapping()->description('Update GeoIP databases'),
+    Schedule::command('dmarc:update-geoip')->daily()->withoutOverlapping()->description('Update GeoIP databases'),
     'update-geoip',
 );
 

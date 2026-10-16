@@ -328,15 +328,28 @@ class DmarcMetricsService
      * reported under its bare IP before its name is known; unenriched ones
      * become candidates once the enrichment job has run.
      *
+     * With $asnResolved only records named by their ASN organisation count;
+     * without it only those without one, skipping IPs that have since been
+     * resolved to an ASN in any record.
+     *
      * @return Collection<string, list<string>>
      */
-    public function newSourceCandidates(int $domainId, CarbonInterface $from, CarbonInterface $to, string $dateColumn = 'date_range_begin'): Collection
+    public function newSourceCandidates(int $domainId, CarbonInterface $from, CarbonInterface $to, string $dateColumn = 'date_range_begin', bool $asnResolved = true): Collection
     {
         return AggregateReportRecord::query()
             ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
             ->where('aggregate_reports.domain_id', $domainId)
             ->whereBetween("aggregate_reports.{$dateColumn}", [$from, $to])
             ->whereNotNull('aggregate_report_records.enriched_at')
+            ->when(
+                $asnResolved,
+                fn ($query) => $query->whereNotNull('aggregate_report_records.asn_org'),
+                fn ($query) => $query->whereNull('aggregate_report_records.asn_org')
+                    ->whereNotExists(fn ($resolved) => $resolved->selectRaw('1')
+                        ->from('aggregate_report_records as resolved_records')
+                        ->whereColumn('resolved_records.source_ip', 'aggregate_report_records.source_ip')
+                        ->whereNotNull('resolved_records.asn_org')),
+            )
             ->distinct()
             ->selectRaw($this->sourceNameSql().' as source_name')
             ->addSelect('aggregate_report_records.source_ip')

@@ -6,6 +6,8 @@ use App\Models\AggregateReportRecord;
 use App\Models\Domain;
 use App\Models\DomainRecordHistory;
 use App\Support\DmarcRecord;
+use App\Support\MailProvider;
+use App\Support\SpfRecord;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -26,13 +28,20 @@ class DomainAuthenticationChecker
     private $txtResolver;
 
     /**
+     * @var callable(string): array<string, int>
+     */
+    private $mxResolver;
+
+    /**
      * @param  (callable(string): array<int, string|list<string>>)|null  $txtResolver  Defaults to a real
      *                                                                                 dns_get_record() TXT lookup;
      *                                                                                 injectable so tests never hit real DNS.
      *                                                                                 A record is a string, or the list of
      *                                                                                 strings it was split into.
+     * @param  (callable(string): array<string, int>)|null  $mxResolver  Defaults to a real dns_get_record()
+     *                                                                   MX lookup returning host => preference.
      */
-    public function __construct(?callable $txtResolver = null)
+    public function __construct(?callable $txtResolver = null, ?callable $mxResolver = null)
     {
         $this->txtResolver = $txtResolver ?? function (string $hostname): array {
             $records = @dns_get_record($hostname, DNS_TXT) ?: [];
@@ -41,6 +50,15 @@ class DomainAuthenticationChecker
                 ->map(fn (array $record) => $record['entries'] ?? [$record['txt'] ?? ''])
                 ->filter(fn (array $strings) => implode('', $strings) !== '')
                 ->values()
+                ->all();
+        };
+
+        $this->mxResolver = $mxResolver ?? function (string $hostname): array {
+            $records = @dns_get_record($hostname, DNS_MX) ?: [];
+
+            return collect($records)
+                ->filter(fn (array $record) => ($record['target'] ?? '') !== '')
+                ->mapWithKeys(fn (array $record) => [$record['target'] => (int) ($record['pri'] ?? 0)])
                 ->all();
         };
     }
@@ -171,8 +189,7 @@ class DomainAuthenticationChecker
         }
 
         $record = implode('', $strings);
-        $lookups = 0;
-        $this->countSpfLookups($record, $lookups, 0);
+        $lookups = $this->spfAnalyzer()->analyze($record, $fqdn)['lookups'];
 
         return [
             'spf_status' => match (true) {
@@ -187,12 +204,18 @@ class DomainAuthenticationChecker
 
     private function isSpfRecord(string $txt): bool
     {
-        return (bool) preg_match('/^v=spf1(\s|$)/i', $txt);
+        return SpfRecord::isSpfRecord($txt);
     }
 
-    private function spfRecord(string $hostname): ?string
+    /**
+     * Counting lookups only needs the TXT records of the includes, so the
+     * analyzer gets no answers for the address lookups it would also make.
+     */
+    private function spfAnalyzer(): SpfAnalyzer
     {
-        return $this->firstMatching($hostname, $this->isSpfRecord(...));
+        return new SpfAnalyzer(fn (string $hostname, int $type): array => $type === DNS_TXT
+            ? array_map(fn (string|array $record) => implode('', (array) $record), ($this->txtResolver)($hostname))
+            : []);
     }
 
     /**
@@ -217,49 +240,14 @@ class DomainAuthenticationChecker
     }
 
     /**
-     * Counts the include, a, mx, ptr, exists and redirect terms that each
-     * cost a DNS lookup, following include: and redirect= into the records
-     * they point at. Stops descending once the limit is exceeded, since the
-     * exact count past that point no longer matters.
-     */
-    private function countSpfLookups(string $record, int &$lookups, int $depth): void
-    {
-        $terms = array_map(
-            fn (string $term) => ltrim(strtolower($term), '+-~?'),
-            preg_split('/\s+/', trim($record)),
-        );
-        $hasAllMechanism = in_array('all', $terms, true);
-
-        foreach ($terms as $term) {
-            if (preg_match('/^(include:|redirect=)(.+)$/', $term, $matches)) {
-                if ($matches[1] === 'redirect=' && $hasAllMechanism) {
-                    continue;
-                }
-
-                $lookups++;
-
-                if ($lookups > self::SPF_MAX_LOOKUPS || $depth >= self::SPF_MAX_LOOKUPS || str_contains($matches[2], '%')) {
-                    continue;
-                }
-
-                $nested = $this->spfRecord($matches[2]);
-
-                if ($nested !== null) {
-                    $this->countSpfLookups($nested, $lookups, $depth + 1);
-                }
-            } elseif (preg_match('/^(a|mx|ptr|exists)([:\/]|$)/', $term)) {
-                $lookups++;
-            }
-        }
-    }
-
-    /**
      * Every selector seen in aggregate reports is looked up again on each check:
      * the ones whose record exists are the configured selectors, so a selector
      * that has since been removed from DNS stops being reported as configured.
      * The most recently seen configured selector is kept as the primary one.
+     * When the MX records point at a known mail provider, the selectors it
+     * signs with are checked too, even before any report has shown them.
      *
-     * @return array{dkim_status: string, dkim_selector: ?string, dkim_record: ?string, dkim_selectors: list<array{selector: string, record: string}>}
+     * @return array{dkim_status: string, dkim_selector: ?string, dkim_record: ?string, dkim_selectors: list<array{selector: string, record: string}>, mail_provider: ?string, dkim_expected_selectors: ?list<array{selector: string, found: bool}>}
      */
     private function checkDkim(Domain $domain): array
     {
@@ -272,8 +260,14 @@ class DomainAuthenticationChecker
             ->orderByRaw('MAX(aggregate_reports.date_range_end) DESC')
             ->pluck('aggregate_report_records.dkim_selector');
 
+        $provider = $this->detectMailProvider($domain->fqdn);
+        $expectedSelectors = $provider?->dkimSelectors() ?? [];
+        $selectors = $selectors->merge($expectedSelectors)->unique()->values();
+
+        $providerColumns = ['mail_provider' => $provider?->value, 'dkim_expected_selectors' => null];
+
         if ($selectors->isEmpty()) {
-            return ['dkim_status' => 'unknown', 'dkim_selector' => null, 'dkim_record' => null, 'dkim_selectors' => []];
+            return ['dkim_status' => 'unknown', 'dkim_selector' => null, 'dkim_record' => null, 'dkim_selectors' => [], ...$providerColumns];
         }
 
         $configured = [];
@@ -289,8 +283,16 @@ class DomainAuthenticationChecker
             }
         }
 
+        if ($provider !== null) {
+            $configuredNames = array_column($configured, 'selector');
+            $providerColumns['dkim_expected_selectors'] = array_map(
+                fn (string $selector) => ['selector' => $selector, 'found' => in_array($selector, $configuredNames, true)],
+                $expectedSelectors,
+            );
+        }
+
         if ($configured === []) {
-            return ['dkim_status' => 'missing', 'dkim_selector' => $selectors->first(), 'dkim_record' => null, 'dkim_selectors' => []];
+            return ['dkim_status' => 'missing', 'dkim_selector' => $selectors->first(), 'dkim_record' => null, 'dkim_selectors' => [], ...$providerColumns];
         }
 
         return [
@@ -298,7 +300,19 @@ class DomainAuthenticationChecker
             'dkim_selector' => $configured[0]['selector'],
             'dkim_record' => $configured[0]['record'],
             'dkim_selectors' => $configured,
+            ...$providerColumns,
         ];
+    }
+
+    private function detectMailProvider(string $fqdn): ?MailProvider
+    {
+        try {
+            return MailProvider::detect(($this->mxResolver)($fqdn));
+        } catch (Throwable $e) {
+            Log::warning("DNS MX lookup failed for [{$fqdn}]: {$e->getMessage()}");
+
+            return null;
+        }
     }
 
     /**

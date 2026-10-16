@@ -49,6 +49,40 @@ class PublicDashboardAdminTest extends TestCase
         $this->assertSame(1, PublicDashboardSetting::count());
     }
 
+    public function test_admin_can_toggle_auto_scrolling(): void
+    {
+        $admin = User::factory()->create();
+
+        $this->assertTrue(PublicDashboardSetting::autoScrolls());
+
+        Volt::actingAs($admin)->test('admin.public-dashboard')->call('toggleAutoScroll');
+
+        $this->assertFalse(PublicDashboardSetting::autoScrolls());
+        $this->assertDatabaseHas('audit_logs', ['action' => 'public_dashboard.auto_scroll_disabled', 'user_id' => $admin->id]);
+
+        Volt::actingAs($admin)->test('admin.public-dashboard')->call('toggleAutoScroll');
+
+        $this->assertTrue(PublicDashboardSetting::autoScrolls());
+        $this->assertFalse(PublicDashboardSetting::isEnabled());
+        $this->assertSame(1, PublicDashboardSetting::count());
+    }
+
+    public function test_admin_can_set_the_default_range(): void
+    {
+        $admin = User::factory()->create();
+
+        $this->assertSame(30, PublicDashboardSetting::defaultDays());
+
+        Volt::actingAs($admin)->test('admin.public-dashboard')->call('setDefaultDays', 90);
+
+        $this->assertSame(90, PublicDashboardSetting::defaultDays());
+        $this->assertDatabaseHas('audit_logs', ['action' => 'public_dashboard.default_days_changed', 'user_id' => $admin->id]);
+
+        Volt::actingAs($admin)->test('admin.public-dashboard')->call('setDefaultDays', 45);
+
+        $this->assertSame(90, PublicDashboardSetting::defaultDays());
+    }
+
     public function test_admin_can_add_and_remove_addresses(): void
     {
         $admin = User::factory()->create();

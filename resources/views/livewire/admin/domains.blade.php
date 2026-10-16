@@ -4,9 +4,12 @@ use App\Models\AggregateReportRecord;
 use App\Models\Domain;
 use App\Models\Organisation;
 use App\Services\Analytics\DomainHealthService;
+use App\Rules\IpOrCidr;
 use App\Services\Dns\DomainAuthenticationChecker;
+use App\Services\Dns\SpfAnalyzer;
 use App\Support\AuditLogger;
 use App\Support\DmarcRecord;
+use App\Support\SpfRecord;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
@@ -30,6 +33,9 @@ new #[Layout('layouts.app')] class extends Component
 
     #[Url(as: 'attention')]
     public bool $needsAttention = false;
+
+    #[Url(as: 'hide_inactive')]
+    public bool $hideInactive = false;
 
     /**
      * Set by the organisations page's "Add domains" link (?bulk=1); consumed
@@ -77,6 +83,13 @@ new #[Layout('layouts.app')] class extends Component
      */
     public array $genExtraTags = [];
 
+    public ?int $spfDomainId = null;
+    public string $spfFqdn = '';
+    public ?string $spfCurrentRecord = null;
+    public string $spfDraft = '';
+    public string $spfAddMechanism = 'include';
+    public string $spfAddValue = '';
+
     public function mount(): void
     {
         if ($this->bulk) {
@@ -101,9 +114,14 @@ new #[Layout('layouts.app')] class extends Component
         $this->resetPage();
     }
 
+    public function updatedHideInactive(): void
+    {
+        $this->resetPage();
+    }
+
     public function clearFilters(): void
     {
-        $this->reset(['search', 'organisationFilter', 'needsAttention']);
+        $this->reset(['search', 'organisationFilter', 'needsAttention', 'hideInactive']);
         $this->resetPage();
     }
 
@@ -387,6 +405,142 @@ new #[Layout('layouts.app')] class extends Component
             ->all();
     }
 
+    /**
+     * Opens the SPF editor on the domain's current record, or on a
+     * record that only fails unlisted senders when it has none.
+     */
+    public function openSpfEditor(int $id): void
+    {
+        $domain = Domain::findOrFail($id);
+        abort_unless(auth()->user()->canAccessOrganisation($domain->organisation_id), 404);
+
+        $this->spfDomainId = $domain->id;
+        $this->spfFqdn = $domain->fqdn;
+        $this->spfCurrentRecord = $domain->spf_record;
+        $this->spfDraft = $domain->spf_record ?: 'v=spf1 ~all';
+        $this->reset(['spfAddMechanism', 'spfAddValue']);
+        $this->resetErrorBag();
+
+        $this->dispatch('open-modal', 'spf-editor');
+    }
+
+    /**
+     * Stops the closed editor's DNS analysis from running on every later request.
+     */
+    public function closeSpfEditor(): void
+    {
+        $this->reset(['spfDomainId', 'spfFqdn', 'spfCurrentRecord', 'spfDraft', 'spfAddMechanism', 'spfAddValue']);
+    }
+
+    /**
+     * @return array{lookups: int, void_lookups: int, terms: list<array<string, mixed>>, warnings: list<string>}
+     */
+    public function spfAnalysis(): array
+    {
+        return app(SpfAnalyzer::class)->analyze($this->spfDraft, $this->spfFqdn);
+    }
+
+    /**
+     * @return list<array{key: string, title: string, detail: string, risk: ?string, record: string, lookups: int, saves: int, length: int}>
+     */
+    public function spfSuggestions(): array
+    {
+        return app(SpfAnalyzer::class)->suggestions($this->spfDraft, $this->spfFqdn, $this->spfReportedSourceIps());
+    }
+
+    /**
+     * The source IPs in the domain's aggregate reports of the last 90 days,
+     * or null when there are none to judge an include's use by.
+     *
+     * @return list<string>|null
+     */
+    private function spfReportedSourceIps(): ?array
+    {
+        $domain = $this->spfDomainId ? Domain::visibleTo(auth()->user())->find($this->spfDomainId) : null;
+
+        if ($domain === null) {
+            return null;
+        }
+
+        $sourceIps = AggregateReportRecord::query()
+            ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
+            ->where('aggregate_reports.domain_id', $domain->id)
+            ->where('aggregate_reports.date_range_end', '>=', now()->subDays(90))
+            ->distinct()
+            ->limit(5000)
+            ->pluck('aggregate_report_records.source_ip')
+            ->filter()
+            ->values()
+            ->all();
+
+        return $sourceIps === [] ? null : $sourceIps;
+    }
+
+    public function addSpfTerm(): void
+    {
+        $this->spfAddValue = trim(strtolower($this->spfAddValue));
+        $hostname = 'regex:/^(?=.{1,253}$)(?:[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/';
+
+        $this->validate([
+            'spfAddMechanism' => ['required', 'in:'.implode(',', SpfRecord::ADDABLE_MECHANISMS)],
+            'spfAddValue' => match ($this->spfAddMechanism) {
+                'ip4' => ['required', new IpOrCidr, fn (string $attribute, mixed $value, \Closure $fail) => str_contains((string) $value, ':') ? $fail(__('Use ip6 for an IPv6 address.')) : null],
+                'ip6' => ['required', new IpOrCidr, fn (string $attribute, mixed $value, \Closure $fail) => str_contains((string) $value, ':') ? null : $fail(__('Use ip4 for an IPv4 address.'))],
+                'include' => ['required', $hostname],
+                default => ['nullable', $hostname],
+            },
+        ], attributes: ['spfAddValue' => __('value')]);
+
+        $this->spfDraft = SpfRecord::build([
+            ...SpfRecord::parse($this->spfDraft),
+            ['qualifier' => '+', 'name' => $this->spfAddMechanism, 'argument' => $this->spfAddValue === '' ? '' : ':'.$this->spfAddValue],
+        ]);
+        $this->spfAddValue = '';
+    }
+
+    public function addSpfPreset(string $key): void
+    {
+        $preset = SpfRecord::PROVIDER_PRESETS[$key] ?? null;
+
+        if ($preset === null) {
+            return;
+        }
+
+        $this->spfDraft = SpfRecord::build([
+            ...SpfRecord::parse($this->spfDraft),
+            ['qualifier' => '+', 'name' => 'include', 'argument' => ':'.$preset['include']],
+        ]);
+    }
+
+    public function removeSpfTerm(int $index): void
+    {
+        $terms = SpfRecord::parse($this->spfDraft);
+        unset($terms[$index]);
+
+        $this->spfDraft = SpfRecord::build(array_values($terms));
+    }
+
+    public function setSpfAll(string $qualifier): void
+    {
+        if (! in_array($qualifier, ['-', '~', '?'], true)) {
+            return;
+        }
+
+        $this->spfDraft = SpfRecord::build([
+            ...array_filter(SpfRecord::parse($this->spfDraft), fn (array $term) => $term['name'] !== 'all'),
+            ['qualifier' => $qualifier, 'name' => 'all', 'argument' => ''],
+        ]);
+    }
+
+    public function applySpfSuggestion(string $key): void
+    {
+        $suggestion = collect($this->spfSuggestions())->firstWhere('key', $key);
+
+        if ($suggestion !== null) {
+            $this->spfDraft = $suggestion['record'];
+        }
+    }
+
     public function delete(int $id): void
     {
         $domain = Domain::findOrFail($id);
@@ -435,7 +589,8 @@ new #[Layout('layouts.app')] class extends Component
             ->with('organisation')
             ->when(trim($this->search) !== '', fn ($query) => $query->where('fqdn', 'like', '%'.trim($this->search).'%'))
             ->when($this->organisationFilter === 'unassigned', fn ($query) => $query->whereNull('organisation_id'))
-            ->when(ctype_digit($this->organisationFilter), fn ($query) => $query->where('organisation_id', (int) $this->organisationFilter));
+            ->when(ctype_digit($this->organisationFilter), fn ($query) => $query->where('organisation_id', (int) $this->organisationFilter))
+            ->when($this->hideInactive, fn ($query) => $query->where('is_active', true));
 
         $attentionHealth = null;
 
@@ -521,15 +676,13 @@ new #[Layout('layouts.app')] class extends Component
 
                 <div>
                     <x-input-label for="organisation_filter" :value="__('Organisation')" />
-                    <select wire:model.live="organisationFilter" id="organisation_filter" class="mt-1 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
-                        <option value="">{{ __('All organisations') }}</option>
-                        @unless ($organisationScoped)
-                            <option value="unassigned">{{ __('— Unassigned —') }}</option>
-                        @endunless
-                        @foreach ($organisations as $organisation)
-                            <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
-                        @endforeach
-                    </select>
+                    <x-searchable-select
+                        wire:model.live="organisationFilter"
+                        id="organisation_filter"
+                        :options="($organisationScoped ? [] : ['unassigned' => __('— Unassigned —')]) + $organisations->pluck('name', 'id')->all()"
+                        :placeholder="__('All organisations')"
+                        class="mt-1"
+                    />
                 </div>
 
                 <label class="inline-flex items-center gap-2 pb-2 text-sm text-gray-700 dark:text-gray-300">
@@ -537,7 +690,12 @@ new #[Layout('layouts.app')] class extends Component
                     {{ __('Needs attention') }}
                 </label>
 
-                @if ($search !== '' || $organisationFilter !== '' || $needsAttention)
+                <label class="inline-flex items-center gap-2 pb-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input wire:model.live="hideInactive" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                    {{ __('Hide inactive') }}
+                </label>
+
+                @if ($search !== '' || $organisationFilter !== '' || $needsAttention || $hideInactive)
                     <button type="button" wire:click="clearFilters" class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 pb-2">{{ __('Clear filters') }}</button>
                 @endif
 
@@ -597,6 +755,7 @@ new #[Layout('layouts.app')] class extends Component
                                             <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
                                         </svg>
                                         <span>{{ $domain->fqdn }}</span>
+                                        <x-mail-provider-icon :provider="$domain->mail_provider" />
                                     </button>
                                     @if ($domainHealth && ($domainHealth['issues'] !== [] || $domainHealth['remarks'] !== []))
                                         <div class="mt-1 flex flex-wrap gap-1 md:pl-6 max-md:justify-end">
@@ -724,6 +883,10 @@ new #[Layout('layouts.app')] class extends Component
                                                 @endif
 
                                                 <x-record-history :entries="$domain->recordHistories->where('type', \App\Models\DomainRecordHistory::TYPE_SPF)" />
+
+                                                <x-secondary-button type="button" wire:click="openSpfEditor({{ $domain->id }})" class="mt-3">
+                                                    {{ $domain->spf_status === 'too_many_lookups' ? __('Fix lookups') : __('SPF editor') }}
+                                                </x-secondary-button>
                                             </div>
                                             <div>
                                                 <h4 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('DKIM') }}</h4>
@@ -735,6 +898,24 @@ new #[Layout('layouts.app')] class extends Component
                                                 @empty
                                                     <p class="mt-2 text-xs font-mono break-all text-gray-600 dark:text-gray-300">{{ __('No record found.') }}</p>
                                                 @endforelse
+
+                                                @if ($domain->mail_provider)
+                                                    <h5 class="mt-3 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                                        <x-mail-provider-icon :provider="$domain->mail_provider" />
+                                                        {{ __('Expected for :provider', ['provider' => $domain->mail_provider->label()]) }}
+                                                    </h5>
+                                                    <ul class="mt-1 space-y-1">
+                                                        @foreach ($domain->expectedDkimSelectors() as $expectedSelector)
+                                                            <li class="flex items-start gap-2 text-xs {{ $expectedSelector['found'] ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400' }}">
+                                                                <span aria-hidden="true">{{ $expectedSelector['found'] ? '✓' : '✗' }}</span>
+                                                                <span>
+                                                                    <span class="font-mono break-all">{{ $expectedSelector['selector'] }}._domainkey.{{ $domain->fqdn }}</span>
+                                                                    <span class="text-gray-400 dark:text-gray-500">· {{ $expectedSelector['found'] ? __('Found') : __('Missing') }}</span>
+                                                                </span>
+                                                            </li>
+                                                        @endforeach
+                                                    </ul>
+                                                @endif
 
                                                 @php $dkimSelectorsSeen = $this->dkimSelectorsSeen($domain); @endphp
                                                 <h5 class="mt-3 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('Selectors seen in reports') }}</h5>
@@ -798,7 +979,7 @@ new #[Layout('layouts.app')] class extends Component
                             @endif
                         @empty
                             <tr>
-                                <td colspan="8" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ $search !== '' || $organisationFilter !== '' || $needsAttention ? __('No domains match your filters.') : __('No domains yet.') }}</td>
+                                <td colspan="8" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ $search !== '' || $organisationFilter !== '' || $needsAttention || $hideInactive ? __('No domains match your filters.') : __('No domains yet.') }}</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -811,7 +992,7 @@ new #[Layout('layouts.app')] class extends Component
         </div>
     </div>
 
-    <x-modal name="domain-form" focusable>
+    <x-modal name="domain-form" overflow-visible focusable>
         <form wire:submit="save" class="p-6">
             <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">
                 {{ $editingId ? __('Edit Domain') : __('New Domain') }}
@@ -825,16 +1006,14 @@ new #[Layout('layouts.app')] class extends Component
 
             <div class="mt-6">
                 <x-input-label for="organisation_id" :value="__('Organisation')" />
-                <select wire:model="organisation_id" id="organisation_id" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
-                    @if ($organisationScoped)
-                        <option value="" disabled>{{ __('— Select organisation —') }}</option>
-                    @else
-                        <option value="">{{ __('— Unassigned —') }}</option>
-                    @endif
-                    @foreach ($organisations as $organisation)
-                        <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
-                    @endforeach
-                </select>
+                <x-searchable-select
+                    wire:model="organisation_id"
+                    id="organisation_id"
+                    :options="$organisations->pluck('name', 'id')"
+                    :placeholder="$organisationScoped ? __('— Select organisation —') : __('— Unassigned —')"
+                    :placeholder-selectable="! $organisationScoped"
+                    class="mt-1"
+                />
                 <x-input-error :messages="$errors->get('organisation_id')" class="mt-2" />
             </div>
 
@@ -856,7 +1035,7 @@ new #[Layout('layouts.app')] class extends Component
         </form>
     </x-modal>
 
-    <x-modal name="domain-bulk-form" :show="$openBulkOnLoad" focusable>
+    <x-modal name="domain-bulk-form" :show="$openBulkOnLoad" overflow-visible focusable>
         <form wire:submit="saveBulk" class="p-6">
             <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ __('Bulk add domains') }}</h2>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ __('One domain per line, or separated by commas or spaces. Pasted URLs and wildcards are tidied up; domains that already exist are skipped.') }}</p>
@@ -869,16 +1048,14 @@ new #[Layout('layouts.app')] class extends Component
 
             <div class="mt-6">
                 <x-input-label for="bulk_organisation_id" :value="__('Organisation')" />
-                <select wire:model="bulkOrganisationId" id="bulk_organisation_id" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
-                    @if ($organisationScoped)
-                        <option value="" disabled>{{ __('— Select organisation —') }}</option>
-                    @else
-                        <option value="">{{ __('— Unassigned —') }}</option>
-                    @endif
-                    @foreach ($organisations as $organisation)
-                        <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
-                    @endforeach
-                </select>
+                <x-searchable-select
+                    wire:model="bulkOrganisationId"
+                    id="bulk_organisation_id"
+                    :options="$organisations->pluck('name', 'id')"
+                    :placeholder="$organisationScoped ? __('— Select organisation —') : __('— Unassigned —')"
+                    :placeholder-selectable="! $organisationScoped"
+                    class="mt-1"
+                />
                 <x-input-error :messages="$errors->get('bulkOrganisationId')" class="mt-2" />
             </div>
 
@@ -1015,6 +1192,141 @@ new #[Layout('layouts.app')] class extends Component
                 <div class="mt-4 text-xs text-gray-500 dark:text-gray-400">
                     {{ __('Current record:') }}
                     <span class="font-mono break-all text-gray-600 dark:text-gray-300">{{ $generatorCurrentRecord ?: __('none') }}</span>
+                </div>
+            @endif
+
+            <div class="mt-6 flex justify-end">
+                <x-secondary-button type="button" x-on:click="show = false">{{ __('Close') }}</x-secondary-button>
+            </div>
+        </div>
+    </x-modal>
+
+    <x-modal name="spf-editor" maxWidth="2xl" focusable>
+        <div class="p-6" x-init="$watch('show', value => value || $wire.closeSpfEditor())">
+            <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ __('SPF record for :domain', ['domain' => $spfFqdn]) }}</h2>
+
+            @if ($spfDomainId)
+                @php
+                    $spfAnalysis = $this->spfAnalysis();
+                    $spfSuggestions = $this->spfSuggestions();
+                    $spfMaxLookups = \App\Services\Dns\DomainAuthenticationChecker::SPF_MAX_LOOKUPS;
+                    $spfLength = strlen($spfDraft);
+                    $spfStrings = \App\Support\SpfRecord::dnsStrings($spfDraft);
+                    $spfAddPlaceholder = match ($spfAddMechanism) {
+                        'ip4' => '192.0.2.0/24',
+                        'ip6' => '2001:db8::/32',
+                        'include' => '_spf.example.com',
+                        default => __('Optional: another domain'),
+                    };
+                @endphp
+
+                <div class="mt-6">
+                    <div class="flex items-end justify-between gap-3">
+                        <x-input-label for="spf_draft" :value="__('Record')" />
+                        <div class="flex items-center gap-2 text-xs">
+                            <span class="inline-flex items-center rounded-full px-2 py-0.5 font-medium {{ $spfAnalysis['lookups'] > $spfMaxLookups ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' }}">{{ __(':count/:max lookups', ['count' => $spfAnalysis['lookups'], 'max' => $spfMaxLookups]) }}</span>
+                            <span class="{{ $spfLength > \App\Services\Dns\DomainAuthenticationChecker::SPF_MAX_RECOMMENDED_LENGTH ? 'text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400' }}">{{ __(':length characters', ['length' => $spfLength]) }}</span>
+                            <span wire:loading wire:target="spfDraft" class="text-gray-400 dark:text-gray-500">{{ __('Checking…') }}</span>
+                        </div>
+                    </div>
+                    <textarea wire:model.live.debounce.500ms="spfDraft" id="spf_draft" rows="3" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm font-mono"></textarea>
+
+                    @if ($spfAnalysis['warnings'] !== [])
+                        <ul class="mt-2 space-y-1">
+                            @foreach ($spfAnalysis['warnings'] as $warning)
+                                <li class="text-xs text-red-700 dark:text-red-400">{{ $warning }}</li>
+                            @endforeach
+                        </ul>
+                    @endif
+                </div>
+
+                <div class="mt-4">
+                    <h3 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('Terms') }}</h3>
+                    @if ($spfAnalysis['terms'] === [])
+                        <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ __('No terms yet.') }}</p>
+                    @else
+                        <x-spf-term-tree :nodes="$spfAnalysis['terms']" removable class="mt-1 space-y-1" />
+                    @endif
+                </div>
+
+                <div class="mt-4 grid grid-cols-1 sm:grid-cols-4 gap-2 items-start">
+                    <select wire:model.live="spfAddMechanism" aria-label="{{ __('Mechanism') }}" class="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
+                        @foreach (\App\Support\SpfRecord::ADDABLE_MECHANISMS as $mechanism)
+                            <option value="{{ $mechanism }}">{{ $mechanism }}</option>
+                        @endforeach
+                    </select>
+                    <div class="sm:col-span-2">
+                        <x-text-input wire:model="spfAddValue" wire:keydown.enter.prevent="addSpfTerm" type="text" class="block w-full text-sm font-mono" aria-label="{{ __('Value') }}" :placeholder="$spfAddPlaceholder" />
+                        <x-input-error :messages="$errors->get('spfAddValue')" class="mt-1" />
+                    </div>
+                    <x-secondary-button type="button" wire:click="addSpfTerm" class="justify-center">{{ __('Add') }}</x-secondary-button>
+                </div>
+
+                <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                    <span class="text-gray-500 dark:text-gray-400">{{ __('Add a service:') }}</span>
+                    @foreach (\App\Support\SpfRecord::PROVIDER_PRESETS as $presetKey => $preset)
+                        <button type="button" wire:click="addSpfPreset('{{ $presetKey }}')" class="rounded-full border border-gray-300 dark:border-gray-600 px-2 py-0.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">{{ $preset['label'] }}</button>
+                    @endforeach
+                </div>
+
+                <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                    <span class="text-gray-500 dark:text-gray-400">{{ __('Other senders:') }}</span>
+                    @foreach (['-' => __('Fail (-all)'), '~' => __('Soft fail (~all)'), '?' => __('Neutral (?all)')] as $qualifier => $label)
+                        <button type="button" wire:click="setSpfAll('{{ $qualifier }}')" class="rounded-full border border-gray-300 dark:border-gray-600 px-2 py-0.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">{{ $label }}</button>
+                    @endforeach
+                </div>
+
+                @if ($spfSuggestions !== [])
+                    <div class="mt-6">
+                        <h3 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('Suggestions') }}</h3>
+                        <ul class="mt-2 space-y-3">
+                            @foreach ($spfSuggestions as $suggestion)
+                                <li wire:key="spf-suggestion-{{ $suggestion['key'] }}" class="rounded-md border border-gray-200 dark:border-gray-700 p-3">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ $suggestion['title'] }}</p>
+                                            <p class="text-xs text-gray-500 dark:text-gray-400">
+                                                {{ trans_choice('Saves :count lookup|Saves :count lookups', $suggestion['saves']) }}
+                                                · {{ __(':count/:max after', ['count' => $suggestion['lookups'], 'max' => $spfMaxLookups]) }}
+                                                · {{ __(':length characters', ['length' => $suggestion['length']]) }}
+                                            </p>
+                                        </div>
+                                        <x-secondary-button type="button" wire:click="applySpfSuggestion('{{ $suggestion['key'] }}')" class="shrink-0">{{ __('Apply') }}</x-secondary-button>
+                                    </div>
+                                    <p class="mt-2 text-xs text-gray-600 dark:text-gray-300">{{ $suggestion['detail'] }}</p>
+                                    @if ($suggestion['risk'])
+                                        <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">{{ $suggestion['risk'] }}</p>
+                                    @endif
+                                    <p class="mt-2 font-mono text-xs break-all text-gray-700 dark:text-gray-300">{{ $suggestion['record'] }}</p>
+                                </li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                <div class="mt-6 rounded-md border border-gray-200 dark:border-gray-700 p-3" x-data="{ copied: false }">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="text-xs text-gray-500 dark:text-gray-400">
+                            {{ __('TXT record at') }} <span class="font-mono text-gray-700 dark:text-gray-200">{{ $spfFqdn }}</span>
+                        </div>
+                        <button type="button" x-on:click="navigator.clipboard.writeText(@js(count($spfStrings) > 1 ? collect($spfStrings)->map(fn ($string) => '"'.$string.'"')->implode(' ') : $spfDraft)); copied = true; setTimeout(() => copied = false, 1500)" class="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">
+                            <span x-show="! copied">{{ __('Copy') }}</span>
+                            <span x-show="copied" x-cloak>{{ __('Copied') }}</span>
+                        </button>
+                    </div>
+                    @if (count($spfStrings) > 1)
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ __('Longer than :max characters, so it is published as several strings in one TXT record. Each string ends with a space so receivers join them correctly.', ['max' => \App\Support\SpfRecord::MAX_STRING_LENGTH]) }}</p>
+                        @foreach ($spfStrings as $string)
+                            <p class="mt-1 font-mono text-sm break-all text-gray-900 dark:text-gray-100">"{{ $string }}"</p>
+                        @endforeach
+                    @else
+                        <p class="mt-1 font-mono text-sm break-all text-gray-900 dark:text-gray-100">{{ $spfDraft }}</p>
+                    @endif
+                </div>
+
+                <div class="mt-4 text-xs text-gray-500 dark:text-gray-400">
+                    {{ __('Current record:') }}
+                    <span class="font-mono break-all text-gray-600 dark:text-gray-300">{{ $spfCurrentRecord ?: __('none') }}</span>
                 </div>
             @endif
 

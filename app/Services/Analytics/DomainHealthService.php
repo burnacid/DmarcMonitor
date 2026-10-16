@@ -52,7 +52,7 @@ class DomainHealthService
 
     public const float READINESS_PASS_FOR_REJECT = 99.0;
 
-    public const array ISSUES = ['no_reports', 'dmarc_missing', 'spf_missing', 'spf_broken_split', 'spf_too_many_lookups', 'spf_too_long', 'dkim_missing', 'low_pass_rate', 'open_alerts', 'not_reporting_here', 'report_auth_missing'];
+    public const array ISSUES = ['no_reports', 'dmarc_missing', 'spf_missing', 'spf_broken_split', 'spf_too_many_lookups', 'spf_too_long', 'dkim_missing', 'dkim_selector_missing', 'low_pass_rate', 'open_alerts', 'not_reporting_here', 'report_auth_missing'];
 
     /** Worth knowing, but not a reason for a domain to need attention. */
     public const array REMARKS = ['rarely_sends', 'no_mail_seen'];
@@ -78,6 +78,7 @@ class DomainHealthService
             'spf_too_many_lookups' => __('SPF exceeds 10 DNS lookups'),
             'spf_too_long' => __('SPF record too long'),
             'dkim_missing' => __('DKIM missing'),
+            'dkim_selector_missing' => __('DKIM selector missing'),
             'low_pass_rate' => __('Low pass rate'),
             'open_alerts' => __('Open alerts'),
             'not_reporting_here' => __('Reports sent elsewhere'),
@@ -297,6 +298,8 @@ class DomainHealthService
 
         if ($domain->dkim_status === 'missing') {
             $issues[] = 'dkim_missing';
+        } elseif ($domain->missingExpectedDkimSelectors() !== []) {
+            $issues[] = 'dkim_selector_missing';
         }
 
         if ($health['total'] >= self::MIN_VOLUME_FOR_PASS_RATE && $health['pass_status'] !== 'good') {

@@ -234,7 +234,7 @@ new #[Layout('layouts.app')] class extends Component
         </div>
     </div>
 
-    <x-modal name="alert-rule-form" max-width="2xl" focusable>
+    <x-modal name="alert-rule-form" max-width="2xl" overflow-visible focusable>
         <form wire:submit="save" class="p-6">
             <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">
                 {{ $editingId ? __('Edit Alert Rule') : __('New Alert Rule') }}
@@ -258,16 +258,14 @@ new #[Layout('layouts.app')] class extends Component
                 @unless ($type === 'new_domain_discovered')
                     <div>
                         <x-input-label for="organisation_id" :value="__('Organisation')" />
-                        <select wire:model="organisation_id" id="organisation_id" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
-                            @if ($organisationScoped)
-                                <option value="" disabled>{{ __('— Select organisation —') }}</option>
-                            @else
-                                <option value="">{{ __('— All organisations —') }}</option>
-                            @endif
-                            @foreach ($organisations as $organisation)
-                                <option value="{{ $organisation->id }}">{{ $organisation->name }}</option>
-                            @endforeach
-                        </select>
+                        <x-searchable-select
+                            wire:model="organisation_id"
+                            id="organisation_id"
+                            :options="$organisations->pluck('name', 'id')"
+                            :placeholder="$organisationScoped ? __('— Select organisation —') : __('— All organisations —')"
+                            :placeholder-selectable="! $organisationScoped"
+                            class="mt-1"
+                        />
                         <x-input-error :messages="$errors->get('organisation_id')" class="mt-2" />
                     </div>
                 @else

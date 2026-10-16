@@ -2,6 +2,32 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
+## [1.5.0]
+
+### Added
+
+- **Hide inactive domains**: tick "Hide inactive" on the Domains page to leave out domains that are switched off. The setting is kept in the page address, so a bookmarked or refreshed page keeps it, and "Clear filters" turns it off again.
+- **SPF editor**: expand a domain and click "SPF editor" (or "Fix lookups" when the record needs more than 10 DNS lookups) to build or change its SPF record. The lookup count is shown as you type, and so is what each term costs, including the includes nested inside it. Add terms, add common sending services with one click, and choose how other senders are treated (`-all`/`~all`/`?all`). Suggestions give a complete replacement record that needs fewer lookups:
+  - remove duplicate, broken or `ptr` terms;
+  - remove includes that none of the source IPs in the last 90 days of aggregate reports belong to;
+  - replace `a`/`mx` with their addresses;
+  - flatten includes into their `ip4`/`ip6` ranges;
+  - for a record over the limit, a combined fix that brings it within 10 lookups.
+
+  A record over 255 characters is shown split into strings that receivers join correctly. Nothing is changed in DNS: copy the record and publish it yourself.
+- **Mail provider detection**: the DNS check now recognises Microsoft 365, Google Workspace, Proton Mail, Fastmail and iCloud Mail from a domain's MX records. An icon next to the domain name on the Domains page shows the detected provider. The DKIM selectors that provider signs with (for example `selector1` and `selector2` for Microsoft 365, `google` for Google Workspace) are checked even before an aggregate report has shown them. Expand a domain to see each expected `<selector>._domainkey` record marked as found or missing. When DKIM works but one of the expected selectors is missing, the domain gets a "DKIM selector missing" issue.
+- **Auto-scrolling wallboard**: when the organisations on the wallboard don't fit on the screen, the panel now scrolls slowly to the bottom and starts again from the top, pausing at both ends. Turn it off under Settings > Public Dashboard ("Auto-scroll organisations"); it is on by default.
+- **Default wallboard range**: choose under Settings > Public Dashboard whether the wallboard shows 7, 30 or 90 days when opened without a range in its address (30 days by default). The 7d/30d/90d buttons on the wallboard itself still work as before.
+
+### Changed
+
+- DKIM for a domain whose mail provider was detected but whose expected selectors don't resolve now shows "Missing" instead of "Unknown", even before any aggregate report has arrived.
+- The "Previous records" history of a domain's DMARC and SPF records is now collapsed: click it to show the older records.
+- The SPF lookup count now uses the same evaluation as the SPF editor. It gives the exact number of lookups where it used to stop just past 10, and an include that loops back to the domain counts as too many lookups.
+- The "new sending source" alert now names sources by their ASN organisation. A source whose IP has no ASN is only reported, by its hostname or IP, once 24 hours have passed without an ASN turning up for that IP.
+
+- The organisation and domain dropdowns now have a search box: type to filter the list, then pick with the mouse or the arrow keys and Enter. This applies to the filters on the Dashboard, Reports, Forensic Reports and Domains pages, and to the organisation field when adding or editing domains, bulk adding domains and editing alert rules.
+
 ## [1.4.1]
 
 ### Added

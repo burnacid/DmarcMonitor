@@ -122,6 +122,30 @@ class PublicOverviewTest extends TestCase
         $this->getWall()->assertOk()->assertSee('<time id="updated-at" datetime="2026-10-13T14:05:00+00:00">14:05</time>', false);
     }
 
+    public function test_the_organisations_panel_only_auto_scrolls_while_enabled(): void
+    {
+        DashboardAllowedIp::factory()->create(['address' => '203.0.113.7']);
+
+        $this->getWall()->assertOk()->assertSee('id="organisations-scroll"', false);
+
+        PublicDashboardSetting::setAutoScroll(false);
+
+        $this->getWall()->assertOk()->assertDontSee('id="organisations-scroll"', false);
+    }
+
+    public function test_it_uses_the_configured_default_range_unless_the_address_picks_one(): void
+    {
+        DashboardAllowedIp::factory()->create(['address' => '203.0.113.7']);
+        PublicDashboardSetting::setDefaultDays(7);
+
+        $this->getWall()->assertOk()->assertViewHas('days', 7);
+
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.7'])
+            ->get(route('public.overview', ['days' => 90]))
+            ->assertOk()
+            ->assertViewHas('days', 90);
+    }
+
     public function test_cidr_ranges_are_matched(): void
     {
         DashboardAllowedIp::factory()->create(['address' => '198.51.100.0/24']);

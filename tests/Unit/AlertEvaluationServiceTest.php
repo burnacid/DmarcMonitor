@@ -265,19 +265,43 @@ class AlertEvaluationServiceTest extends TestCase
         $this->assertSame('New Sender LLC', AlertEvent::first()->details['source']);
     }
 
-    public function test_new_source_name_falls_back_to_hostname_then_ip(): void
+    public function test_source_without_asn_falls_back_to_hostname_then_ip_after_24_hours(): void
     {
         Mail::fake();
         [$recentReport, $rule] = $this->newSourceScenario();
         AggregateReportRecord::factory()->enriched(ptrHostname: 'mail.unknown-host.test')->create(['aggregate_report_id' => $recentReport->id, 'source_ip' => '198.51.100.9']);
         AggregateReportRecord::factory()->enriched()->create(['aggregate_report_id' => $recentReport->id, 'source_ip' => '198.51.100.7']);
 
-        app(AlertEvaluationService::class)->evaluate($rule);
+        $service = app(AlertEvaluationService::class);
+        $service->evaluate($rule);
+
+        $this->assertDatabaseCount('alert_events', 0);
+
+        $this->travel(25)->hours();
+        $service->evaluate($rule);
 
         $this->assertEqualsCanonicalizing(
             ['mail.unknown-host.test', '198.51.100.7'],
             AlertEvent::all()->pluck('details.source')->all(),
         );
+    }
+
+    public function test_source_without_asn_is_not_reported_by_ip_once_an_asn_turns_up(): void
+    {
+        Mail::fake();
+        [$recentReport, $rule] = $this->newSourceScenario();
+        AggregateReportRecord::factory()->enriched()->create(['aggregate_report_id' => $recentReport->id, 'source_ip' => '198.51.100.7']);
+
+        $this->travel(2)->hours();
+        $laterReport = AggregateReport::factory()->create(['domain_id' => $recentReport->domain_id]);
+        AggregateReportRecord::factory()->enriched('New Sender LLC')->create(['aggregate_report_id' => $laterReport->id, 'source_ip' => '198.51.100.7']);
+
+        $service = app(AlertEvaluationService::class);
+        $service->evaluate($rule);
+        $this->travel(25)->hours();
+        $service->evaluate($rule);
+
+        $this->assertSame(['New Sender LLC'], AlertEvent::all()->pluck('details.source')->all());
     }
 
     public function test_new_domain_discovered_rule_fires_once_per_inactive_domain(): void

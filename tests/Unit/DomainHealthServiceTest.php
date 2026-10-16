@@ -178,6 +178,16 @@ class DomainHealthServiceTest extends TestCase
         $this->assertNotContains('spf_too_long', $this->health($justShortEnough)['issues']);
     }
 
+    public function test_a_missing_expected_dkim_selector_is_an_issue_while_dkim_otherwise_works(): void
+    {
+        $expected = fn (bool $secondFound) => [['selector' => 'selector1', 'found' => true], ['selector' => 'selector2', 'found' => $secondFound]];
+        $incomplete = $this->healthyDomain(attributes: ['dkim_expected_selectors' => $expected(false)]);
+        $complete = $this->healthyDomain(attributes: ['dkim_expected_selectors' => $expected(true)]);
+
+        $this->assertContains('dkim_selector_missing', $this->health($incomplete)['issues']);
+        $this->assertNotContains('dkim_selector_missing', $this->health($complete)['issues']);
+    }
+
     public function test_missing_report_authorisation_is_an_issue_only_for_addresses_in_the_record(): void
     {
         config(['dmarc.rua_address' => 'dmarc@msp.test']);
