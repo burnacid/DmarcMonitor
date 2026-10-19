@@ -2,6 +2,12 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
+## [Unreleased]
+
+### Fixed
+
+- On the Alerts page, long details (such as a list of IPs) now wrap inside the Details column instead of widening the table and pushing the Resolve button off the screen.
+
 ## [1.5.0]
 
 ### Added
@@ -25,12 +31,7 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 - The "Previous records" history of a domain's DMARC and SPF records is now collapsed: click it to show the older records.
 - The SPF lookup count now uses the same evaluation as the SPF editor. It gives the exact number of lookups where it used to stop just past 10, and an include that loops back to the domain counts as too many lookups.
 - The "new sending source" alert now names sources by their ASN organisation. A source whose IP has no ASN is only reported, by its hostname or IP, once 24 hours have passed without an ASN turning up for that IP.
-
 - The organisation and domain dropdowns now have a search box: type to filter the list, then pick with the mouse or the arrow keys and Enter. This applies to the filters on the Dashboard, Reports, Forensic Reports and Domains pages, and to the organisation field when adding or editing domains, bulk adding domains and editing alert rules.
-
-### Fixed
-
-- On the Alerts page, long details (such as a list of IPs) now wrap inside the Details column instead of widening the table and pushing the Resolve button off the screen.
 
 ## [1.4.1]
 
