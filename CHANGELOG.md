@@ -26,6 +26,10 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 
 - The organisation and domain dropdowns now have a search box: type to filter the list, then pick with the mouse or the arrow keys and Enter. This applies to the filters on the Dashboard, Reports, Forensic Reports and Domains pages, and to the organisation field when adding or editing domains, bulk adding domains and editing alert rules.
 
+### Fixed
+
+- On the Alerts page, long details (such as a list of IPs) now wrap inside the Details column instead of widening the table and pushing the Resolve button off the screen.
+
 ## [1.4.1]
 
 ### Added
