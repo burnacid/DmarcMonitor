@@ -4,9 +4,14 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 
 ## [Unreleased]
 
+### Added
+
+- **DKIM ready to enable**: when a selector your mail provider expects has no key yet but its CNAME record is already in place, the expanded domain on the Domains page now shows it as "Ready to enable" with the CNAME's target, instead of "Missing". The DNS side is done; turn on DKIM signing at the provider (for Microsoft 365: Defender portal → Email authentication settings → DKIM) to finish.
+
 ### Fixed
 
 - On the Alerts page, long details (such as a list of IPs) now wrap inside the Details column instead of widening the table and pushing the Resolve button off the screen.
+- Tables on every page (Domains, Overview, Reports, Users and the other admin pages) now scroll sideways when their content is too wide, instead of cutting off the columns on the right.
 
 ## [1.5.0]
 

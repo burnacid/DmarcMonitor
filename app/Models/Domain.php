@@ -53,9 +53,11 @@ class Domain extends Model
 
     /**
      * The DKIM selectors the mail provider detected from the MX records signs
-     * with, and whether each one's record was found at the last check.
+     * with, and whether each one's record was found at the last check. A
+     * missing selector that already is a CNAME carries its target: the DNS
+     * side is done and DKIM signing only needs turning on at the provider.
      *
-     * @return list<array{selector: string, found: bool}>
+     * @return list<array{selector: string, found: bool, cname?: string}>
      */
     public function expectedDkimSelectors(): array
     {

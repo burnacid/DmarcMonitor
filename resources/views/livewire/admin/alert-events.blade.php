@@ -59,7 +59,7 @@ new #[Layout('layouts.app')] class extends Component
                 </select>
             </div>
 
-            <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
+            <div class="bg-white dark:bg-gray-800 overflow-x-auto shadow-sm sm:rounded-lg">
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 max-md:block">
                     <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
                         <tr>

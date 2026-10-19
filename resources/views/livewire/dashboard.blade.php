@@ -283,7 +283,7 @@ new #[Layout('layouts.app')] class extends Component
                         </div>
                     </div>
 
-                    <div class="lg:col-span-2 bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
+                    <div class="lg:col-span-2 bg-white dark:bg-gray-800 overflow-x-auto shadow-sm sm:rounded-lg">
                         <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 px-6 pt-4">{{ __('Top failing sources') }}</h3>
                         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 mt-2 max-md:block max-md:mt-4">
                             <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">

@@ -731,7 +731,7 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
             </div>
 
-            <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
+            <div class="bg-white dark:bg-gray-800 overflow-x-auto shadow-sm sm:rounded-lg">
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 max-md:block">
                     <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
                         <tr>
@@ -906,15 +906,22 @@ new #[Layout('layouts.app')] class extends Component
                                                     </h5>
                                                     <ul class="mt-1 space-y-1">
                                                         @foreach ($domain->expectedDkimSelectors() as $expectedSelector)
-                                                            <li class="flex items-start gap-2 text-xs {{ $expectedSelector['found'] ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400' }}">
-                                                                <span aria-hidden="true">{{ $expectedSelector['found'] ? '✓' : '✗' }}</span>
-                                                                <span>
+                                                            @php $isReadyToEnable = ! $expectedSelector['found'] && isset($expectedSelector['cname']); @endphp
+                                                            <li class="flex items-start gap-2 text-xs {{ $expectedSelector['found'] ? 'text-green-700 dark:text-green-400' : ($isReadyToEnable ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400') }}">
+                                                                <span aria-hidden="true">{{ $expectedSelector['found'] ? '✓' : ($isReadyToEnable ? '◷' : '✗') }}</span>
+                                                                <span class="min-w-0">
                                                                     <span class="font-mono break-all">{{ $expectedSelector['selector'] }}._domainkey.{{ $domain->fqdn }}</span>
-                                                                    <span class="text-gray-400 dark:text-gray-500">· {{ $expectedSelector['found'] ? __('Found') : __('Missing') }}</span>
+                                                                    <span class="text-gray-400 dark:text-gray-500">· {{ $expectedSelector['found'] ? __('Found') : ($isReadyToEnable ? __('Ready to enable') : __('Missing')) }}</span>
+                                                                    @if ($isReadyToEnable)
+                                                                        <span class="block text-gray-500 dark:text-gray-400">{{ __('CNAME points to') }} <span class="font-mono break-all">{{ $expectedSelector['cname'] }}</span></span>
+                                                                    @endif
                                                                 </span>
                                                             </li>
                                                         @endforeach
                                                     </ul>
+                                                    @if (collect($domain->expectedDkimSelectors())->contains(fn (array $expected) => ! $expected['found'] && isset($expected['cname'])))
+                                                        <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">{{ __('The CNAME records are in place, but :provider does not publish the key yet. Turn on DKIM signing for this domain at :provider to finish.', ['provider' => $domain->mail_provider->label()]) }}</p>
+                                                    @endif
                                                 @endif
 
                                                 @php $dkimSelectorsSeen = $this->dkimSelectorsSeen($domain); @endphp
