@@ -8,6 +8,7 @@ use App\Models\Domain;
 use App\Models\DomainRecordHistory;
 use App\Models\User;
 use App\Services\Dns\DomainAuthenticationChecker;
+use App\Support\MailProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Volt\Volt;
 use Tests\TestCase;
@@ -46,7 +47,7 @@ class DomainDnsStatusTest extends TestCase
         $user = User::factory()->create();
         $domain = Domain::factory()->create(['fqdn' => 'example.com', 'dmarc_status' => null]);
 
-        $fake = new DomainAuthenticationChecker(fn () => ['v=DMARC1; p=reject']);
+        $fake = new DomainAuthenticationChecker(fn () => ['v=DMARC1; p=reject'], fn () => []);
         $this->app->instance(DomainAuthenticationChecker::class, $fake);
 
         Volt::actingAs($user)->test('admin.domains')
@@ -92,6 +93,27 @@ class DomainDnsStatusTest extends TestCase
 
         $component->call('toggleExpand', $domain->id)
             ->assertDontSee('v=DKIM1; k=rsa; p=abc123');
+    }
+
+    public function test_it_shows_the_detected_mail_provider_and_its_expected_dkim_selectors(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::factory()->create([
+            'fqdn' => 'm365.example.com',
+            'dkim_status' => 'valid',
+            'mail_provider' => MailProvider::Microsoft365,
+            'dkim_expected_selectors' => [
+                ['selector' => 'selector1', 'found' => true],
+                ['selector' => 'selector2', 'found' => false],
+            ],
+        ]);
+
+        Volt::actingAs($user)->test('admin.domains')
+            ->assertSee('Mail hosted by Microsoft 365')
+            ->assertDontSee('selector2._domainkey.m365.example.com')
+            ->call('toggleExpand', $domain->id)
+            ->assertSee('Expected for Microsoft 365')
+            ->assertSee('selector2._domainkey.m365.example.com');
     }
 
     public function test_expanding_a_domain_shows_its_previous_dmarc_and_spf_records(): void

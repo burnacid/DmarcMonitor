@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Services\Dns\DomainAuthenticationChecker;
 use App\Support\DmarcRecord;
+use App\Support\MailProvider;
 use Database\Factories\DomainFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,13 +19,15 @@ class Domain extends Model
     protected $fillable = [
         'organisation_id', 'fqdn', 'is_active', 'notes',
         'dmarc_status', 'dmarc_record', 'dmarc_report_authorizations', 'spf_status', 'spf_record', 'spf_lookup_count',
-        'dkim_status', 'dkim_selector', 'dkim_record', 'dkim_selectors', 'dns_checked_at',
+        'dkim_status', 'dkim_selector', 'dkim_record', 'dkim_selectors', 'mail_provider', 'dkim_expected_selectors', 'dns_checked_at',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'dmarc_report_authorizations' => 'array',
         'dkim_selectors' => 'array',
+        'mail_provider' => MailProvider::class,
+        'dkim_expected_selectors' => 'array',
         'dns_checked_at' => 'datetime',
         'deleted_at' => 'datetime',
     ];
@@ -46,6 +49,25 @@ class Domain extends Model
         }
 
         return [];
+    }
+
+    /**
+     * The DKIM selectors the mail provider detected from the MX records signs
+     * with, and whether each one's record was found at the last check.
+     *
+     * @return list<array{selector: string, found: bool}>
+     */
+    public function expectedDkimSelectors(): array
+    {
+        return $this->dkim_expected_selectors ?? [];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function missingExpectedDkimSelectors(): array
+    {
+        return array_column(array_filter($this->expectedDkimSelectors(), fn (array $expected) => ! $expected['found']), 'selector');
     }
 
     /**

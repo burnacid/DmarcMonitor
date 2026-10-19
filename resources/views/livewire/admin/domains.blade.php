@@ -755,6 +755,7 @@ new #[Layout('layouts.app')] class extends Component
                                             <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
                                         </svg>
                                         <span>{{ $domain->fqdn }}</span>
+                                        <x-mail-provider-icon :provider="$domain->mail_provider" />
                                     </button>
                                     @if ($domainHealth && ($domainHealth['issues'] !== [] || $domainHealth['remarks'] !== []))
                                         <div class="mt-1 flex flex-wrap gap-1 md:pl-6 max-md:justify-end">
@@ -897,6 +898,24 @@ new #[Layout('layouts.app')] class extends Component
                                                 @empty
                                                     <p class="mt-2 text-xs font-mono break-all text-gray-600 dark:text-gray-300">{{ __('No record found.') }}</p>
                                                 @endforelse
+
+                                                @if ($domain->mail_provider)
+                                                    <h5 class="mt-3 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                                        <x-mail-provider-icon :provider="$domain->mail_provider" />
+                                                        {{ __('Expected for :provider', ['provider' => $domain->mail_provider->label()]) }}
+                                                    </h5>
+                                                    <ul class="mt-1 space-y-1">
+                                                        @foreach ($domain->expectedDkimSelectors() as $expectedSelector)
+                                                            <li class="flex items-start gap-2 text-xs {{ $expectedSelector['found'] ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400' }}">
+                                                                <span aria-hidden="true">{{ $expectedSelector['found'] ? '✓' : '✗' }}</span>
+                                                                <span>
+                                                                    <span class="font-mono break-all">{{ $expectedSelector['selector'] }}._domainkey.{{ $domain->fqdn }}</span>
+                                                                    <span class="text-gray-400 dark:text-gray-500">· {{ $expectedSelector['found'] ? __('Found') : __('Missing') }}</span>
+                                                                </span>
+                                                            </li>
+                                                        @endforeach
+                                                    </ul>
+                                                @endif
 
                                                 @php $dkimSelectorsSeen = $this->dkimSelectorsSeen($domain); @endphp
                                                 <h5 class="mt-3 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('Selectors seen in reports') }}</h5>

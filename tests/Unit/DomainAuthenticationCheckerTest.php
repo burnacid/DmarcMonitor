@@ -16,10 +16,14 @@ class DomainAuthenticationCheckerTest extends TestCase
 
     /**
      * @param  array<string, array<int, string>>  $records  hostname => TXT record strings
+     * @param  array<string, array<string, int>>  $mx  hostname => [MX host => preference]
      */
-    private function checker(array $records): DomainAuthenticationChecker
+    private function checker(array $records, array $mx = []): DomainAuthenticationChecker
     {
-        return new DomainAuthenticationChecker(fn (string $hostname) => $records[$hostname] ?? []);
+        return new DomainAuthenticationChecker(
+            fn (string $hostname) => $records[$hostname] ?? [],
+            fn (string $hostname) => $mx[$hostname] ?? [],
+        );
     }
 
     public function test_it_reports_a_strong_dmarc_policy_as_valid(): void
@@ -218,6 +222,46 @@ class DomainAuthenticationCheckerTest extends TestCase
 
         $this->assertEquals('missing', $result['dkim_status']);
         $this->assertEquals('selector1', $result['dkim_selector']);
+    }
+
+    public function test_the_selectors_of_a_mail_provider_detected_from_the_mx_records_are_checked_without_reports(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+
+        $result = $this->checker(
+            ['selector1._domainkey.example.com' => ['v=DKIM1; k=rsa; p=one']],
+            ['example.com' => ['example-com.mail.protection.outlook.com' => 0]],
+        )->check($domain);
+
+        $this->assertEquals('microsoft365', $result['mail_provider']);
+        $this->assertEquals('valid', $result['dkim_status']);
+        $this->assertEquals('selector1', $result['dkim_selector']);
+        $this->assertSame([
+            ['selector' => 'selector1', 'found' => true],
+            ['selector' => 'selector2', 'found' => false],
+        ], $result['dkim_expected_selectors']);
+    }
+
+    public function test_dkim_is_missing_when_none_of_the_detected_providers_selectors_resolve(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+
+        $result = $this->checker([], ['example.com' => ['aspmx.l.google.com' => 1, 'alt1.aspmx.l.google.com' => 5]])->check($domain);
+
+        $this->assertEquals('google_workspace', $result['mail_provider']);
+        $this->assertEquals('missing', $result['dkim_status']);
+        $this->assertSame([['selector' => 'google', 'found' => false]], $result['dkim_expected_selectors']);
+    }
+
+    public function test_a_domain_whose_mx_is_not_a_known_provider_has_no_expected_selectors(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+
+        $result = $this->checker([], ['example.com' => ['mx.example.com' => 10]])->check($domain);
+
+        $this->assertNull($result['mail_provider']);
+        $this->assertNull($result['dkim_expected_selectors']);
+        $this->assertEquals('unknown', $result['dkim_status']);
     }
 
     public function test_dkim_selectors_from_other_domains_signing_are_ignored(): void
