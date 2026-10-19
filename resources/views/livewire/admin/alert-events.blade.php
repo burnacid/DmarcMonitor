@@ -59,7 +59,7 @@ new #[Layout('layouts.app')] class extends Component
                 </select>
             </div>
 
-            <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
+            <div class="bg-white dark:bg-gray-800 overflow-x-auto shadow-sm sm:rounded-lg">
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 max-md:block">
                     <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
                         <tr>
@@ -79,7 +79,7 @@ new #[Layout('layouts.app')] class extends Component
                                 <td data-label="{{ __('Domain') }}" class="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400 max-md:before:font-normal"><a href="{{ $event->domain->dashboardUrl() }}" wire:navigate class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ $event->domain->fqdn }}</a></td>
                                 <td data-label="{{ __('Type') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ str_replace('_', ' ', $event->alertRule->type) }}</td>
                                 <td data-label="{{ __('Details') }}" class="px-6 py-4 text-xs text-gray-500 dark:text-gray-400 font-mono max-md:flex max-md:justify-between max-md:items-start max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:font-sans max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400 max-md:before:shrink-0">
-                                    <span class="max-md:text-right">
+                                    <span class="block min-w-0 max-md:text-right md:max-w-md [overflow-wrap:anywhere]">
                                         @foreach ($event->details ?? [] as $key => $value)
                                             <div>{{ $key }}: {{ is_array($value) ? json_encode($value) : $value }}</div>
                                         @endforeach

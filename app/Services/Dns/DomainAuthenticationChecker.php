@@ -33,6 +33,11 @@ class DomainAuthenticationChecker
     private $mxResolver;
 
     /**
+     * @var callable(string): ?string
+     */
+    private $cnameResolver;
+
+    /**
      * @param  (callable(string): array<int, string|list<string>>)|null  $txtResolver  Defaults to a real
      *                                                                                 dns_get_record() TXT lookup;
      *                                                                                 injectable so tests never hit real DNS.
@@ -40,8 +45,10 @@ class DomainAuthenticationChecker
      *                                                                                 strings it was split into.
      * @param  (callable(string): array<string, int>)|null  $mxResolver  Defaults to a real dns_get_record()
      *                                                                   MX lookup returning host => preference.
+     * @param  (callable(string): ?string)|null  $cnameResolver  Defaults to a real dns_get_record() CNAME
+     *                                                           lookup returning the target, or null.
      */
-    public function __construct(?callable $txtResolver = null, ?callable $mxResolver = null)
+    public function __construct(?callable $txtResolver = null, ?callable $mxResolver = null, ?callable $cnameResolver = null)
     {
         $this->txtResolver = $txtResolver ?? function (string $hostname): array {
             $records = @dns_get_record($hostname, DNS_TXT) ?: [];
@@ -60,6 +67,12 @@ class DomainAuthenticationChecker
                 ->filter(fn (array $record) => ($record['target'] ?? '') !== '')
                 ->mapWithKeys(fn (array $record) => [$record['target'] => (int) ($record['pri'] ?? 0)])
                 ->all();
+        };
+
+        $this->cnameResolver = $cnameResolver ?? function (string $hostname): ?string {
+            $records = @dns_get_record($hostname, DNS_CNAME) ?: [];
+
+            return collect($records)->pluck('target')->filter()->first();
         };
     }
 
@@ -245,9 +258,12 @@ class DomainAuthenticationChecker
      * that has since been removed from DNS stops being reported as configured.
      * The most recently seen configured selector is kept as the primary one.
      * When the MX records point at a known mail provider, the selectors it
-     * signs with are checked too, even before any report has shown them.
+     * signs with are checked too, even before any report has shown them. An
+     * expected selector without a key that already is a CNAME (as Microsoft 365
+     * asks for) keeps the CNAME's target: the provider publishes the key there
+     * once DKIM signing is turned on, so the domain is ready to enable it.
      *
-     * @return array{dkim_status: string, dkim_selector: ?string, dkim_record: ?string, dkim_selectors: list<array{selector: string, record: string}>, mail_provider: ?string, dkim_expected_selectors: ?list<array{selector: string, found: bool}>}
+     * @return array{dkim_status: string, dkim_selector: ?string, dkim_record: ?string, dkim_selectors: list<array{selector: string, record: string}>, mail_provider: ?string, dkim_expected_selectors: ?list<array{selector: string, found: bool, cname?: string}>}
      */
     private function checkDkim(Domain $domain): array
     {
@@ -286,7 +302,7 @@ class DomainAuthenticationChecker
         if ($provider !== null) {
             $configuredNames = array_column($configured, 'selector');
             $providerColumns['dkim_expected_selectors'] = array_map(
-                fn (string $selector) => ['selector' => $selector, 'found' => in_array($selector, $configuredNames, true)],
+                fn (string $selector) => $this->expectedSelector($domain->fqdn, $selector, in_array($selector, $configuredNames, true)),
                 $expectedSelectors,
             );
         }
@@ -302,6 +318,29 @@ class DomainAuthenticationChecker
             'dkim_selectors' => $configured,
             ...$providerColumns,
         ];
+    }
+
+    /**
+     * @return array{selector: string, found: bool, cname?: string}
+     */
+    private function expectedSelector(string $fqdn, string $selector, bool $found): array
+    {
+        if ($found) {
+            return ['selector' => $selector, 'found' => true];
+        }
+
+        $hostname = "{$selector}._domainkey.{$fqdn}";
+
+        try {
+            $cname = ($this->cnameResolver)($hostname);
+        } catch (Throwable $e) {
+            Log::warning("DNS CNAME lookup failed for [{$hostname}]: {$e->getMessage()}");
+            $cname = null;
+        }
+
+        return $cname !== null
+            ? ['selector' => $selector, 'found' => false, 'cname' => $cname]
+            : ['selector' => $selector, 'found' => false];
     }
 
     private function detectMailProvider(string $fqdn): ?MailProvider

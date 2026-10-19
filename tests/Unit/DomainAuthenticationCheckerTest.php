@@ -17,12 +17,14 @@ class DomainAuthenticationCheckerTest extends TestCase
     /**
      * @param  array<string, array<int, string>>  $records  hostname => TXT record strings
      * @param  array<string, array<string, int>>  $mx  hostname => [MX host => preference]
+     * @param  array<string, string>  $cnames  hostname => CNAME target
      */
-    private function checker(array $records, array $mx = []): DomainAuthenticationChecker
+    private function checker(array $records, array $mx = [], array $cnames = []): DomainAuthenticationChecker
     {
         return new DomainAuthenticationChecker(
             fn (string $hostname) => $records[$hostname] ?? [],
             fn (string $hostname) => $mx[$hostname] ?? [],
+            fn (string $hostname) => $cnames[$hostname] ?? null,
         );
     }
 
@@ -251,6 +253,23 @@ class DomainAuthenticationCheckerTest extends TestCase
         $this->assertEquals('google_workspace', $result['mail_provider']);
         $this->assertEquals('missing', $result['dkim_status']);
         $this->assertSame([['selector' => 'google', 'found' => false]], $result['dkim_expected_selectors']);
+    }
+
+    public function test_an_expected_selector_that_is_a_cname_without_a_key_keeps_the_cname_target(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'example.com']);
+
+        $result = $this->checker(
+            [],
+            ['example.com' => ['example-com.mail.protection.outlook.com' => 0]],
+            ['selector1._domainkey.example.com' => 'selector1-example-com._domainkey.example.d-v1.dkim.mail.microsoft'],
+        )->check($domain);
+
+        $this->assertEquals('missing', $result['dkim_status']);
+        $this->assertSame([
+            ['selector' => 'selector1', 'found' => false, 'cname' => 'selector1-example-com._domainkey.example.d-v1.dkim.mail.microsoft'],
+            ['selector' => 'selector2', 'found' => false],
+        ], $result['dkim_expected_selectors']);
     }
 
     public function test_a_domain_whose_mx_is_not_a_known_provider_has_no_expected_selectors(): void

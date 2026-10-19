@@ -116,6 +116,26 @@ class DomainDnsStatusTest extends TestCase
             ->assertSee('selector2._domainkey.m365.example.com');
     }
 
+    public function test_an_expected_dkim_selector_with_only_a_cname_is_shown_as_ready_to_enable(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::factory()->create([
+            'fqdn' => 'm365.example.com',
+            'dkim_status' => 'missing',
+            'mail_provider' => MailProvider::Microsoft365,
+            'dkim_expected_selectors' => [
+                ['selector' => 'selector1', 'found' => false, 'cname' => 'selector1-m365-example-com._domainkey.example.d-v1.dkim.mail.microsoft'],
+                ['selector' => 'selector2', 'found' => false],
+            ],
+        ]);
+
+        Volt::actingAs($user)->test('admin.domains')
+            ->call('toggleExpand', $domain->id)
+            ->assertSee('Ready to enable')
+            ->assertSee('selector1-m365-example-com._domainkey.example.d-v1.dkim.mail.microsoft')
+            ->assertSee('Turn on DKIM signing for this domain at Microsoft 365');
+    }
+
     public function test_expanding_a_domain_shows_its_previous_dmarc_and_spf_records(): void
     {
         $user = User::factory()->create();
