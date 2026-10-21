@@ -6,6 +6,7 @@ use App\Models\AggregateReport;
 use App\Models\AggregateReportRecord;
 use App\Models\Domain;
 use App\Models\DomainRecordHistory;
+use App\Models\Organisation;
 use App\Models\User;
 use App\Services\Dns\DomainAuthenticationChecker;
 use App\Support\MailProvider;
@@ -40,6 +41,26 @@ class DomainDnsStatusTest extends TestCase
             ->assertSee('selector1')
             ->assertSee('p=none')
             ->assertSee('No selector seen yet');
+    }
+
+    public function test_domains_sort_by_dns_status_health_and_by_organisation(): void
+    {
+        $user = User::factory()->create();
+        Domain::factory()->create(['fqdn' => 'aaa-missing.test', 'dmarc_status' => 'missing', 'organisation_id' => Organisation::factory()->create(['name' => 'Zulu BV'])->id]);
+        Domain::factory()->create(['fqdn' => 'bbb-valid.test', 'dmarc_status' => 'valid', 'organisation_id' => Organisation::factory()->create(['name' => 'Alpha BV'])->id]);
+        Domain::factory()->create(['fqdn' => 'ccc-weak.test', 'dmarc_status' => 'weak', 'organisation_id' => Organisation::factory()->create(['name' => 'Mike BV'])->id]);
+
+        $component = Volt::actingAs($user)->test('admin.domains')
+            ->assertSeeInOrder(['aaa-missing.test', 'bbb-valid.test', 'ccc-weak.test']);
+
+        $component->call('sort', 'dmarc')
+            ->assertSeeInOrder(['bbb-valid.test', 'ccc-weak.test', 'aaa-missing.test']);
+
+        $component->call('sort', 'organisation')
+            ->assertSeeInOrder(['bbb-valid.test', 'ccc-weak.test', 'aaa-missing.test']);
+
+        $component->call('sort', 'organisation')
+            ->assertSeeInOrder(['aaa-missing.test', 'ccc-weak.test', 'bbb-valid.test']);
     }
 
     public function test_recheck_button_reruns_the_authentication_checker_and_updates_the_domain(): void

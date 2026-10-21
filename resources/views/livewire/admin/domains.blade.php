@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithSorting;
 use App\Models\AggregateReportRecord;
 use App\Models\Domain;
 use App\Models\Organisation;
@@ -10,6 +11,7 @@ use App\Services\Dns\SpfAnalyzer;
 use App\Support\AuditLogger;
 use App\Support\DmarcRecord;
 use App\Support\SpfRecord;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
@@ -19,7 +21,7 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] class extends Component
 {
-    use WithPagination;
+    use WithPagination, WithSorting;
 
     #[Url]
     public string $search = '';
@@ -123,6 +125,40 @@ new #[Layout('layouts.app')] class extends Component
     {
         $this->reset(['search', 'organisationFilter', 'needsAttention', 'hideInactive']);
         $this->resetPage();
+    }
+
+    /**
+     * @return array<string, 'asc'|'desc'>
+     */
+    protected function sortableColumns(): array
+    {
+        return ['fqdn' => 'asc', 'organisation' => 'asc', 'status' => 'desc', 'dmarc' => 'asc', 'spf' => 'asc', 'dkim' => 'asc'];
+    }
+
+    /**
+     * @return array{0: string, 1: 'asc'|'desc'}
+     */
+    protected function defaultSort(): array
+    {
+        return ['fqdn', 'asc'];
+    }
+
+    /**
+     * DNS statuses sort by how healthy they are rather than alphabetically:
+     * ascending puts valid records first and unchecked domains last.
+     */
+    private function applySort(Builder $query): void
+    {
+        ['column' => $column, 'direction' => $direction] = $this->currentSort;
+
+        match ($column) {
+            'organisation' => $query->orderBy(DB::table('organisations')->select('name')->whereColumn('organisations.id', 'domains.organisation_id'), $direction),
+            'status' => $query->orderBy('is_active', $direction),
+            'dmarc', 'spf', 'dkim' => $query->orderByRaw(
+                "CASE {$column}_status WHEN 'valid' THEN 0 WHEN 'weak' THEN 1 WHEN 'unknown' THEN 1 WHEN 'broken_split' THEN 2 WHEN 'too_many_lookups' THEN 2 WHEN 'missing' THEN 3 ELSE 4 END {$direction}"
+            ),
+            default => $query->orderBy('fqdn', $direction),
+        };
     }
 
     public function toggleExpand(int $id): void
@@ -599,6 +635,7 @@ new #[Layout('layouts.app')] class extends Component
             $query->whereIn('id', $attentionHealth->keys()->all());
         }
 
+        $this->applySort($query);
         $domains = $query->orderBy('fqdn')->paginate(15);
 
         return [
@@ -735,13 +772,13 @@ new #[Layout('layouts.app')] class extends Component
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 max-md:block">
                     <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Domain') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Organisation') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Status') }}</th>
+                            <x-sortable-th column="fqdn" :sort="$this->currentSort">{{ __('Domain') }}</x-sortable-th>
+                            <x-sortable-th column="organisation" :sort="$this->currentSort">{{ __('Organisation') }}</x-sortable-th>
+                            <x-sortable-th column="status" :sort="$this->currentSort">{{ __('Status') }}</x-sortable-th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Policy') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('DMARC') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('SPF') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('DKIM') }}</th>
+                            <x-sortable-th column="dmarc" :sort="$this->currentSort">{{ __('DMARC') }}</x-sortable-th>
+                            <x-sortable-th column="spf" :sort="$this->currentSort">{{ __('SPF') }}</x-sortable-th>
+                            <x-sortable-th column="dkim" :sort="$this->currentSort">{{ __('DKIM') }}</x-sortable-th>
                             <th class="px-6 py-3"></th>
                         </tr>
                     </thead>

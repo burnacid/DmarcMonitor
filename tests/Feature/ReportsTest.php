@@ -201,6 +201,94 @@ class ReportsTest extends TestCase
             ->assertDontSee('198.51.100.1');
     }
 
+    public function test_report_records_are_sorted_by_count_until_a_column_is_clicked(): void
+    {
+        $user = User::factory()->create();
+        $report = AggregateReport::factory()->create();
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id, 'source_ip' => '10.0.0.10', 'count' => 5]);
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id, 'source_ip' => '10.0.0.9', 'count' => 50]);
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id, 'source_ip' => '192.0.2.1', 'count' => 20]);
+
+        $component = Volt::actingAs($user)->test('reports.show', ['report' => $report])
+            ->assertSeeInOrder(['10.0.0.9', '192.0.2.1', '10.0.0.10']);
+
+        $component->call('sort', 'source_ip')
+            ->assertSeeInOrder(['10.0.0.9', '10.0.0.10', '192.0.2.1']);
+
+        $component->call('sort', 'source_ip')
+            ->assertSeeInOrder(['192.0.2.1', '10.0.0.10', '10.0.0.9']);
+    }
+
+    public function test_reports_index_sorts_by_a_clicked_column_and_ignores_unknown_sort_columns(): void
+    {
+        $user = User::factory()->create();
+        AggregateReport::factory()->create(['org_name' => 'Zeta Mail', 'date_range_begin' => now()->subDay()]);
+        AggregateReport::factory()->create(['org_name' => 'Alpha Mail', 'date_range_begin' => now()->subDays(5)]);
+
+        Volt::actingAs($user)->test('reports.index')
+            ->assertSeeInOrder(['Zeta Mail', 'Alpha Mail'])
+            ->call('sort', 'org_name')
+            ->assertSeeInOrder(['Alpha Mail', 'Zeta Mail'])
+            ->assertSet('sortDirection', 'asc');
+
+        Volt::withQueryParams(['sort' => 'id; drop table users', 'dir' => 'sideways'])
+            ->actingAs($user)
+            ->test('reports.index')
+            ->assertSeeInOrder(['Zeta Mail', 'Alpha Mail']);
+    }
+
+    public function test_dispositions_are_shown_as_coloured_badges(): void
+    {
+        $this->blade('<x-disposition-badge disposition="none" />')->assertSee('bg-green-100')->assertSee('none');
+        $this->blade('<x-disposition-badge disposition="quarantine" />')->assertSee('bg-orange-100')->assertSee('quarantine');
+        $this->blade('<x-disposition-badge disposition="reject" />')->assertSee('bg-red-100')->assertSee('reject');
+    }
+
+    public function test_clicking_a_record_folds_out_its_raw_xml_one_at_a_time(): void
+    {
+        $user = User::factory()->create();
+        $report = $this->reportWithRawXml('dmarc-attachments/report.xml', $this->twoRecordXml());
+        $first = AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id, 'source_ip' => '203.0.113.1']);
+        $second = AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id, 'source_ip' => '198.51.100.2']);
+
+        $component = Volt::actingAs($user)->test('reports.show', ['report' => $report])
+            ->assertDontSee('<source_ip>203.0.113.1</source_ip>');
+
+        $component->call('toggleRecord', $second->id)
+            ->assertSee('<source_ip>198.51.100.2</source_ip>')
+            ->assertDontSee('<source_ip>203.0.113.1</source_ip>');
+
+        $component->call('toggleRecord', $first->id)
+            ->assertSee('<source_ip>203.0.113.1</source_ip>')
+            ->assertDontSee('<source_ip>198.51.100.2</source_ip>');
+
+        $component->call('toggleRecord', $first->id)
+            ->assertDontSee('<source_ip>203.0.113.1</source_ip>');
+    }
+
+    public function test_the_whole_raw_xml_can_be_viewed_on_the_page_even_when_compressed(): void
+    {
+        $user = User::factory()->create();
+        $report = $this->reportWithRawXml('dmarc-attachments/report.xml.gz', gzencode($this->twoRecordXml()));
+
+        Volt::actingAs($user)->test('reports.show', ['report' => $report])
+            ->assertDontSee('<org_name>Acme Mail</org_name>')
+            ->call('toggleRawXml')
+            ->assertSee('<org_name>Acme Mail</org_name>')
+            ->assertSee('<source_ip>198.51.100.2</source_ip>');
+    }
+
+    public function test_a_record_of_a_report_without_stored_xml_says_so_when_folded_out(): void
+    {
+        $user = User::factory()->create();
+        $report = AggregateReport::factory()->create(['raw_xml_path' => null]);
+        $record = AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id]);
+
+        Volt::actingAs($user)->test('reports.show', ['report' => $report])
+            ->call('toggleRecord', $record->id)
+            ->assertSee('Raw XML not stored for this report.');
+    }
+
     public function test_raw_xml_can_be_downloaded(): void
     {
         Storage::fake('local');
@@ -263,5 +351,21 @@ class ReportsTest extends TestCase
         $this->actingAs($user)
             ->get(route('reports.download', $report))
             ->assertNotFound();
+    }
+
+    private function reportWithRawXml(string $path, string $contents): AggregateReport
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put($path, $contents);
+
+        return AggregateReport::factory()->create(['raw_xml_path' => $path]);
+    }
+
+    private function twoRecordXml(): string
+    {
+        $record = fn (string $ip) => "<record><row><source_ip>{$ip}</source_ip><count>1</count></row><identifiers><header_from>example.com</header_from></identifiers></record>";
+
+        return '<?xml version="1.0"?><feedback><report_metadata><org_name>Acme Mail</org_name></report_metadata>'
+            .$record('203.0.113.1').$record('198.51.100.2').'</feedback>';
     }
 }

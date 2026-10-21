@@ -52,6 +52,18 @@ class ForensicReportsTest extends TestCase
             ->assertDontSee('203.0.113.2');
     }
 
+    public function test_forensic_reports_index_sorts_by_a_clicked_column(): void
+    {
+        $user = User::factory()->create();
+        ForensicReport::factory()->create(['source_ip' => '203.0.113.50', 'arrival_date' => now()->subDay()]);
+        ForensicReport::factory()->create(['source_ip' => '198.51.100.7', 'arrival_date' => now()->subDays(3)]);
+
+        Volt::actingAs($user)->test('forensic-reports.index')
+            ->assertSeeInOrder(['203.0.113.50', '198.51.100.7'])
+            ->call('sort', 'source_ip')
+            ->assertSeeInOrder(['198.51.100.7', '203.0.113.50']);
+    }
+
     public function test_forensic_reports_show_displays_report_details(): void
     {
         $user = User::factory()->create();
