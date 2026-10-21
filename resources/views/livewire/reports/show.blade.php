@@ -1,7 +1,9 @@
 <?php
 
 use App\Models\AggregateReport;
+use App\Support\AggregateReportXml;
 use Illuminate\Support\Collection;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
@@ -19,6 +21,11 @@ new #[Layout('layouts.app')] class extends Component
     #[Url]
     public string $disposition = '';
 
+    /** The one record whose raw XML is folded out. */
+    public ?int $expandedRecordId = null;
+
+    public bool $showRawXml = false;
+
     public function mount(AggregateReport $report): void
     {
         $report->loadMissing('domain');
@@ -31,6 +38,37 @@ new #[Layout('layouts.app')] class extends Component
     public function clearFilters(): void
     {
         $this->reset(['spf_result', 'dkim_result', 'disposition']);
+    }
+
+    public function toggleRecord(int $recordId): void
+    {
+        $this->expandedRecordId = $this->expandedRecordId === $recordId ? null : $recordId;
+    }
+
+    public function toggleRawXml(): void
+    {
+        $this->showRawXml = ! $this->showRawXml;
+    }
+
+    #[Computed]
+    public function rawXml(): ?string
+    {
+        return AggregateReportXml::read($this->report);
+    }
+
+    /**
+     * The parser stores a report's records in the order of their <record>
+     * elements, so a record's position by id is its position in the XML.
+     */
+    public function rawRecordXml(int $recordId): ?string
+    {
+        $position = $this->report->records->sortBy('id')->pluck('id')->search($recordId);
+
+        if ($position === false || $this->rawXml === null) {
+            return null;
+        }
+
+        return AggregateReportXml::records($this->rawXml)[$position] ?? null;
     }
 
     public function with(): array
@@ -91,6 +129,8 @@ new #[Layout('layouts.app')] class extends Component
                         <dt class="text-gray-500 dark:text-gray-400">{{ __('Raw XML') }}</dt>
                         <dd class="mt-1">
                             @if ($report->raw_xml_path)
+                                <button type="button" wire:click="toggleRawXml" class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ $showRawXml ? __('Hide') : __('View') }}</button>
+                                <span class="text-gray-300 dark:text-gray-600">·</span>
                                 <a href="{{ route('reports.download', $report) }}" class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ __('Download') }}</a>
                             @else
                                 <span class="text-gray-400 dark:text-gray-500">{{ __('Not stored') }}</span>
@@ -98,6 +138,14 @@ new #[Layout('layouts.app')] class extends Component
                         </dd>
                     </div>
                 </dl>
+
+                @if ($showRawXml)
+                    @if ($this->rawXml !== null)
+                        <pre class="mt-4 max-h-[32rem] overflow-auto whitespace-pre rounded-md bg-gray-50 dark:bg-gray-900/50 p-4 text-xs font-mono text-gray-700 dark:text-gray-300">{{ \App\Support\AggregateReportXml::pretty($this->rawXml) }}</pre>
+                    @else
+                        <p class="mt-4 text-sm text-gray-400 dark:text-gray-500">{{ __('The raw XML file for this report is no longer available.') }}</p>
+                    @endif
+                @endif
             </div>
 
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
@@ -154,9 +202,20 @@ new #[Layout('layouts.app')] class extends Component
                         </thead>
                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:space-y-3 max-md:p-3">
                             @forelse ($filteredRecords as $record)
-                                <tr wire:key="record-{{ $record->id }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
+                                <tr
+                                    wire:key="record-{{ $record->id }}"
+                                    wire:click="toggleRecord({{ $record->id }})"
+                                    title="{{ $expandedRecordId === $record->id ? __('Hide raw record') : __('Show raw record') }}"
+                                    @class([
+                                        'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2',
+                                        'bg-gray-50 dark:bg-gray-700/50' => $expandedRecordId === $record->id,
+                                    ])
+                                >
                                     <td data-label="{{ __('Source IP') }}" class="px-6 py-3 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-start max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:font-sans max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400 max-md:before:shrink-0">
                                         <span class="max-md:text-right">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="inline h-4 w-4 align-text-bottom text-gray-400 dark:text-gray-500 transition-transform {{ $expandedRecordId === $record->id ? 'rotate-90' : '' }}" aria-hidden="true">
+                                                <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                                            </svg>
                                             <x-country-flag :code="$record->country" /> {{ $record->source_ip }}
                                             @if ($record->ptr_hostname)
                                                 <div class="text-xs text-gray-400 dark:text-gray-500">{{ $record->ptr_hostname }}</div>
@@ -186,6 +245,20 @@ new #[Layout('layouts.app')] class extends Component
                                     <td data-label="{{ __('Envelope From') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $record->envelope_from ?? '—' }}</td>
                                     <td data-label="{{ __('Envelope To') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $record->envelope_to ?? '—' }}</td>
                                 </tr>
+                                @if ($expandedRecordId === $record->id)
+                                    @php $rawRecordXml = $this->rawRecordXml($record->id); @endphp
+                                    <tr wire:key="record-{{ $record->id }}-raw" class="max-md:block">
+                                        <td colspan="8" class="bg-gray-50 dark:bg-gray-900/50 px-6 py-4 max-md:block max-md:px-3 max-md:py-3 max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:-mt-2">
+                                            @if ($rawRecordXml !== null)
+                                                <pre class="max-h-[32rem] overflow-auto whitespace-pre text-xs font-mono text-gray-700 dark:text-gray-300">{{ $rawRecordXml }}</pre>
+                                            @elseif ($this->rawXml === null)
+                                                <p class="text-sm text-gray-400 dark:text-gray-500">{{ __('Raw XML not stored for this report.') }}</p>
+                                            @else
+                                                <p class="text-sm text-gray-400 dark:text-gray-500">{{ __('This record could not be found in the raw XML.') }}</p>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endif
                             @empty
                                 <tr>
                                     <td colspan="8" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">

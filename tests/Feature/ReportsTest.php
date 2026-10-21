@@ -201,6 +201,51 @@ class ReportsTest extends TestCase
             ->assertDontSee('198.51.100.1');
     }
 
+    public function test_clicking_a_record_folds_out_its_raw_xml_one_at_a_time(): void
+    {
+        $user = User::factory()->create();
+        $report = $this->reportWithRawXml('dmarc-attachments/report.xml', $this->twoRecordXml());
+        $first = AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id, 'source_ip' => '203.0.113.1']);
+        $second = AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id, 'source_ip' => '198.51.100.2']);
+
+        $component = Volt::actingAs($user)->test('reports.show', ['report' => $report])
+            ->assertDontSee('<source_ip>203.0.113.1</source_ip>');
+
+        $component->call('toggleRecord', $second->id)
+            ->assertSee('<source_ip>198.51.100.2</source_ip>')
+            ->assertDontSee('<source_ip>203.0.113.1</source_ip>');
+
+        $component->call('toggleRecord', $first->id)
+            ->assertSee('<source_ip>203.0.113.1</source_ip>')
+            ->assertDontSee('<source_ip>198.51.100.2</source_ip>');
+
+        $component->call('toggleRecord', $first->id)
+            ->assertDontSee('<source_ip>203.0.113.1</source_ip>');
+    }
+
+    public function test_the_whole_raw_xml_can_be_viewed_on_the_page_even_when_compressed(): void
+    {
+        $user = User::factory()->create();
+        $report = $this->reportWithRawXml('dmarc-attachments/report.xml.gz', gzencode($this->twoRecordXml()));
+
+        Volt::actingAs($user)->test('reports.show', ['report' => $report])
+            ->assertDontSee('<org_name>Acme Mail</org_name>')
+            ->call('toggleRawXml')
+            ->assertSee('<org_name>Acme Mail</org_name>')
+            ->assertSee('<source_ip>198.51.100.2</source_ip>');
+    }
+
+    public function test_a_record_of_a_report_without_stored_xml_says_so_when_folded_out(): void
+    {
+        $user = User::factory()->create();
+        $report = AggregateReport::factory()->create(['raw_xml_path' => null]);
+        $record = AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id]);
+
+        Volt::actingAs($user)->test('reports.show', ['report' => $report])
+            ->call('toggleRecord', $record->id)
+            ->assertSee('Raw XML not stored for this report.');
+    }
+
     public function test_raw_xml_can_be_downloaded(): void
     {
         Storage::fake('local');
@@ -263,5 +308,21 @@ class ReportsTest extends TestCase
         $this->actingAs($user)
             ->get(route('reports.download', $report))
             ->assertNotFound();
+    }
+
+    private function reportWithRawXml(string $path, string $contents): AggregateReport
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put($path, $contents);
+
+        return AggregateReport::factory()->create(['raw_xml_path' => $path]);
+    }
+
+    private function twoRecordXml(): string
+    {
+        $record = fn (string $ip) => "<record><row><source_ip>{$ip}</source_ip><count>1</count></row><identifiers><header_from>example.com</header_from></identifiers></record>";
+
+        return '<?xml version="1.0"?><feedback><report_metadata><org_name>Acme Mail</org_name></report_metadata>'
+            .$record('203.0.113.1').$record('198.51.100.2').'</feedback>';
     }
 }
