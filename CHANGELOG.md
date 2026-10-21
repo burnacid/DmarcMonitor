@@ -2,6 +2,20 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
+## [1.6.0]
+
+### Added
+
+- **Install as an app**: DMARC Monitor can now be installed as an app on desktop and mobile. In Chrome or Edge, open the user menu (your name, top right) and click "Install app". The app opens in its own window with its own icon. The item only appears when the browser offers installing, and disappears once the app is installed. On iPhone and iPad, use Safari's Share > "Add to Home Screen". Pages and report data are never stored on the device: without a connection the app shows an "offline" page instead.
+
+### Changed
+
+- New logo: the envelope's flap is now a green check mark, so the logo reads as one shape instead of an envelope with a separate check underneath it. The logo is updated in the navigation, the login page, the wallboard, the browser tab icon and the app icons.
+
+### Fixed
+
+- The `favicon.ico` icon was an empty file, so browsers that ask for it showed no icon. It now contains the logo.
+
 ## [1.5.2]
 
 ### Added
