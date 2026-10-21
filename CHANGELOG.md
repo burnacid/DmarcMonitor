@@ -9,6 +9,10 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 - **View raw report data**: on a report's page, click "View" next to the raw XML download to read the report's XML on the page. You can also click a record in the table to fold out the raw `<record>` it came from. Only one record is open at a time; click it again to close it.
 - **Sample reports for development**: `php artisan db:seed --class=SampleReportsSeeder` imports 30 days of realistic aggregate reports for every active domain. They come from several providers and mix legitimate senders, a forwarder and spoofers. The reports go through the normal parser, so their raw XML is stored. Running it again replaces the same days' reports instead of adding more.
 
+### Changed
+
+- On a report's page, each record's disposition is now a coloured badge: green for `none`, orange for `quarantine` and red for `reject`.
+
 ## [1.5.1]
 
 ### Added

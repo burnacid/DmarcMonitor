@@ -201,6 +201,13 @@ class ReportsTest extends TestCase
             ->assertDontSee('198.51.100.1');
     }
 
+    public function test_dispositions_are_shown_as_coloured_badges(): void
+    {
+        $this->blade('<x-disposition-badge disposition="none" />')->assertSee('bg-green-100')->assertSee('none');
+        $this->blade('<x-disposition-badge disposition="quarantine" />')->assertSee('bg-orange-100')->assertSee('quarantine');
+        $this->blade('<x-disposition-badge disposition="reject" />')->assertSee('bg-red-100')->assertSee('reject');
+    }
+
     public function test_clicking_a_record_folds_out_its_raw_xml_one_at_a_time(): void
     {
         $user = User::factory()->create();
