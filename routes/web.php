@@ -10,10 +10,13 @@ use App\Http\Controllers\PublicOverviewController;
 use App\Http\Controllers\ReportAuthorizationExportController;
 use App\Http\Controllers\ReportDownloadController;
 use App\Http\Controllers\ReportsExportController;
+use App\Http\Controllers\WebManifestController;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 
 Route::redirect('/', '/dashboard');
+
+Route::get('manifest.webmanifest', WebManifestController::class)->name('web-manifest');
 
 Volt::route('dashboard', 'dashboard')
     ->middleware(['auth', 'verified'])

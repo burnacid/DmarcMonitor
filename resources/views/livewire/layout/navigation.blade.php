@@ -223,6 +223,15 @@ new class extends Component
                             {{ __('Profile') }}
                         </x-dropdown-link>
 
+                        <!-- Install as an app (shown only when the browser offers it) -->
+                        <div x-data="{ installable: window.pwaInstall?.available() ?? false }" x-on:pwa-installable.window="installable = $event.detail" x-show="installable" x-cloak>
+                            <button type="button" x-on:click="window.pwaInstall.prompt()" class="w-full text-start">
+                                <x-dropdown-link>
+                                    {{ __('Install app') }}
+                                </x-dropdown-link>
+                            </button>
+                        </div>
+
                         <!-- Authentication -->
                         <button wire:click="logout" class="w-full text-start">
                             <x-dropdown-link>
@@ -374,6 +383,14 @@ new class extends Component
                 <x-responsive-nav-link :href="route('profile')" wire:navigate>
                     {{ __('Profile') }}
                 </x-responsive-nav-link>
+
+                <div x-data="{ installable: window.pwaInstall?.available() ?? false }" x-on:pwa-installable.window="installable = $event.detail" x-show="installable" x-cloak>
+                    <button type="button" x-on:click="window.pwaInstall.prompt()" class="w-full text-start">
+                        <x-responsive-nav-link>
+                            {{ __('Install app') }}
+                        </x-responsive-nav-link>
+                    </button>
+                </div>
 
                 <!-- Authentication -->
                 <button wire:click="logout" class="w-full text-start">
