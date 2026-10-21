@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithSorting;
 use App\Models\Domain;
 use App\Models\ForensicReport;
 use Illuminate\Database\Eloquent\Builder;
@@ -10,7 +11,7 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] class extends Component
 {
-    use WithPagination;
+    use WithPagination, WithSorting;
 
     #[Url]
     public ?int $domain_id = null;
@@ -37,6 +38,35 @@ new #[Layout('layouts.app')] class extends Component
         $this->reset(['domain_id', 'ip', 'from', 'to', 'search']);
     }
 
+    /**
+     * @return array<string, 'asc'|'desc'>
+     */
+    protected function sortableColumns(): array
+    {
+        return ['domain' => 'asc', 'source_ip' => 'asc', 'delivery_result' => 'asc', 'header_from' => 'asc', 'arrival_date' => 'desc'];
+    }
+
+    /**
+     * @return array{0: string, 1: 'asc'|'desc'}
+     */
+    protected function defaultSort(): array
+    {
+        return ['arrival_date', 'desc'];
+    }
+
+    private function applySort(Builder $query): void
+    {
+        ['column' => $column, 'direction' => $direction] = $this->currentSort;
+
+        if ($column === 'domain') {
+            $query->orderBy(DB::table('domains')->select('fqdn')->whereColumn('domains.id', 'forensic_reports.domain_id'), $direction);
+
+            return;
+        }
+
+        $query->orderBy($column, $direction);
+    }
+
     public function with(): array
     {
         $reports = ForensicReport::query()
@@ -50,7 +80,8 @@ new #[Layout('layouts.app')] class extends Component
                 fn (Builder $q) => $q->where('subject', 'like', "%{$this->search}%")
                     ->orWhere('header_from', 'like', "%{$this->search}%")
             ))
-            ->orderByDesc('arrival_date')
+            ->tap(fn (Builder $query) => $this->applySort($query))
+            ->orderByDesc('id')
             ->paginate(15);
 
         return [
@@ -102,11 +133,11 @@ new #[Layout('layouts.app')] class extends Component
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 max-md:block">
                     <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Domain') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Source IP') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Delivery Result') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Header/Envelope From') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Arrival Date') }}</th>
+                            <x-sortable-th column="domain" :sort="$this->currentSort">{{ __('Domain') }}</x-sortable-th>
+                            <x-sortable-th column="source_ip" :sort="$this->currentSort">{{ __('Source IP') }}</x-sortable-th>
+                            <x-sortable-th column="delivery_result" :sort="$this->currentSort">{{ __('Delivery Result') }}</x-sortable-th>
+                            <x-sortable-th column="header_from" :sort="$this->currentSort">{{ __('Header/Envelope From') }}</x-sortable-th>
+                            <x-sortable-th column="arrival_date" :sort="$this->currentSort">{{ __('Arrival Date') }}</x-sortable-th>
                             <th class="px-6 py-3"></th>
                         </tr>
                     </thead>

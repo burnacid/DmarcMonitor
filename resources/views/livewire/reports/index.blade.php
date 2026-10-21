@@ -1,7 +1,10 @@
 <?php
 
+use App\Livewire\Concerns\WithSorting;
 use App\Models\AggregateReport;
 use App\Models\Domain;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
@@ -9,7 +12,7 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] class extends Component
 {
-    use WithPagination;
+    use WithPagination, WithSorting;
 
     #[Url]
     public ?int $domain_id = null;
@@ -49,6 +52,22 @@ new #[Layout('layouts.app')] class extends Component
     }
 
     /**
+     * @return array<string, 'asc'|'desc'>
+     */
+    protected function sortableColumns(): array
+    {
+        return ['domain' => 'asc', 'org_name' => 'asc', 'date' => 'desc', 'records' => 'desc', 'messages' => 'desc'];
+    }
+
+    /**
+     * @return array{0: string, 1: 'asc'|'desc'}
+     */
+    protected function defaultSort(): array
+    {
+        return ['date', 'desc'];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function filters(): array
@@ -66,6 +85,19 @@ new #[Layout('layouts.app')] class extends Component
         ];
     }
 
+    private function applySort(Builder $query): void
+    {
+        ['column' => $column, 'direction' => $direction] = $this->currentSort;
+
+        match ($column) {
+            'domain' => $query->orderBy(DB::table('domains')->select('fqdn')->whereColumn('domains.id', 'aggregate_reports.domain_id'), $direction),
+            'org_name' => $query->orderBy('org_name', $direction),
+            'records' => $query->orderBy('records_count', $direction),
+            'messages' => $query->orderBy('message_count', $direction),
+            default => $query->orderBy('date_range_begin', $direction),
+        };
+    }
+
     public function with(): array
     {
         $reports = AggregateReport::query()
@@ -74,7 +106,8 @@ new #[Layout('layouts.app')] class extends Component
             ->with('domain')
             ->withCount('records')
             ->withSum('records as message_count', 'count')
-            ->orderByDesc('date_range_begin')
+            ->tap(fn (Builder $query) => $this->applySort($query))
+            ->orderByDesc('id')
             ->paginate(15);
 
         return [
@@ -165,11 +198,11 @@ new #[Layout('layouts.app')] class extends Component
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 max-md:block">
                     <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Domain') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Reporting org') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Date range') }}</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Records') }}</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Messages') }}</th>
+                            <x-sortable-th column="domain" :sort="$this->currentSort">{{ __('Domain') }}</x-sortable-th>
+                            <x-sortable-th column="org_name" :sort="$this->currentSort">{{ __('Reporting org') }}</x-sortable-th>
+                            <x-sortable-th column="date" :sort="$this->currentSort">{{ __('Date range') }}</x-sortable-th>
+                            <x-sortable-th column="records" align="right" :sort="$this->currentSort">{{ __('Records') }}</x-sortable-th>
+                            <x-sortable-th column="messages" align="right" :sort="$this->currentSort">{{ __('Messages') }}</x-sortable-th>
                             <th class="px-6 py-3"></th>
                         </tr>
                     </thead>

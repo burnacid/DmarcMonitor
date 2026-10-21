@@ -1,6 +1,8 @@
 <?php
 
+use App\Livewire\Concerns\WithSorting;
 use App\Models\AggregateReport;
+use App\Models\AggregateReportRecord;
 use App\Support\AggregateReportXml;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
@@ -10,6 +12,8 @@ use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithSorting;
+
     public AggregateReport $report;
 
     #[Url]
@@ -38,6 +42,44 @@ new #[Layout('layouts.app')] class extends Component
     public function clearFilters(): void
     {
         $this->reset(['spf_result', 'dkim_result', 'disposition']);
+    }
+
+    /**
+     * @return array<string, 'asc'|'desc'>
+     */
+    protected function sortableColumns(): array
+    {
+        return [
+            'source_ip' => 'asc', 'count' => 'desc', 'disposition' => 'asc', 'dkim_result' => 'asc',
+            'spf_result' => 'asc', 'header_from' => 'asc', 'envelope_from' => 'asc', 'envelope_to' => 'asc',
+        ];
+    }
+
+    /**
+     * @return array{0: string, 1: 'asc'|'desc'}
+     */
+    protected function defaultSort(): array
+    {
+        return ['count', 'desc'];
+    }
+
+    /**
+     * IP addresses sort by their numeric value (as fixed-width hex, prefixed
+     * so it's never compared as a number), text case-insensitively.
+     */
+    private function recordSortValue(AggregateReportRecord $record, string $column): int|string
+    {
+        if ($column === 'count') {
+            return (int) $record->count;
+        }
+
+        if ($column === 'source_ip') {
+            $packed = @inet_pton((string) $record->source_ip);
+
+            return 'ip'.str_pad($packed === false ? '' : bin2hex($packed), 32, '0', STR_PAD_LEFT);
+        }
+
+        return strtolower((string) $record->{$column});
     }
 
     public function toggleRecord(int $recordId): void
@@ -77,7 +119,8 @@ new #[Layout('layouts.app')] class extends Component
             'filteredRecords' => $this->report->records
                 ->when($this->spf_result, fn (Collection $records) => $records->where('spf_result', $this->spf_result))
                 ->when($this->dkim_result, fn (Collection $records) => $records->where('dkim_result', $this->dkim_result))
-                ->when($this->disposition, fn (Collection $records) => $records->where('disposition', $this->disposition)),
+                ->when($this->disposition, fn (Collection $records) => $records->where('disposition', $this->disposition))
+                ->sortBy(fn (AggregateReportRecord $record) => $this->recordSortValue($record, $this->currentSort['column']), SORT_REGULAR, $this->currentSort['direction'] === 'desc'),
         ];
     }
 }; ?>
@@ -190,14 +233,14 @@ new #[Layout('layouts.app')] class extends Component
                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 mt-2 max-md:block max-md:mt-4">
                         <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
                             <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Source IP') }}</th>
-                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Count') }}</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Disposition') }}</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('DKIM') }}</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('SPF') }}</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Header From') }}</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Envelope From') }}</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Envelope To') }}</th>
+                                <x-sortable-th column="source_ip" :sort="$this->currentSort">{{ __('Source IP') }}</x-sortable-th>
+                                <x-sortable-th column="count" align="right" :sort="$this->currentSort">{{ __('Count') }}</x-sortable-th>
+                                <x-sortable-th column="disposition" :sort="$this->currentSort">{{ __('Disposition') }}</x-sortable-th>
+                                <x-sortable-th column="dkim_result" :sort="$this->currentSort">{{ __('DKIM') }}</x-sortable-th>
+                                <x-sortable-th column="spf_result" :sort="$this->currentSort">{{ __('SPF') }}</x-sortable-th>
+                                <x-sortable-th column="header_from" :sort="$this->currentSort">{{ __('Header From') }}</x-sortable-th>
+                                <x-sortable-th column="envelope_from" :sort="$this->currentSort">{{ __('Envelope From') }}</x-sortable-th>
+                                <x-sortable-th column="envelope_to" :sort="$this->currentSort">{{ __('Envelope To') }}</x-sortable-th>
                             </tr>
                         </thead>
                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:space-y-3 max-md:p-3">

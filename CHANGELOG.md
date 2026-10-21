@@ -8,6 +8,7 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 
 - **View raw report data**: on a report's page, click "View" next to the raw XML download to read the report's XML on the page. You can also click a record in the table to fold out the raw `<record>` it came from. Only one record is open at a time; click it again to close it.
 - **Sample reports for development**: `php artisan db:seed --class=SampleReportsSeeder` imports 30 days of realistic aggregate reports for every active domain. They come from several providers and mix legitimate senders, a forwarder and spoofers. The reports go through the normal parser, so their raw XML is stored. Running it again replaces the same days' reports instead of adding more.
+- **Sortable tables**: click a column header to sort by it, and click again to reverse the order. This works on the Reports, Forensic Reports and Domains pages and on the records table of a report. The sort is kept in the page address, so a bookmarked or refreshed page keeps it. On the Domains page, DMARC, SPF and DKIM sort from healthy to missing instead of alphabetically. A report's records are now listed with the most messages first.
 
 ### Changed
 
