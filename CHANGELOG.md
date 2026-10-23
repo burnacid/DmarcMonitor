@@ -2,6 +2,12 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
+## [Unreleased]
+
+### Changed
+
+- The dashboard uses far less memory and loads faster when there are many reports. Only the sending sources it shows are worked out in detail, and the sending-sources table is kept for up to 10 minutes. It is refreshed as soon as a new report arrives or source names are looked up. The CSV export, the organisation PDF report and the wallboard also use less memory.
+
 ## [1.6.0]
 
 ### Added

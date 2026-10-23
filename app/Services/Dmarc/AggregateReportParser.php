@@ -7,6 +7,7 @@ use App\Models\AggregateReport;
 use App\Models\Domain;
 use App\Models\ImapAccount;
 use App\Models\Microsoft365MailAccount;
+use App\Services\Analytics\DmarcMetricsService;
 use App\Support\CompressedFileReader;
 use Avvertix\DmarcReportParser\Data\DmarcReport;
 use Avvertix\DmarcReportParser\Data\Record;
@@ -111,6 +112,7 @@ class AggregateReportParser
             return $aggregateReport;
         });
 
+        DmarcMetricsService::flushCache();
         EnrichReportRecordsJob::dispatch($aggregateReport->id);
 
         return $aggregateReport;

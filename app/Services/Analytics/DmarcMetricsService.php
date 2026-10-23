@@ -4,7 +4,9 @@ namespace App\Services\Analytics;
 
 use App\Models\AggregateReportRecord;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 class DmarcMetricsService
 {
@@ -14,6 +16,24 @@ class DmarcMetricsService
      * envelope breakdown instead of silently vanishing from it.
      */
     private const NO_ENVELOPE_LABEL = '(no envelope-to data)';
+
+    /**
+     * Cache key holding a counter that is bumped whenever report data changes,
+     * so cached dashboard figures are invalidated as soon as new reports
+     * arrive or get enriched rather than only when their TTL runs out.
+     */
+    private const CACHE_VERSION_KEY = 'dmarc-metrics-version';
+
+    private const DASHBOARD_CACHE_MINUTES = 10;
+
+    /**
+     * Invalidates all cached metrics; call after report data changes.
+     */
+    public static function flushCache(): void
+    {
+        Cache::add(self::CACHE_VERSION_KEY, 0);
+        Cache::increment(self::CACHE_VERSION_KEY);
+    }
 
     /**
      * Daily DMARC/SPF/DKIM pass-rate trend across the given window.
@@ -48,6 +68,21 @@ class DmarcMetricsService
      */
     public function sourceBreakdown(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null): Collection
     {
+        $envelopeDomains = $this->envelopeDomainsBySourceIp($domainId, $from, $to, $organisationId, $allowedDomainIds);
+
+        return $this->sourceRows($domainId, $from, $to, $organisationId, $allowedDomainIds)
+            ->map(fn (array $source) => $source + [
+                'envelope_domains' => $envelopeDomains->get("{$source['domain_id']}|{$source['source_ip']}", collect())->all(),
+            ]);
+    }
+
+    /**
+     * Volume and pass-rate aggregates per (source IP, domain) pair, ordered by volume.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function sourceRows(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null): Collection
+    {
         $rows = $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds)
             ->selectRaw('aggregate_report_records.source_ip')
             ->selectRaw('aggregate_reports.domain_id')
@@ -64,11 +99,9 @@ class DmarcMetricsService
             ->orderByDesc('total')
             ->get();
 
-        $envelopeDomains = $this->envelopeDomainsBySourceIp($domainId, $from, $to, $organisationId, $allowedDomainIds);
-
         return $rows->map(fn ($row) => [
             'source_ip' => $row->source_ip,
-            'domain_id' => $row->domain_id,
+            'domain_id' => (int) $row->domain_id,
             'domain' => $row->domain,
             'ptr_hostname' => $row->ptr_hostname,
             'asn_org' => $row->asn_org,
@@ -82,7 +115,6 @@ class DmarcMetricsService
             'spf_pass_pct' => $this->percentage($row->spf_pass, $row->total),
             'dkim_pass_pct' => $this->percentage($row->dkim_pass, $row->total),
             'enforced' => (int) $row->enforced,
-            'envelope_domains' => $envelopeDomains->get("{$row->domain_id}|{$row->source_ip}", collect())->all(),
         ]);
     }
 
@@ -111,9 +143,10 @@ class DmarcMetricsService
      *
      * @return Collection<int, array<string, mixed>>
      */
-    private function envelopeStatsBySourceIp(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId, ?array $allowedDomainIds = null): Collection
+    private function envelopeStatsBySourceIp(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId, ?array $allowedDomainIds = null, ?array $sourceIps = null): Collection
     {
         return $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds)
+            ->when($sourceIps !== null, fn (Builder $query) => $query->whereIn('aggregate_report_records.source_ip', $sourceIps))
             ->selectRaw('aggregate_report_records.source_ip')
             ->selectRaw('aggregate_reports.domain_id')
             ->selectRaw('aggregate_report_records.envelope_to')
@@ -126,7 +159,7 @@ class DmarcMetricsService
             ->get()
             ->map(fn ($row) => [
                 'source_ip' => $row->source_ip,
-                'domain_id' => $row->domain_id,
+                'domain_id' => (int) $row->domain_id,
                 'envelope_to' => $row->envelope_to ?? self::NO_ENVELOPE_LABEL,
                 'total' => (int) $row->total,
                 'dmarc_pass' => (int) $row->dmarc_pass,
@@ -143,63 +176,136 @@ class DmarcMetricsService
      * sender (e.g. one ASN/org sending from several IPs) reads as one row instead
      * of many near-duplicate ones.
      *
+     * Without $withEnvelopes the per-envelope-to split is left empty, which
+     * saves loading envelope stats for every source; attachEnvelopes() can
+     * add it to just the groups that are shown.
+     *
      * @return Collection<int, array<string, mixed>>
      */
-    public function groupedSourceBreakdown(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null): Collection
+    public function groupedSourceBreakdown(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, bool $withEnvelopes = true): Collection
     {
-        $sources = $this->sourceBreakdown($domainId, $from, $to, $organisationId, $allowedDomainIds);
-        $envelopeStats = $this->envelopeStatsBySourceIp($domainId, $from, $to, $organisationId, $allowedDomainIds)
-            ->groupBy(fn ($row) => "{$row['domain_id']}|{$row['source_ip']}");
-
-        return $sources
+        $groups = $this->sourceRows($domainId, $from, $to, $organisationId, $allowedDomainIds)
             ->groupBy(fn ($source) => $source['domain_id'].'|'.($source['asn_org'] ?? $source['ptr_hostname'] ?? $source['source_ip']))
-            ->map(function (Collection $ips) use ($envelopeStats) {
-                $label = $ips->first()['asn_org'] ?? $ips->first()['ptr_hostname'] ?? $ips->first()['source_ip'];
+            ->map(function (Collection $ips) {
                 $total = $ips->sum('total');
-                $dmarcPass = $ips->sum('dmarc_pass');
-                $spfPass = $ips->sum('spf_pass');
-                $dkimPass = $ips->sum('dkim_pass');
-                $enforced = $ips->sum('enforced');
-
-                $envelopes = $ips
-                    ->flatMap(fn ($ip) => $envelopeStats->get("{$ip['domain_id']}|{$ip['source_ip']}", collect()))
-                    ->groupBy('envelope_to')
-                    ->map(function (Collection $rows, string $domain) {
-                        $envelopeTotal = $rows->sum('total');
-
-                        return [
-                            'domain' => $domain,
-                            'ips' => $rows->pluck('source_ip')->unique()->sort()->values()->all(),
-                            'total' => $envelopeTotal,
-                            'dmarc_pass_pct' => $this->percentage($rows->sum('dmarc_pass'), $envelopeTotal),
-                            'spf_pass_pct' => $this->percentage($rows->sum('spf_pass'), $envelopeTotal),
-                            'dkim_pass_pct' => $this->percentage($rows->sum('dkim_pass'), $envelopeTotal),
-                            'enforced' => $rows->sum('enforced'),
-                        ];
-                    })
-                    ->values()
-                    ->sortByDesc('total')
-                    ->values();
 
                 return [
-                    'label' => $label,
+                    'label' => $ips->first()['asn_org'] ?? $ips->first()['ptr_hostname'] ?? $ips->first()['source_ip'],
                     'domain' => $ips->first()['domain'],
                     'domain_id' => $ips->first()['domain_id'],
                     'ips' => $ips->values(),
                     'ip_count' => $ips->count(),
                     'country_by_ip' => $ips->pluck('country', 'source_ip')->all(),
                     'total' => $total,
-                    'dmarc_pass_pct' => $this->percentage($dmarcPass, $total),
-                    'spf_pass_pct' => $this->percentage($spfPass, $total),
-                    'dkim_pass_pct' => $this->percentage($dkimPass, $total),
-                    'enforced' => $enforced,
-                    'envelopes' => $envelopes->all(),
-                    'envelope_count' => $envelopes->count(),
+                    'dmarc_pass_pct' => $this->percentage($ips->sum('dmarc_pass'), $total),
+                    'spf_pass_pct' => $this->percentage($ips->sum('spf_pass'), $total),
+                    'dkim_pass_pct' => $this->percentage($ips->sum('dkim_pass'), $total),
+                    'enforced' => $ips->sum('enforced'),
+                    'envelopes' => [],
+                    'envelope_count' => 0,
                 ];
             })
             ->values()
             ->sortByDesc('total')
             ->values();
+
+        if (! $withEnvelopes) {
+            return $groups;
+        }
+
+        return $this->withEnvelopeSplit($groups, $this->envelopeStatsBySourceIp($domainId, $from, $to, $organisationId, $allowedDomainIds));
+    }
+
+    /**
+     * Fills in the per-envelope-to split of the given groups from
+     * groupedSourceBreakdown(), loading envelope stats only for their IPs.
+     *
+     * @param  Collection<int, array<string, mixed>>  $groups
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function attachEnvelopes(Collection $groups, ?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null): Collection
+    {
+        if ($groups->isEmpty()) {
+            return $groups;
+        }
+
+        // Chunked to stay under the database's bound-parameter limit when the
+        // groups span many IPs.
+        $envelopeStats = $groups
+            ->flatMap(fn (array $group) => $group['ips']->pluck('source_ip'))
+            ->unique()
+            ->chunk(500)
+            ->flatMap(fn (Collection $sourceIps) => $this->envelopeStatsBySourceIp($domainId, $from, $to, $organisationId, $allowedDomainIds, $sourceIps->values()->all()));
+
+        return $this->withEnvelopeSplit($groups, $envelopeStats);
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $groups
+     * @param  Collection<int, array<string, mixed>>  $envelopeStats  Rows from envelopeStatsBySourceIp().
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function withEnvelopeSplit(Collection $groups, Collection $envelopeStats): Collection
+    {
+        $envelopeStats = $envelopeStats->groupBy(fn ($row) => "{$row['domain_id']}|{$row['source_ip']}");
+
+        return $groups->map(function (array $group) use ($envelopeStats) {
+            $envelopes = $group['ips']
+                ->flatMap(fn ($ip) => $envelopeStats->get("{$ip['domain_id']}|{$ip['source_ip']}", collect()))
+                ->groupBy('envelope_to')
+                ->map(function (Collection $rows, string $domain) {
+                    $envelopeTotal = $rows->sum('total');
+
+                    return [
+                        'domain' => $domain,
+                        'ips' => $rows->pluck('source_ip')->unique()->sort()->values()->all(),
+                        'total' => $envelopeTotal,
+                        'dmarc_pass_pct' => $this->percentage($rows->sum('dmarc_pass'), $envelopeTotal),
+                        'spf_pass_pct' => $this->percentage($rows->sum('spf_pass'), $envelopeTotal),
+                        'dkim_pass_pct' => $this->percentage($rows->sum('dkim_pass'), $envelopeTotal),
+                        'enforced' => $rows->sum('enforced'),
+                    ];
+                })
+                ->values()
+                ->sortByDesc('total')
+                ->values();
+
+            return [
+                ...$group,
+                'envelopes' => $envelopes->all(),
+                'envelope_count' => $envelopes->count(),
+            ];
+        });
+    }
+
+    /**
+     * The dashboard's sending-sources table (the $limit largest groups, with
+     * their envelope split) and its top failing sources (picked from all
+     * groups). Cached briefly per filter set, since computing them means
+     * aggregating every record in the window; flushCache() invalidates it.
+     *
+     * @return array{groups: Collection<int, array<string, mixed>>, top_failing: Collection<int, array<string, mixed>>}
+     */
+    public function dashboardSources(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, int $limit = 25): array
+    {
+        $key = 'dashboard-sources:'.md5(serialize([
+            Cache::get(self::CACHE_VERSION_KEY, 0),
+            $domainId,
+            $from->toDateTimeString(),
+            $to->toDateTimeString(),
+            $organisationId,
+            $allowedDomainIds,
+            $limit,
+        ]));
+
+        return Cache::remember($key, now()->addMinutes(self::DASHBOARD_CACHE_MINUTES), function () use ($domainId, $from, $to, $organisationId, $allowedDomainIds, $limit) {
+            $groups = $this->groupedSourceBreakdown($domainId, $from, $to, $organisationId, $allowedDomainIds, withEnvelopes: false);
+
+            return [
+                'groups' => $this->attachEnvelopes($groups->take($limit)->values(), $domainId, $from, $to, $organisationId, $allowedDomainIds),
+                'top_failing' => $this->topFailingSources($groups),
+            ];
+        });
     }
 
     /**
@@ -367,13 +473,19 @@ class DmarcMetricsService
         return 'COALESCE(aggregate_report_records.asn_org, aggregate_report_records.ptr_hostname, aggregate_report_records.source_ip)';
     }
 
-    private function baseQuery(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, string $dateColumn = 'date_range_begin')
+    /**
+     * Records joined to their report and domain, filtered to the window and
+     * scope. A base query builder, so aggregate rows come back as plain
+     * objects rather than hydrated (and far heavier) Eloquent models.
+     */
+    private function baseQuery(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, string $dateColumn = 'date_range_begin'): Builder
     {
         $query = AggregateReportRecord::query()
             ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
             ->join('domains', 'domains.id', '=', 'aggregate_reports.domain_id')
             ->whereNull('domains.deleted_at')
-            ->whereBetween("aggregate_reports.{$dateColumn}", [$from, $to]);
+            ->whereBetween("aggregate_reports.{$dateColumn}", [$from, $to])
+            ->toBase();
 
         if ($domainId !== null) {
             $query->where('aggregate_reports.domain_id', $domainId);

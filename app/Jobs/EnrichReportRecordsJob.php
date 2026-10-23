@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\AggregateReportRecord;
+use App\Services\Analytics\DmarcMetricsService;
 use App\Services\Enrichment\IpEnrichmentService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -32,5 +33,8 @@ class EnrichReportRecordsJob implements ShouldQueue
                 'enriched_at' => now(),
             ]);
         }
+
+        // Enrichment changes how sources are named and grouped.
+        DmarcMetricsService::flushCache();
     }
 }

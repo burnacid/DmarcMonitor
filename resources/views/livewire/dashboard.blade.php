@@ -46,11 +46,20 @@ new #[Layout('layouts.app')] class extends Component
         return $this->window();
     }
 
+    /**
+     * @var array<int, int>|false|null Memoized per request; false means not loaded yet.
+     */
+    private array|false|null $allowedDomainIdsCache = false;
+
     private function allowedDomainIds(): ?array
     {
-        $user = auth()->user();
+        if ($this->allowedDomainIdsCache === false) {
+            $user = auth()->user();
 
-        return $user->hasOrganisationScope() ? Domain::visibleTo($user)->pluck('id')->all() : null;
+            $this->allowedDomainIdsCache = $user->hasOrganisationScope() ? Domain::visibleTo($user)->pluck('id')->all() : null;
+        }
+
+        return $this->allowedDomainIdsCache;
     }
 
     private function trendData(): array
@@ -156,7 +165,7 @@ new #[Layout('layouts.app')] class extends Component
             $domains->where('organisation_id', $this->organisationId);
         }
 
-        $sourceGroups = $service->groupedSourceBreakdown($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds);
+        $sources = $service->dashboardSources($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds);
 
         return [
             'organisations' => Organisation::visibleTo($user)->orderBy('name')->get(),
@@ -164,8 +173,8 @@ new #[Layout('layouts.app')] class extends Component
             'summary' => $service->summary($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
             'trend' => $this->trendData(),
             'failureBreakdown' => $service->failureBreakdown($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
-            'sourceGroups' => $sourceGroups->take(25),
-            'topFailingSources' => $service->topFailingSources($sourceGroups),
+            'sourceGroups' => $sources['groups'],
+            'topFailingSources' => $sources['top_failing'],
             'hasAnyReports' => \App\Models\AggregateReport::visibleTo($user)->exists(),
             'windowFrom' => $from->toDateString(),
             'windowTo' => $to->toDateString(),
