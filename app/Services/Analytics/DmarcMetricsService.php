@@ -288,7 +288,7 @@ class DmarcMetricsService
      */
     public function dashboardSources(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, int $limit = 25): array
     {
-        $key = 'dashboard-sources:'.md5(serialize([
+        $key = 'dashboard-sources-v2:'.md5(serialize([
             Cache::get(self::CACHE_VERSION_KEY, 0),
             $domainId,
             $from->toDateTimeString(),
@@ -298,14 +298,24 @@ class DmarcMetricsService
             $limit,
         ]));
 
-        return Cache::remember($key, now()->addMinutes(self::DASHBOARD_CACHE_MINUTES), function () use ($domainId, $from, $to, $organisationId, $allowedDomainIds, $limit) {
+        // Cached as plain arrays: the cache refuses to unserialize objects
+        // (cache.serializable_classes), so Collections are rebuilt on read.
+        $cached = Cache::remember($key, now()->addMinutes(self::DASHBOARD_CACHE_MINUTES), function () use ($domainId, $from, $to, $organisationId, $allowedDomainIds, $limit) {
             $groups = $this->groupedSourceBreakdown($domainId, $from, $to, $organisationId, $allowedDomainIds, withEnvelopes: false);
+            $dehydrate = fn (Collection $groups): array => $groups->map(fn (array $group) => [...$group, 'ips' => $group['ips']->all()])->all();
 
             return [
-                'groups' => $this->attachEnvelopes($groups->take($limit)->values(), $domainId, $from, $to, $organisationId, $allowedDomainIds),
-                'top_failing' => $this->topFailingSources($groups),
+                'groups' => $dehydrate($this->attachEnvelopes($groups->take($limit)->values(), $domainId, $from, $to, $organisationId, $allowedDomainIds)),
+                'top_failing' => $dehydrate($this->topFailingSources($groups)),
             ];
         });
+
+        $hydrate = fn (array $groups): Collection => collect($groups)->map(fn (array $group) => [...$group, 'ips' => collect($group['ips'])]);
+
+        return [
+            'groups' => $hydrate($cached['groups']),
+            'top_failing' => $hydrate($cached['top_failing']),
+        ];
     }
 
     /**

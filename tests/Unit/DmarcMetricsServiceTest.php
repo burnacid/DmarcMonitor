@@ -9,6 +9,7 @@ use App\Services\Analytics\DmarcMetricsService;
 use App\Services\Dmarc\AggregateReportParser;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -320,6 +321,29 @@ class DmarcMetricsServiceTest extends TestCase
         (new AggregateReportParser)->parseFile($this->fixture('google-single-record.xml'));
 
         $this->assertCount(3, $service->dashboardSources(null, $from, $to)['groups']);
+    }
+
+    public function test_dashboard_sources_survive_a_serializing_cache_that_refuses_objects(): void
+    {
+        // Mirrors the database store in production: values are serialized
+        // and no classes may be unserialized.
+        config(['cache.stores.array.serialize' => true, 'cache.serializable_classes' => false]);
+        Cache::purge('array');
+
+        (new AggregateReportParser)->parseFile($this->fixture('multi-record-multi-auth.xml'));
+        AggregateReportRecord::where('source_ip', '40.92.90.104')->update(['count' => 10]);
+        AggregateReportRecord::where('source_ip', '203.0.113.55')->update(['count' => 6]);
+
+        $service = new DmarcMetricsService;
+        $from = Carbon::createFromTimestamp(1735689600)->subDay();
+        $to = Carbon::createFromTimestamp(1735689600)->addDay();
+
+        $service->dashboardSources(null, $from, $to);
+        $sources = $service->dashboardSources(null, $from, $to);
+
+        $this->assertEquals('40.92.90.104', $sources['groups'][0]['label']);
+        $this->assertEquals('40.92.90.104', $sources['groups'][0]['ips']->pluck('source_ip')->implode(','));
+        $this->assertEquals('203.0.113.55', $sources['top_failing'][0]['ips']->first()['source_ip']);
     }
 
     public function test_dashboard_sources_are_cached_until_flushed(): void
