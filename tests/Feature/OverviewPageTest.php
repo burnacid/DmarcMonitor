@@ -90,11 +90,11 @@ class OverviewPageTest extends TestCase
         $user->update(['all_organisations' => false]);
         $user->organisations()->attach($own->id);
 
-        Livewire::withQueryParams(['organisation' => $own->id, 'days' => 90])->actingAs($user)->test('dashboard')
+        Livewire::withoutLazyLoading()->withQueryParams(['organisation' => $own->id, 'days' => 90])->actingAs($user)->test('dashboard')
             ->assertSet('organisationId', $own->id)
             ->assertSet('days', 90);
 
-        Livewire::withQueryParams(['organisation' => $other->id, 'days' => 5])->actingAs($user)->test('dashboard')
+        Livewire::withoutLazyLoading()->withQueryParams(['organisation' => $other->id, 'days' => 5])->actingAs($user)->test('dashboard')
             ->assertSet('organisationId', null)
             ->assertSet('days', 30);
     }

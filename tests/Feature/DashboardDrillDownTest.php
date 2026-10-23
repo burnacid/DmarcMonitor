@@ -8,12 +8,21 @@ use App\Models\Domain;
 use App\Models\Organisation;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 use Livewire\Volt\Volt;
 use Tests\TestCase;
 
 class DashboardDrillDownTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // The dashboard is lazy-loaded; render its real content, not the placeholder.
+        Livewire::withoutLazyLoading();
+    }
 
     public function test_domain_filter_only_lists_domains_of_the_selected_organisation(): void
     {

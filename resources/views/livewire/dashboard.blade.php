@@ -5,11 +5,13 @@ use App\Models\Organisation;
 use App\Services\Analytics\DmarcMetricsService;
 use App\Services\Analytics\DomainHealthService;
 use Carbon\Carbon;
+use Illuminate\Contracts\View\View;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Lazy;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 
-new #[Layout('layouts.app')] class extends Component
+new #[Layout('layouts.app')] #[Lazy] class extends Component
 {
     #[Url(as: 'organisation')]
     public ?int $organisationId = null;
@@ -181,6 +183,15 @@ new #[Layout('layouts.app')] class extends Component
         ];
     }
 
+    /**
+     * Shown while the (lazy-loaded) dashboard computes its figures, so the
+     * page appears immediately instead of after the queries finish.
+     */
+    public function placeholder(): View
+    {
+        return view('livewire.dashboard-placeholder');
+    }
+
     public function statusFor(float $pct): string
     {
         return DomainHealthService::passStatus($pct);
@@ -214,6 +225,11 @@ new #[Layout('layouts.app')] class extends Component
                         >{{ $label }}</button>
                     @endforeach
                 </div>
+
+                <span wire:loading.delay class="inline-flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500" role="status">
+                    <x-spinner class="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                    {{ __('Loading…') }}
+                </span>
             </div>
 
             @if (! $hasAnyReports)
