@@ -65,11 +65,29 @@ class Domain extends Model
     }
 
     /**
+     * Expected selectors with neither a key nor a CNAME to the provider. One
+     * that is a CNAME without a key is not missing: providers that rotate
+     * keys (Microsoft 365, Proton Mail) only publish the keys in use, so
+     * the other one is a standby while DKIM works, and while it does not,
+     * the domain is reported as DKIM missing instead.
+     *
      * @return list<string>
      */
     public function missingExpectedDkimSelectors(): array
     {
-        return array_column(array_filter($this->expectedDkimSelectors(), fn (array $expected) => ! $expected['found']), 'selector');
+        return array_column(array_filter($this->expectedDkimSelectors(), fn (array $expected) => ! $expected['found'] && ! isset($expected['cname'])), 'selector');
+    }
+
+    /**
+     * An expected selector that is a CNAME to the provider without a
+     * published key, while another selector's key is live: the provider's
+     * standby key for its next rotation.
+     *
+     * @param  array{selector: string, found: bool, cname?: string}  $expected
+     */
+    public function isStandbyDkimSelector(array $expected): bool
+    {
+        return ! $expected['found'] && isset($expected['cname']) && $this->dkim_status === 'valid';
     }
 
     /**

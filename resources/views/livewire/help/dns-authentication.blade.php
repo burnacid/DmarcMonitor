@@ -92,6 +92,9 @@ new #[Layout('layouts.app')] class extends Component
                     {{ __('Every selector marked "Configured" has a DKIM record published in your DNS. On each DNS check, every selector seen in reports is looked up again: those whose record exists are marked Configured, and a selector whose record has been removed loses the badge. A domain can have several, for example when it sends through more than one mail platform, or while a key is being rotated.') }}
                 </p>
                 <p>
+                    {{ __('Some mail providers rotate between several selectors: Microsoft 365 uses selector1 and selector2, Proton Mail uses protonmail, protonmail2 and protonmail3. Every selector needs a CNAME in your DNS, but the provider only publishes the keys it is currently using. While DKIM works, a selector whose CNAME is in place but has no key yet is shown as "Standby" and is not reported as a problem.') }}
+                </p>
+                <p>
                     {{ __('It is completely normal to see other, unfamiliar selectors in that list with 0 passes and every message failing. Spammers who forge your domain in the From header often invent a random-looking selector name (or reuse one from elsewhere); since it was never published in your DNS, DKIM fails for that mail. That is expected and does not indicate a problem with your own setup — it is exactly the kind of abuse DMARC reporting is meant to surface.') }}
                 </p>
             </div>

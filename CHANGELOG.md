@@ -8,6 +8,10 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 
 - The dashboard opens straight away with a loading indicator while its figures are worked out, instead of a blank wait. Changing a filter or clicking a day in the chart shows "Loading…" next to the filters until the update arrives.
 
+### Fixed
+
+- Microsoft 365 and Proton Mail domains were reported as "DKIM selector missing". These providers only publish the keys they are currently using, so a selector that is set up correctly can still have no key. Microsoft 365 publishes one of selector1 and selector2; Proton Mail publishes some of protonmail, protonmail2 and protonmail3. Such a selector, with its CNAME in place, is now shown as "Standby" and is no longer reported as a problem, as long as DKIM works. A domain where no DKIM key is published at all is still reported as "DKIM missing".
+
 ### Changed
 
 - The dashboard uses far less memory and loads faster when there are many reports. Only the sending sources it shows are worked out in detail, and the sending-sources table is kept for up to 10 minutes. It is refreshed as soon as a new report arrives or source names are looked up. The CSV export, the organisation PDF report and the wallboard also use less memory.

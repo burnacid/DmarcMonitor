@@ -44,7 +44,9 @@ enum MailProvider: string
 
     /**
      * The selectors the provider signs with. Microsoft 365 rotates between
-     * two, Proton Mail and Fastmail publish three; all of them must exist.
+     * two, Proton Mail and Fastmail use three; all of them need a CNAME, but
+     * Microsoft 365 and Proton Mail only publish the keys currently in use
+     * (see Domain::isStandbyDkimSelector()).
      *
      * @return list<string>
      */
