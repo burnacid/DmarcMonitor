@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\DashboardSetting;
 use App\Models\Domain;
 use App\Models\Organisation;
 use App\Services\Analytics\DmarcMetricsService;
@@ -19,10 +20,27 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
     #[Url(as: 'domain')]
     public ?int $domainId = null;
 
+    /** Null until mount() fills in the user's default, so a period in the URL wins. */
     #[Url]
-    public int $days = 30;
+    public ?int $days = null;
 
     public ?string $selectedDay = null;
+
+    public function mount(): void
+    {
+        $this->days ??= auth()->user()->dashboardDays();
+    }
+
+    /**
+     * Falls back to the user's default when the period isn't one the
+     * dashboard offers (an old bookmark, or a hand-edited URL).
+     */
+    private function ensureOfferedDays(): void
+    {
+        if ($this->days === null || ! DashboardSetting::offers($this->days)) {
+            $this->days = auth()->user()->dashboardDays();
+        }
+    }
 
     private function window(): array
     {
@@ -116,6 +134,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
 
     public function updatedDays(): void
     {
+        $this->ensureOfferedDays();
         $this->selectedDay = null;
         $this->dispatchChartUpdates(trendChanged: true);
     }
@@ -141,9 +160,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
     {
         $user = auth()->user();
 
-        if (! in_array($this->days, [7, 30, 90], true)) {
-            $this->days = 30;
-        }
+        $this->ensureOfferedDays();
 
         if ($this->organisationId !== null && ! $user->canAccessOrganisation($this->organisationId)) {
             $this->organisationId = null;
@@ -170,6 +187,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
         $sources = $service->dashboardSources($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds);
 
         return [
+            'dayRanges' => DashboardSetting::dayRanges(),
             'organisations' => Organisation::visibleTo($user)->orderBy('name')->get(),
             'domains' => $domains->get(),
             'summary' => $service->summary($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
@@ -213,7 +231,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                 <x-searchable-select wire:model.live="domainId" wire:key="domain-filter-{{ $organisationId ?? 'all' }}" :options="$domains->pluck('fqdn', 'id')" :placeholder="__('All domains')" />
 
                 <div class="inline-flex rounded-md shadow-sm" role="group">
-                    @foreach ([7 => '7d', 30 => '30d', 90 => '90d'] as $value => $label)
+                    @foreach ($dayRanges as $value)
                         <button
                             type="button"
                             wire:click="$set('days', {{ $value }})"
@@ -222,7 +240,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                                 'bg-indigo-600 text-white border-indigo-600' => $days === $value,
                                 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700' => $days !== $value,
                             ])
-                        >{{ $label }}</button>
+                        >{{ $value }}d</button>
                     @endforeach
                 </div>
 
@@ -323,7 +341,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:space-y-3 max-md:p-3">
                                 @forelse ($topFailingSources as $group)
                                     @php($status = $this->statusFor($group['dmarc_pass_pct']))
-                                    <tr wire:key="failing-{{ $group['label'] }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
+                                    <tr wire:key="failing-{{ $group['domain_id'] }}-{{ $group['label'] }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
                                         <td data-label="{{ __('Source') }}" class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $group['label'] }}</td>
                                         <td data-label="{{ __('Domain') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $group['domain'] }}</td>
                                         <td data-label="{{ __('Volume') }}" class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ number_format($group['total']) }}</td>
@@ -384,7 +402,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                                 @php($dkimStatus = $this->statusFor($group['dkim_pass_pct']))
                                 @php($expandable = $group['ip_count'] > 1 || $group['envelope_count'] > 1)
                                 <tbody
-                                    wire:key="group-{{ $group['label'] }}"
+                                    wire:key="group-{{ $group['domain_id'] }}-{{ $group['label'] }}"
                                     x-data="{ open: false }"
                                     class="divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:mb-3 max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:overflow-hidden"
                                 >

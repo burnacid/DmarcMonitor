@@ -8,8 +8,12 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 
 - The dashboard opens straight away with a loading indicator while its figures are worked out, instead of a blank wait. Changing a filter or clicking a day in the chart shows "Loading…" next to the filters until the update arrives.
 
+- The dashboard now has a 14-day period. Admins choose which periods are offered (7, 14, 30, 60, 90, 180 and 365 days) and which one the dashboard opens with, under Settings > Dashboard Settings.
+- Each user can pick the period their dashboard opens with on their profile page. A period in the address bar, for example from a bookmark, still wins.
+
 ### Fixed
 
+- The dashboard's sending-sources and top-failing-sources tables could leave out or mix up rows after changing the period with "All domains" selected. This happened when the same source (for example Google) sent mail for more than one domain.
 - Microsoft 365 and Proton Mail domains were reported as "DKIM selector missing". These providers only publish the keys they are currently using, so a selector that is set up correctly can still have no key. Microsoft 365 publishes one of selector1 and selector2; Proton Mail publishes some of protonmail, protonmail2 and protonmail3. Such a selector, with its CNAME in place, is now shown as "Standby" and is no longer reported as a problem, as long as DKIM works. A domain where no DKIM key is published at all is still reported as "DKIM missing".
 
 ### Changed

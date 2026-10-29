@@ -30,6 +30,9 @@ new #[Layout('layouts.app')] class extends Component
                 <p>
                     {{ __('The filters (organisation, domain and period) are kept in the address bar, so a filtered dashboard can be bookmarked or shared.') }}
                 </p>
+                <p>
+                    {{ __('An admin chooses which periods are offered and which one the dashboard opens with under Settings > Dashboard Settings. You can pick your own default period on your profile page.') }}
+                </p>
             </div>
 
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-4 text-sm text-gray-600 dark:text-gray-300">

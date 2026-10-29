@@ -38,6 +38,29 @@ class DashboardDrillDownTest extends TestCase
             ->assertDontSee('other-org.test');
     }
 
+    public function test_the_same_source_sending_for_two_domains_gets_a_unique_row_key_per_domain(): void
+    {
+        $user = User::factory()->create();
+        $domains = Domain::factory()->count(2)->create();
+
+        foreach ($domains as $domain) {
+            AggregateReportRecord::factory()->create([
+                'aggregate_report_id' => AggregateReport::factory()->create(['domain_id' => $domain->id, 'date_range_begin' => now()]),
+                'source_ip' => '192.0.2.10',
+                'count' => 10,
+                'dkim_result' => 'fail',
+                'spf_result' => 'fail',
+            ]);
+        }
+
+        $html = Volt::actingAs($user)->test('dashboard')->html();
+
+        foreach ($domains as $domain) {
+            $this->assertStringContainsString('wire:key="group-'.$domain->id.'-192.0.2.10"', $html);
+            $this->assertStringContainsString('wire:key="failing-'.$domain->id.'-192.0.2.10"', $html);
+        }
+    }
+
     public function test_clicking_a_day_scopes_the_summary_to_that_day_only(): void
     {
         $user = User::factory()->create();

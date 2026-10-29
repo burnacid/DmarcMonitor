@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Password;
 use Laravel\Passkeys\Contracts\PasskeyUser;
 use Laravel\Passkeys\PasskeyAuthenticatable;
 
-#[Fillable(['name', 'email', 'password', 'role', 'all_organisations'])]
+#[Fillable(['name', 'email', 'password', 'role', 'all_organisations', 'dashboard_default_days'])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
 class User extends Authenticatable implements PasskeyUser
 {
@@ -36,7 +36,19 @@ class User extends Authenticatable implements PasskeyUser
             'two_factor_recovery_codes' => 'encrypted:array',
             'two_factor_confirmed_at' => 'datetime',
             'all_organisations' => 'boolean',
+            'dashboard_default_days' => 'integer',
         ];
+    }
+
+    /**
+     * The period the dashboard opens with for this user: their own choice
+     * while the dashboard still offers it, otherwise the site-wide default.
+     */
+    public function dashboardDays(): int
+    {
+        $days = $this->dashboard_default_days;
+
+        return $days !== null && DashboardSetting::offers($days) ? $days : DashboardSetting::defaultDays();
     }
 
     public function hasEnabledTwoFactorAuthentication(): bool

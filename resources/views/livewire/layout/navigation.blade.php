@@ -103,7 +103,7 @@ new class extends Component
                 </a>
 
                 @php
-                    $settingsActive = request()->routeIs(['admin.organisations', 'admin.domains', 'admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.microsoft365-app', 'admin.geoip', 'admin.alert-rules', 'admin.users', 'admin.scheduled-tasks', 'admin.audit-log', 'admin.report-branding', 'admin.public-dashboard']);
+                    $settingsActive = request()->routeIs(['admin.organisations', 'admin.domains', 'admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.microsoft365-app', 'admin.geoip', 'admin.alert-rules', 'admin.users', 'admin.scheduled-tasks', 'admin.audit-log', 'admin.report-branding', 'admin.dashboard-settings', 'admin.public-dashboard']);
                 @endphp
                 @if (auth()->user()->canManage() || auth()->user()->isAdmin())
                     <x-dropdown align="right" width="48">
@@ -174,6 +174,9 @@ new class extends Component
 
                                 <x-dropdown-link :href="route('admin.report-branding')" wire:navigate>
                                     {{ __('Report Branding') }}
+                                </x-dropdown-link>
+                                <x-dropdown-link :href="route('admin.dashboard-settings')" wire:navigate>
+                                    {{ __('Dashboard Settings') }}
                                 </x-dropdown-link>
                                 <x-dropdown-link :href="route('admin.public-dashboard')" wire:navigate>
                                     {{ __('Public Dashboard') }}
@@ -293,7 +296,7 @@ new class extends Component
                 {{ __('Help') }}
             </x-responsive-nav-link>
             @php
-                $settingsActive = request()->routeIs(['admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.microsoft365-app', 'admin.geoip', 'admin.alert-rules', 'admin.users', 'admin.report-branding', 'admin.public-dashboard']);
+                $settingsActive = request()->routeIs(['admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.microsoft365-app', 'admin.geoip', 'admin.alert-rules', 'admin.users', 'admin.report-branding', 'admin.dashboard-settings', 'admin.public-dashboard']);
             @endphp
             @if (auth()->user()->canManage() || auth()->user()->isAdmin())
                 <div x-data="{ settingsOpen: {{ $settingsActive ? 'true' : 'false' }} }">
@@ -359,6 +362,9 @@ new class extends Component
 
                             <x-responsive-nav-link :href="route('admin.report-branding')" :active="request()->routeIs('admin.report-branding')" wire:navigate class="ps-6">
                                 {{ __('Report Branding') }}
+                            </x-responsive-nav-link>
+                            <x-responsive-nav-link :href="route('admin.dashboard-settings')" :active="request()->routeIs('admin.dashboard-settings')" wire:navigate class="ps-6">
+                                {{ __('Dashboard Settings') }}
                             </x-responsive-nav-link>
                             <x-responsive-nav-link :href="route('admin.public-dashboard')" :active="request()->routeIs('admin.public-dashboard')" wire:navigate class="ps-6">
                                 {{ __('Public Dashboard') }}
