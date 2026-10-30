@@ -4,12 +4,15 @@ namespace App\Services\Graph;
 
 use App\Models\Microsoft365MailAccount;
 use App\Models\Microsoft365SendAccount;
-use Illuminate\Support\Facades\Http;
+use RuntimeException;
 use Throwable;
 
 class GraphConnectionTester
 {
-    public function __construct(private readonly GraphTokenService $tokenService = new GraphTokenService) {}
+    public function __construct(
+        private readonly GraphTokenService $tokenService = new GraphTokenService,
+        private readonly GraphFolderResolver $folderResolver = new GraphFolderResolver,
+    ) {}
 
     /**
      * Verifies a collecting mailbox using only what polling itself needs
@@ -23,18 +26,15 @@ class GraphConnectionTester
             $token = $this->tokenService->getAccessTokenFor($account);
             $mailbox = rawurlencode($account->mailbox);
 
-            $response = Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$mailbox}/mailFolders", [
-                '$filter' => "displayName eq '".str_replace("'", "''", $account->folder_inbox)."'",
-                '$select' => 'id,displayName',
-            ]);
-
-            if ($response->failed()) {
+            try {
+                $folderId = $this->folderResolver->resolve($mailbox, $token, $account->folder_inbox);
+            } catch (RuntimeException $e) {
                 $this->tokenService->forgetAccessTokenFor($account);
 
-                return $response->json('error.message') ?? $response->body();
+                return $e->getMessage();
             }
 
-            if ($response->json('value.0.id') === null) {
+            if ($folderId === null) {
                 return "Inbox folder [{$account->folder_inbox}] not found.";
             }
 

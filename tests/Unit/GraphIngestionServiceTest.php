@@ -61,6 +61,23 @@ class GraphIngestionServiceTest extends TestCase
             && ! str_contains(urldecode($request->url()), 'contentBytes'));
     }
 
+    public function test_it_finds_a_localized_inbox_by_its_well_known_name(): void
+    {
+        Http::fake([
+            'login.microsoftonline.com/*' => Http::response(['access_token' => 'test-token', 'expires_in' => 3600]),
+            'graph.microsoft.com/v1.0/users/*/mailFolders?*' => Http::response(['value' => []]),
+            'graph.microsoft.com/v1.0/users/*/mailFolders/inbox?*' => Http::response(['id' => 'inbox-id', 'displayName' => 'Postvak IN']),
+            'graph.microsoft.com/v1.0/users/*/mailFolders/inbox-id/messages*' => Http::response(['value' => []]),
+        ]);
+
+        $account = Microsoft365MailAccount::factory()->create(['folder_inbox' => 'Inbox']);
+
+        (new GraphIngestionService)->pollAccount($account);
+
+        $this->assertNull($account->refresh()->last_error);
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/mailFolders/inbox-id/messages'));
+    }
+
     public function test_it_counts_a_failed_attachment_download_as_failed(): void
     {
         Storage::fake('local');
@@ -170,6 +187,44 @@ class GraphIngestionServiceTest extends TestCase
 
         Http::assertSent(fn ($request) => str_ends_with($request->url(), '/messages/msg-1/move')
             && $request->method() === 'POST');
+    }
+
+    public function test_it_creates_a_missing_processed_folder_and_moves_the_message_into_it(): void
+    {
+        Storage::fake('local');
+
+        $xml = file_get_contents(base_path('tests/Fixtures/dmarc/aggregate/google-single-record.xml'));
+
+        Http::fake([
+            'login.microsoftonline.com/*' => Http::response(['access_token' => 'test-token', 'expires_in' => 3600]),
+            'graph.microsoft.com/v1.0/users/*/mailFolders?*' => fn (Request $request) => Http::response(['value' => str_contains(urldecode($request->url()), "'Inbox'")
+                ? [['id' => 'inbox-id']]
+                : []]),
+            'graph.microsoft.com/v1.0/users/*/mailFolders' => Http::response(['id' => 'created-id', 'displayName' => 'Processed'], 201),
+            'graph.microsoft.com/v1.0/users/*/mailFolders/*/messages*' => Http::response([
+                'value' => [
+                    ['id' => 'msg-1', 'subject' => 'DMARC report', 'hasAttachments' => true, 'isRead' => false],
+                ],
+            ]),
+            'graph.microsoft.com/v1.0/users/*/messages/*/attachments/att-1/$value' => Http::response($xml),
+            'graph.microsoft.com/v1.0/users/*/messages/*/attachments*' => Http::response([
+                'value' => [
+                    ['id' => 'att-1', 'name' => 'google.com!example.com!1735689600!1735776000.xml', 'contentType' => 'application/octet-stream', 'size' => strlen($xml)],
+                ],
+            ]),
+            'graph.microsoft.com/v1.0/users/*/messages/*/move' => Http::response([]),
+        ]);
+
+        $account = Microsoft365MailAccount::factory()->create(['folder_processed' => 'Processed']);
+
+        (new GraphIngestionService)->pollAccount($account);
+
+        Http::assertSent(fn ($request) => str_ends_with($request->url(), '/mailFolders')
+            && $request->method() === 'POST'
+            && $request->data() === ['displayName' => 'Processed']);
+
+        Http::assertSent(fn ($request) => str_ends_with($request->url(), '/messages/msg-1/move')
+            && $request->data() === ['destinationId' => 'created-id']);
     }
 
     public function test_it_records_a_graph_error_without_crashing(): void
