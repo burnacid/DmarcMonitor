@@ -7,12 +7,21 @@ use App\Models\AggregateReportRecord;
 use App\Models\Domain;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 use Livewire\Volt\Volt;
 use Tests\TestCase;
 
 class DashboardFailureBreakdownTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // The dashboard is lazy-loaded; render its real content, not the placeholder.
+        Livewire::withoutLazyLoading();
+    }
 
     public function test_failure_breakdown_splits_the_window_by_which_mechanism_failed(): void
     {

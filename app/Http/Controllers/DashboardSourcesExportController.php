@@ -43,7 +43,7 @@ class DashboardSourcesExportController extends Controller
                 'Domain', 'Source', 'IP Count', 'Volume', 'DMARC Pass %', 'SPF Pass %', 'DKIM Pass %', 'Enforced',
             ]);
 
-            foreach ($service->groupedSourceBreakdown($domainId, $from, $to, $organisationId, $allowedDomainIds) as $group) {
+            foreach ($service->groupedSourceBreakdown($domainId, $from, $to, $organisationId, $allowedDomainIds, withEnvelopes: false) as $group) {
                 fputcsv($handle, CsvRow::safe([
                     $group['domain'],
                     $group['label'],

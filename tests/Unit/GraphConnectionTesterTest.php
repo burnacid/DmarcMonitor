@@ -38,6 +38,31 @@ class GraphConnectionTesterTest extends TestCase
         $this->assertSame('Inbox folder [DMARC] not found.', (new GraphConnectionTester)->test($account));
     }
 
+    public function test_a_localized_inbox_is_found_by_its_well_known_name(): void
+    {
+        Http::fake([
+            'login.microsoftonline.com/*' => Http::response(['access_token' => $this->tokenWithRoles(['Mail.ReadWrite']), 'expires_in' => 3600]),
+            'graph.microsoft.com/v1.0/users/*/mailFolders?*' => Http::response(['value' => []]),
+            'graph.microsoft.com/v1.0/users/*/mailFolders/inbox?*' => Http::response(['id' => 'inbox-id', 'displayName' => 'Postvak IN']),
+        ]);
+
+        $account = Microsoft365MailAccount::factory()->create(['folder_inbox' => 'Inbox']);
+
+        $this->assertSame('ok', (new GraphConnectionTester)->test($account));
+    }
+
+    public function test_a_mailbox_reports_the_graph_error_when_the_folder_lookup_is_rejected(): void
+    {
+        Http::fake([
+            'login.microsoftonline.com/*' => Http::response(['access_token' => $this->tokenWithRoles([]), 'expires_in' => 3600]),
+            'graph.microsoft.com/*' => Http::response(['error' => ['message' => 'Access is denied.']], 403),
+        ]);
+
+        $account = Microsoft365MailAccount::factory()->create(['folder_inbox' => 'Inbox']);
+
+        $this->assertSame('Access is denied.', (new GraphConnectionTester)->test($account));
+    }
+
     public function test_a_sending_account_passes_when_mail_send_is_consented(): void
     {
         Http::fake([

@@ -9,6 +9,7 @@ use App\Services\Analytics\DmarcMetricsService;
 use App\Services\Dmarc\AggregateReportParser;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -267,5 +268,100 @@ class DmarcMetricsServiceTest extends TestCase
 
         $this->assertCount(2, $groups);
         $this->assertTrue($groups->every(fn ($group) => $group['ip_count'] === 1));
+    }
+
+    public function test_grouped_source_breakdown_can_skip_envelopes(): void
+    {
+        (new AggregateReportParser)->parseFile($this->fixture('multi-record-multi-auth.xml'));
+
+        $service = new DmarcMetricsService;
+        $from = Carbon::createFromTimestamp(1735689600)->subDay();
+        $to = Carbon::createFromTimestamp(1735689600)->addDay();
+
+        $groups = $service->groupedSourceBreakdown(null, $from, $to, withEnvelopes: false);
+
+        $this->assertCount(2, $groups);
+        $this->assertTrue($groups->every(fn ($group) => $group['envelopes'] === [] && $group['envelope_count'] === 0));
+    }
+
+    public function test_dashboard_sources_limits_the_table_but_picks_failing_sources_from_all_groups(): void
+    {
+        (new AggregateReportParser)->parseFile($this->fixture('multi-record-multi-auth.xml'));
+
+        // The passing source has the most volume; the failing one only falls
+        // outside a one-row table but is still large enough to count as failing.
+        AggregateReportRecord::where('source_ip', '40.92.90.104')->update(['count' => 10]);
+        AggregateReportRecord::where('source_ip', '203.0.113.55')->update(['count' => 6]);
+
+        $service = new DmarcMetricsService;
+        $from = Carbon::createFromTimestamp(1735689600)->subDay();
+        $to = Carbon::createFromTimestamp(1735689600)->addDay();
+
+        $sources = $service->dashboardSources(null, $from, $to, limit: 1);
+
+        $this->assertCount(1, $sources['groups']);
+        $this->assertEquals('40.92.90.104', $sources['groups'][0]['label']);
+        $this->assertEquals(1, $sources['groups'][0]['envelope_count']);
+        $this->assertEquals('recipient.example.net', $sources['groups'][0]['envelopes'][0]['domain']);
+
+        $this->assertCount(1, $sources['top_failing']);
+        $this->assertEquals('203.0.113.55', $sources['top_failing'][0]['label']);
+    }
+
+    public function test_dashboard_sources_are_refreshed_when_a_new_report_is_stored(): void
+    {
+        (new AggregateReportParser)->parseFile($this->fixture('multi-record-multi-auth.xml'));
+
+        $service = new DmarcMetricsService;
+        $from = Carbon::createFromTimestamp(1735689600)->subDay();
+        $to = Carbon::createFromTimestamp(1735689600)->addDay();
+
+        $this->assertCount(2, $service->dashboardSources(null, $from, $to)['groups']);
+
+        (new AggregateReportParser)->parseFile($this->fixture('google-single-record.xml'));
+
+        $this->assertCount(3, $service->dashboardSources(null, $from, $to)['groups']);
+    }
+
+    public function test_dashboard_sources_survive_a_serializing_cache_that_refuses_objects(): void
+    {
+        // Mirrors the database store in production: values are serialized
+        // and no classes may be unserialized.
+        config(['cache.stores.array.serialize' => true, 'cache.serializable_classes' => false]);
+        Cache::purge('array');
+
+        (new AggregateReportParser)->parseFile($this->fixture('multi-record-multi-auth.xml'));
+        AggregateReportRecord::where('source_ip', '40.92.90.104')->update(['count' => 10]);
+        AggregateReportRecord::where('source_ip', '203.0.113.55')->update(['count' => 6]);
+
+        $service = new DmarcMetricsService;
+        $from = Carbon::createFromTimestamp(1735689600)->subDay();
+        $to = Carbon::createFromTimestamp(1735689600)->addDay();
+
+        $service->dashboardSources(null, $from, $to);
+        $sources = $service->dashboardSources(null, $from, $to);
+
+        $this->assertEquals('40.92.90.104', $sources['groups'][0]['label']);
+        $this->assertEquals('40.92.90.104', $sources['groups'][0]['ips']->pluck('source_ip')->implode(','));
+        $this->assertEquals('203.0.113.55', $sources['top_failing'][0]['ips']->first()['source_ip']);
+    }
+
+    public function test_dashboard_sources_are_cached_until_flushed(): void
+    {
+        (new AggregateReportParser)->parseFile($this->fixture('multi-record-multi-auth.xml'));
+
+        $service = new DmarcMetricsService;
+        $from = Carbon::createFromTimestamp(1735689600)->subDay();
+        $to = Carbon::createFromTimestamp(1735689600)->addDay();
+
+        $this->assertEquals(5, $service->dashboardSources(null, $from, $to)['groups'][0]['total']);
+
+        AggregateReportRecord::where('source_ip', '40.92.90.104')->update(['count' => 10]);
+
+        $this->assertEquals(5, $service->dashboardSources(null, $from, $to)['groups'][0]['total']);
+
+        DmarcMetricsService::flushCache();
+
+        $this->assertEquals(10, $service->dashboardSources(null, $from, $to)['groups'][0]['total']);
     }
 }

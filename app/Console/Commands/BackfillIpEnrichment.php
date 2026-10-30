@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\AggregateReportRecord;
+use App\Services\Analytics\DmarcMetricsService;
 use App\Services\Enrichment\IpEnrichmentService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -59,6 +60,9 @@ class BackfillIpEnrichment extends Command
 
         $bar->finish();
         $this->newLine();
+
+        DmarcMetricsService::flushCache();
+
         $this->info("Backfilled enrichment for {$total} record(s).");
 
         return self::SUCCESS;

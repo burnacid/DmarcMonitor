@@ -38,7 +38,7 @@ class OrganisationReportPdfController extends Controller
             'summary' => $service->summary(null, $from, $to, $organisation->id),
             'trend' => $service->trend(null, $from, $to, $organisation->id),
             'failureBreakdown' => $service->failureBreakdown(null, $from, $to, $organisation->id),
-            'topSources' => $service->groupedSourceBreakdown(null, $from, $to, $organisation->id)->take(15),
+            'topSources' => $service->groupedSourceBreakdown(null, $from, $to, $organisation->id, withEnvelopes: false)->take(15),
             'generatedAt' => now(),
             'branding' => ReportBranding::forReports(),
         ];

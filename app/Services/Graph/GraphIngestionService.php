@@ -49,6 +49,7 @@ class GraphIngestionService
         private readonly GraphTokenService $tokenService = new GraphTokenService,
         private readonly AggregateReportParser $parser = new AggregateReportParser,
         private readonly ForensicReportParser $forensicParser = new ForensicReportParser,
+        private readonly GraphFolderResolver $folderResolver = new GraphFolderResolver,
     ) {}
 
     /**
@@ -396,14 +397,12 @@ class GraphIngestionService
             $targetFolderName = $success ? $account->folder_processed : $account->folder_failed;
 
             if ($targetFolderName) {
-                $targetFolderId = $this->resolveFolderId($mailbox, $token, $targetFolderName);
+                $targetFolderId = $this->resolveFolderId($mailbox, $token, $targetFolderName, createIfMissing: true);
 
-                if ($targetFolderId !== null) {
-                    Http::withToken($token)->post(
-                        "https://graph.microsoft.com/v1.0/users/{$mailbox}/messages/{$messageId}/move",
-                        ['destinationId' => $targetFolderId],
-                    );
-                }
+                Http::withToken($token)->post(
+                    "https://graph.microsoft.com/v1.0/users/{$mailbox}/messages/{$messageId}/move",
+                    ['destinationId' => $targetFolderId],
+                );
             }
         } catch (Throwable $e) {
             Log::warning("Failed to post-process message for account [{$account->label}]: {$e->getMessage()}");
@@ -413,23 +412,19 @@ class GraphIngestionService
     /**
      * Resolves a mail folder's display name to its Graph id, caching the
      * result for the lifetime of this service instance so a batch of
-     * messages doesn't re-resolve the same folder repeatedly.
+     * messages doesn't re-resolve the same folder repeatedly. With
+     * $createIfMissing, a folder that doesn't exist yet is created.
      */
-    private function resolveFolderId(string $mailbox, string $token, string $folderName): ?string
+    private function resolveFolderId(string $mailbox, string $token, string $folderName, bool $createIfMissing = false): ?string
     {
         $cacheKey = $mailbox.'|'.strtolower($folderName);
 
-        if (array_key_exists($cacheKey, $this->folderIdCache)) {
+        if (isset($this->folderIdCache[$cacheKey]) || (! $createIfMissing && array_key_exists($cacheKey, $this->folderIdCache))) {
             return $this->folderIdCache[$cacheKey];
         }
 
-        $response = Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$mailbox}/mailFolders", [
-            '$filter' => "displayName eq '".str_replace("'", "''", $folderName)."'",
-            '$select' => 'id,displayName',
-        ]);
-
-        $id = $response->successful() ? $response->json('value.0.id') : null;
-
-        return $this->folderIdCache[$cacheKey] = $id;
+        return $this->folderIdCache[$cacheKey] = $createIfMissing
+            ? $this->folderResolver->resolveOrCreate($mailbox, $token, $folderName)
+            : $this->folderResolver->resolve($mailbox, $token, $folderName);
     }
 }

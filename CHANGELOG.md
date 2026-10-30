@@ -2,6 +2,28 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
+## [1.7.0]
+
+### Added
+
+- The dashboard opens straight away with a loading indicator while its figures are worked out, instead of a blank wait. Changing a filter or clicking a day in the chart shows "Loading…" next to the filters until the update arrives.
+
+- The dashboard now has a 14-day period. Admins choose which periods are offered (7, 14, 30, 60, 90, 180 and 365 days) and which one the dashboard opens with, under Settings > Dashboard Settings.
+- Each user can pick the period their dashboard opens with on their profile page. A period in the address bar, for example from a bookmark, still wins.
+- Microsoft 365 mailboxes: the folders for processed and failed messages are created automatically, at the top level of the mailbox, when they don't exist yet. Before, messages simply stayed in the inbox.
+
+### Fixed
+
+- Microsoft 365 mailboxes set up in another language than English failed with "Inbox folder [Inbox] not found", because Outlook shows the inbox under a translated name (for example "Postvak IN"). Standard folders such as Inbox, Archive, Junk Email and Deleted Items are now found in any language. "Test connection" also shows Microsoft's own error message when the folder lookup is refused, for example because of missing permissions.
+- The dashboard's sending-sources and top-failing-sources tables could leave out or mix up rows after changing the period with "All domains" selected. This happened when the same source (for example Google) sent mail for more than one domain.
+- Microsoft 365 and Proton Mail domains were reported as "DKIM selector missing". These providers only publish the keys they are currently using, so a selector that is set up correctly can still have no key. Microsoft 365 publishes one of selector1 and selector2; Proton Mail publishes some of protonmail, protonmail2 and protonmail3. Such a selector, with its CNAME in place, is now shown as "Standby" and is no longer reported as a problem, as long as DKIM works. A domain where no DKIM key is published at all is still reported as "DKIM missing".
+
+### Changed
+
+- The dashboard's "Pass rate over time" chart now shows how many messages were reported each day, as light grey bars with their own scale on the right. Days with far fewer messages than usual are drawn faded and dashed, so a few failures on a quiet day no longer look like a big drop. Hovering a day shows its message count.
+- The management report's (PDF) "DMARC pass rate over time" chart works the same way: grey bars show the number of messages per day, with the highest count on the right, and days with few messages are drawn faded and dashed. A short note under the chart explains this.
+- The dashboard uses far less memory and loads faster when there are many reports. Only the sending sources it shows are worked out in detail, and the sending-sources table is kept for up to 10 minutes. It is refreshed as soon as a new report arrives or source names are looked up. The CSV export, the organisation PDF report and the wallboard also use less memory.
+
 ## [1.6.0]
 
 ### Added

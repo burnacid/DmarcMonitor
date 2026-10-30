@@ -134,6 +134,19 @@ class OrganisationManagementReportPdfTest extends TestCase
         $this->assertSame('', $report['chartSvg']);
     }
 
+    public function test_the_chart_shows_message_volume_and_fades_low_volume_days(): void
+    {
+        $svg = app(OrganisationManagementReport::class)->trendChartSvg(collect([
+            ['date' => '2026-09-01', 'total' => 1200, 'dmarc_pass_pct' => 99.0],
+            ['date' => '2026-09-02', 'total' => 1000, 'dmarc_pass_pct' => 98.0],
+            ['date' => '2026-09-03', 'total' => 4, 'dmarc_pass_pct' => 50.0],
+        ]));
+
+        $this->assertSame(3, substr_count($svg, '<rect '));
+        $this->assertStringContainsString('>1,200</text>', $svg);
+        $this->assertSame(1, substr_count($svg, 'stroke-opacity="0.35"'));
+    }
+
     public function test_the_report_modal_links_to_the_management_pdf(): void
     {
         $admin = User::factory()->create();

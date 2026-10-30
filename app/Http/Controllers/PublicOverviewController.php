@@ -67,6 +67,7 @@ class PublicOverviewController extends Controller
             Carbon::now()->subDays($days - 1)->startOfDay(),
             Carbon::now()->endOfDay(),
             allowedDomainIds: $domainIds,
+            withEnvelopes: false,
         );
 
         return view('public.overview', [

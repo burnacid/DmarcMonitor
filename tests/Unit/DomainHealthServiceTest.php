@@ -188,6 +188,17 @@ class DomainHealthServiceTest extends TestCase
         $this->assertNotContains('dkim_selector_missing', $this->health($complete)['issues']);
     }
 
+    public function test_a_standby_dkim_selector_with_only_a_cname_is_not_an_issue(): void
+    {
+        $standby = $this->healthyDomain(attributes: ['dkim_expected_selectors' => [
+            ['selector' => 'selector1', 'found' => true],
+            ['selector' => 'selector2', 'found' => false, 'cname' => 'selector2-example-com._domainkey.example.onmicrosoft.com'],
+        ]]);
+
+        $this->assertNotContains('dkim_selector_missing', $this->health($standby)['issues']);
+        $this->assertNotContains('dkim_missing', $this->health($standby)['issues']);
+    }
+
     public function test_missing_report_authorisation_is_an_issue_only_for_addresses_in_the_record(): void
     {
         config(['dmarc.rua_address' => 'dmarc@msp.test']);

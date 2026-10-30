@@ -1,15 +1,18 @@
 <?php
 
+use App\Models\DashboardSetting;
 use App\Models\Domain;
 use App\Models\Organisation;
 use App\Services\Analytics\DmarcMetricsService;
 use App\Services\Analytics\DomainHealthService;
 use Carbon\Carbon;
+use Illuminate\Contracts\View\View;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Lazy;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 
-new #[Layout('layouts.app')] class extends Component
+new #[Layout('layouts.app')] #[Lazy] class extends Component
 {
     #[Url(as: 'organisation')]
     public ?int $organisationId = null;
@@ -17,10 +20,27 @@ new #[Layout('layouts.app')] class extends Component
     #[Url(as: 'domain')]
     public ?int $domainId = null;
 
+    /** Null until mount() fills in the user's default, so a period in the URL wins. */
     #[Url]
-    public int $days = 30;
+    public ?int $days = null;
 
     public ?string $selectedDay = null;
+
+    public function mount(): void
+    {
+        $this->days ??= auth()->user()->dashboardDays();
+    }
+
+    /**
+     * Falls back to the user's default when the period isn't one the
+     * dashboard offers (an old bookmark, or a hand-edited URL).
+     */
+    private function ensureOfferedDays(): void
+    {
+        if ($this->days === null || ! DashboardSetting::offers($this->days)) {
+            $this->days = auth()->user()->dashboardDays();
+        }
+    }
 
     private function window(): array
     {
@@ -46,11 +66,20 @@ new #[Layout('layouts.app')] class extends Component
         return $this->window();
     }
 
+    /**
+     * @var array<int, int>|false|null Memoized per request; false means not loaded yet.
+     */
+    private array|false|null $allowedDomainIdsCache = false;
+
     private function allowedDomainIds(): ?array
     {
-        $user = auth()->user();
+        if ($this->allowedDomainIdsCache === false) {
+            $user = auth()->user();
 
-        return $user->hasOrganisationScope() ? Domain::visibleTo($user)->pluck('id')->all() : null;
+            $this->allowedDomainIdsCache = $user->hasOrganisationScope() ? Domain::visibleTo($user)->pluck('id')->all() : null;
+        }
+
+        return $this->allowedDomainIdsCache;
     }
 
     private function trendData(): array
@@ -105,6 +134,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function updatedDays(): void
     {
+        $this->ensureOfferedDays();
         $this->selectedDay = null;
         $this->dispatchChartUpdates(trendChanged: true);
     }
@@ -130,9 +160,7 @@ new #[Layout('layouts.app')] class extends Component
     {
         $user = auth()->user();
 
-        if (! in_array($this->days, [7, 30, 90], true)) {
-            $this->days = 30;
-        }
+        $this->ensureOfferedDays();
 
         if ($this->organisationId !== null && ! $user->canAccessOrganisation($this->organisationId)) {
             $this->organisationId = null;
@@ -156,20 +184,30 @@ new #[Layout('layouts.app')] class extends Component
             $domains->where('organisation_id', $this->organisationId);
         }
 
-        $sourceGroups = $service->groupedSourceBreakdown($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds);
+        $sources = $service->dashboardSources($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds);
 
         return [
+            'dayRanges' => DashboardSetting::dayRanges(),
             'organisations' => Organisation::visibleTo($user)->orderBy('name')->get(),
             'domains' => $domains->get(),
             'summary' => $service->summary($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
             'trend' => $this->trendData(),
             'failureBreakdown' => $service->failureBreakdown($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
-            'sourceGroups' => $sourceGroups->take(25),
-            'topFailingSources' => $service->topFailingSources($sourceGroups),
+            'sourceGroups' => $sources['groups'],
+            'topFailingSources' => $sources['top_failing'],
             'hasAnyReports' => \App\Models\AggregateReport::visibleTo($user)->exists(),
             'windowFrom' => $from->toDateString(),
             'windowTo' => $to->toDateString(),
         ];
+    }
+
+    /**
+     * Shown while the (lazy-loaded) dashboard computes its figures, so the
+     * page appears immediately instead of after the queries finish.
+     */
+    public function placeholder(): View
+    {
+        return view('livewire.dashboard-placeholder');
     }
 
     public function statusFor(float $pct): string
@@ -193,7 +231,7 @@ new #[Layout('layouts.app')] class extends Component
                 <x-searchable-select wire:model.live="domainId" wire:key="domain-filter-{{ $organisationId ?? 'all' }}" :options="$domains->pluck('fqdn', 'id')" :placeholder="__('All domains')" />
 
                 <div class="inline-flex rounded-md shadow-sm" role="group">
-                    @foreach ([7 => '7d', 30 => '30d', 90 => '90d'] as $value => $label)
+                    @foreach ($dayRanges as $value)
                         <button
                             type="button"
                             wire:click="$set('days', {{ $value }})"
@@ -202,9 +240,14 @@ new #[Layout('layouts.app')] class extends Component
                                 'bg-indigo-600 text-white border-indigo-600' => $days === $value,
                                 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700' => $days !== $value,
                             ])
-                        >{{ $label }}</button>
+                        >{{ $value }}d</button>
                     @endforeach
                 </div>
+
+                <span wire:loading.delay class="inline-flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500" role="status">
+                    <x-spinner class="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                    {{ __('Loading…') }}
+                </span>
             </div>
 
             @if (! $hasAnyReports)
@@ -298,7 +341,7 @@ new #[Layout('layouts.app')] class extends Component
                             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:space-y-3 max-md:p-3">
                                 @forelse ($topFailingSources as $group)
                                     @php($status = $this->statusFor($group['dmarc_pass_pct']))
-                                    <tr wire:key="failing-{{ $group['label'] }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
+                                    <tr wire:key="failing-{{ $group['domain_id'] }}-{{ $group['label'] }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
                                         <td data-label="{{ __('Source') }}" class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $group['label'] }}</td>
                                         <td data-label="{{ __('Domain') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $group['domain'] }}</td>
                                         <td data-label="{{ __('Volume') }}" class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ number_format($group['total']) }}</td>
@@ -359,7 +402,7 @@ new #[Layout('layouts.app')] class extends Component
                                 @php($dkimStatus = $this->statusFor($group['dkim_pass_pct']))
                                 @php($expandable = $group['ip_count'] > 1 || $group['envelope_count'] > 1)
                                 <tbody
-                                    wire:key="group-{{ $group['label'] }}"
+                                    wire:key="group-{{ $group['domain_id'] }}-{{ $group['label'] }}"
                                     x-data="{ open: false }"
                                     class="divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:mb-3 max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:overflow-hidden"
                                 >
@@ -531,6 +574,40 @@ new #[Layout('layouts.app')] class extends Component
         // which sends that Proxy into infinite recursion the moment anything touches it.
         let chart = null;
 
+        // Days with far fewer messages than usual: a few failures there swing
+        // the percentage a lot, so their points and line segments are faded.
+        let lowVolume = [];
+
+        const messagesLabel = @js(__('Messages'));
+
+        const fade = (hex, alpha) => {
+            const value = parseInt(hex.slice(1), 16);
+
+            return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+        };
+
+        const lowVolumeDays = (totals) => {
+            if (!totals.length) return [];
+
+            const sorted = [...totals].sort((a, b) => a - b);
+            const middle = Math.floor(sorted.length / 2);
+            const median = sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+
+            return totals.map((total) => total < median * 0.2);
+        };
+
+        const lineStyle = (color) => ({
+            borderColor: color,
+            backgroundColor: color,
+            pointBackgroundColor: (ctx) => lowVolume[ctx.dataIndex] ? fade(color, 0.35) : color,
+            pointBorderColor: (ctx) => lowVolume[ctx.dataIndex] ? fade(color, 0.35) : color,
+            pointRadius: (ctx) => lowVolume[ctx.dataIndex] ? 1.5 : 2,
+            segment: {
+                borderColor: (ctx) => lowVolume[ctx.p0DataIndex] || lowVolume[ctx.p1DataIndex] ? fade(color, 0.35) : undefined,
+                borderDash: (ctx) => lowVolume[ctx.p0DataIndex] || lowVolume[ctx.p1DataIndex] ? [4, 3] : undefined,
+            },
+        });
+
         return {
             colors() {
                 const dark = document.documentElement.classList.contains('dark');
@@ -538,9 +615,14 @@ new #[Layout('layouts.app')] class extends Component
                     dmarc: dark ? '#3987e5' : '#2a78d6',
                     spf: dark ? '#d95926' : '#eb6834',
                     dkim: dark ? '#199e70' : '#1baf7a',
+                    volume: dark ? 'rgba(148, 163, 184, 0.16)' : 'rgba(100, 116, 139, 0.18)',
                     grid: dark ? 'rgba(148, 163, 184, 0.12)' : 'rgba(100, 116, 139, 0.15)',
                     ink: dark ? '#c3c2b7' : '#52514e',
                 };
+            },
+
+            volumeAxisMax(data) {
+                return Math.max(1, ...data.map((row) => row.total)) * 3;
             },
 
             init(canvas) {
@@ -575,6 +657,14 @@ new #[Layout('layouts.app')] class extends Component
                                 grid: { color: c.grid },
                                 border: { display: false },
                             },
+                            y1: {
+                                position: 'right',
+                                beginAtZero: true,
+                                suggestedMax: this.volumeAxisMax(initialData),
+                                ticks: { color: c.ink, precision: 0 },
+                                grid: { drawOnChartArea: false },
+                                border: { display: false },
+                            },
                             x: {
                                 ticks: { color: c.ink },
                                 grid: { display: false },
@@ -583,10 +673,22 @@ new #[Layout('layouts.app')] class extends Component
                         },
                         plugins: {
                             legend: {
-                                labels: { color: c.ink, usePointStyle: true, pointStyle: 'line' },
+                                labels: {
+                                    color: c.ink,
+                                    usePointStyle: true,
+                                    generateLabels: (chart) => Chart.defaults.plugins.legend.labels.generateLabels(chart).map((item) => ({
+                                        ...item,
+                                        pointStyle: chart.data.datasets[item.datasetIndex].type === 'bar' ? 'rect' : 'line',
+                                    })),
+                                },
                             },
                             tooltip: {
-                                callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}%` },
+                                itemSort: (a, b) => (b.dataset.type === 'bar') - (a.dataset.type === 'bar'),
+                                callbacks: {
+                                    label: (ctx) => ctx.dataset.type === 'bar'
+                                        ? `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()}`
+                                        : `${ctx.dataset.label}: ${ctx.parsed.y}%`,
+                                },
                             },
                         },
                     },
@@ -598,12 +700,15 @@ new #[Layout('layouts.app')] class extends Component
             },
 
             buildData(data, c) {
+                lowVolume = lowVolumeDays(data.map((row) => row.total));
+
                 return {
                     labels: data.map((row) => row.date),
                     datasets: [
-                        { label: 'DMARC', data: data.map((row) => row.dmarc_pass_pct), borderColor: c.dmarc, backgroundColor: c.dmarc, tension: 0.25, borderWidth: 2, pointRadius: 2 },
-                        { label: 'SPF', data: data.map((row) => row.spf_pass_pct), borderColor: c.spf, backgroundColor: c.spf, tension: 0.25, borderWidth: 2, pointRadius: 2 },
-                        { label: 'DKIM', data: data.map((row) => row.dkim_pass_pct), borderColor: c.dkim, backgroundColor: c.dkim, tension: 0.25, borderWidth: 2, pointRadius: 2 },
+                        { label: 'DMARC', data: data.map((row) => row.dmarc_pass_pct), ...lineStyle(c.dmarc), tension: 0.25, borderWidth: 2, order: 0 },
+                        { label: 'SPF', data: data.map((row) => row.spf_pass_pct), ...lineStyle(c.spf), tension: 0.25, borderWidth: 2, order: 0 },
+                        { label: 'DKIM', data: data.map((row) => row.dkim_pass_pct), ...lineStyle(c.dkim), tension: 0.25, borderWidth: 2, order: 0 },
+                        { type: 'bar', label: messagesLabel, data: data.map((row) => row.total), yAxisID: 'y1', order: 1, backgroundColor: c.volume, borderWidth: 0, barPercentage: 0.9 },
                     ],
                 };
             },
@@ -614,6 +719,7 @@ new #[Layout('layouts.app')] class extends Component
                 const fresh = this.buildData(data, c);
                 chart.data.labels = fresh.labels;
                 chart.data.datasets.forEach((ds, i) => { ds.data = fresh.datasets[i].data; });
+                chart.options.scales.y1.suggestedMax = this.volumeAxisMax(data);
                 chart.update();
             },
 
@@ -622,14 +728,11 @@ new #[Layout('layouts.app')] class extends Component
                 const c = this.colors();
                 chart.options.scales.y.ticks.color = c.ink;
                 chart.options.scales.y.grid.color = c.grid;
+                chart.options.scales.y1.ticks.color = c.ink;
                 chart.options.scales.x.ticks.color = c.ink;
                 chart.options.plugins.legend.labels.color = c.ink;
-                chart.data.datasets[0].borderColor = c.dmarc;
-                chart.data.datasets[0].backgroundColor = c.dmarc;
-                chart.data.datasets[1].borderColor = c.spf;
-                chart.data.datasets[1].backgroundColor = c.spf;
-                chart.data.datasets[2].borderColor = c.dkim;
-                chart.data.datasets[2].backgroundColor = c.dkim;
+                [c.dmarc, c.spf, c.dkim].forEach((color, i) => Object.assign(chart.data.datasets[i], lineStyle(color)));
+                chart.data.datasets[3].backgroundColor = c.volume;
                 chart.update();
             },
         };

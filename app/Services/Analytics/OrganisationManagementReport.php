@@ -281,7 +281,7 @@ class OrganisationManagementReport
         $width = 720;
         $height = 190;
         $left = 40;
-        $right = 12;
+        $right = 44;
         $top = 12;
         $bottom = 26;
         $plotWidth = $width - $left - $right;
@@ -312,13 +312,23 @@ class OrganisationManagementReport
             $svg .= '<text x="'.($width - $right).'" y="'.($ty - 4).'" font-family="Helvetica" font-size="8" fill="#059669" text-anchor="end">'.__('target').' '.(int) DomainHealthService::PASS_GOOD.'%</text>';
         }
 
+        $svg .= $this->volumeBarsSvg($trend, $x, $baseline, $plotHeight / 3, $plotWidth / $count, $left, $width - $right);
+
+        $lowVolume = $this->lowVolumeDays($trend);
+        $days = $trend->values();
+
         if ($count > 1) {
             $svg .= '<polygon points="'.$x(0).','.$baseline.' '.$points.' '.$x($count - 1).','.$baseline.'" fill="'.$accent.'" fill-opacity="0.08" stroke="none"/>';
-            $svg .= '<polyline points="'.$points.'" fill="none" stroke="'.$accent.'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+
+            for ($index = 1; $index < $count; $index++) {
+                $faded = $lowVolume[$index - 1] || $lowVolume[$index];
+                $svg .= '<line x1="'.$x($index - 1).'" y1="'.$y((float) $days[$index - 1]['dmarc_pass_pct']).'" x2="'.$x($index).'" y2="'.$y((float) $days[$index]['dmarc_pass_pct']).'" stroke="'.$accent.'" stroke-width="2" stroke-linecap="round"'
+                    .($faded ? ' stroke-opacity="0.35" stroke-dasharray="4,3"' : '').'/>';
+            }
         }
 
-        $last = $trend->last();
-        $svg .= '<circle cx="'.$x($count - 1).'" cy="'.$y((float) $last['dmarc_pass_pct']).'" r="3" fill="'.$accent.'"/>';
+        $svg .= '<circle cx="'.$x($count - 1).'" cy="'.$y((float) $days[$count - 1]['dmarc_pass_pct']).'" r="3" fill="'.$accent.'"'
+            .($lowVolume[$count - 1] ? ' fill-opacity="0.35"' : '').'/>';
 
         $labelCount = min(5, $count);
         $labelIndexes = $labelCount === 1 ? [0] : array_unique(array_map(fn (int $i) => (int) round($i * ($count - 1) / ($labelCount - 1)), range(0, $labelCount - 1)));
@@ -335,5 +345,48 @@ class OrganisationManagementReport
         }
 
         return $svg.'</svg>';
+    }
+
+    /**
+     * Grey bars with the number of messages per day, in the lower part of the
+     * plot, with the highest count labelled on the right.
+     *
+     * @param  Collection<int, array{date: string, total: int, dmarc_pass_pct: float}>  $trend
+     * @param  callable(int): float  $x
+     */
+    private function volumeBarsSvg(Collection $trend, callable $x, float $baseline, float $maxBarHeight, float $slotWidth, float $plotLeft, float $plotRight): string
+    {
+        $maxTotal = max(1, (int) $trend->max('total'));
+        $barWidth = min(24, $slotWidth * 0.7);
+        $svg = '';
+
+        foreach ($trend->values() as $index => $day) {
+            $barHeight = round($day['total'] / $maxTotal * $maxBarHeight, 1);
+            $barLeft = max($plotLeft, $x($index) - $barWidth / 2);
+            $barRight = min($plotRight, $x($index) + $barWidth / 2);
+
+            $svg .= '<rect x="'.round($barLeft, 1).'" y="'.round($baseline - $barHeight, 1).'" width="'.round($barRight - $barLeft, 1).'" height="'.$barHeight.'" fill="#cbd5e1" fill-opacity="0.6"/>';
+        }
+
+        $labelX = $plotRight + 6;
+        $svg .= '<text x="'.$labelX.'" y="'.round($baseline - $maxBarHeight + 3, 1).'" font-family="Helvetica" font-size="9" fill="#9ca3af">'.number_format($maxTotal).'</text>';
+        $svg .= '<text x="'.$labelX.'" y="'.round($baseline + 3, 1).'" font-family="Helvetica" font-size="9" fill="#9ca3af">0</text>';
+
+        return $svg;
+    }
+
+    /**
+     * Flags days with far fewer messages than the period's median day: a few
+     * failures there swing the pass rate a lot, so the chart draws them faded.
+     * Same rule as the dashboard's trend chart.
+     *
+     * @param  Collection<int, array{date: string, total: int, dmarc_pass_pct: float}>  $trend
+     * @return array<int, bool>
+     */
+    private function lowVolumeDays(Collection $trend): array
+    {
+        $median = (float) $trend->median('total');
+
+        return $trend->values()->map(fn (array $day): bool => $day['total'] < $median * 0.2)->all();
     }
 }

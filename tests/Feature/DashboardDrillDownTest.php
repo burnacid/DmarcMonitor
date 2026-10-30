@@ -8,12 +8,21 @@ use App\Models\Domain;
 use App\Models\Organisation;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 use Livewire\Volt\Volt;
 use Tests\TestCase;
 
 class DashboardDrillDownTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // The dashboard is lazy-loaded; render its real content, not the placeholder.
+        Livewire::withoutLazyLoading();
+    }
 
     public function test_domain_filter_only_lists_domains_of_the_selected_organisation(): void
     {
@@ -27,6 +36,42 @@ class DashboardDrillDownTest extends TestCase
             ->set('organisationId', $selected->id)
             ->assertSee('selected-org.test')
             ->assertDontSee('other-org.test');
+    }
+
+    public function test_the_trend_chart_receives_the_message_count_per_day(): void
+    {
+        $user = User::factory()->create();
+
+        AggregateReportRecord::factory()->create([
+            'aggregate_report_id' => AggregateReport::factory()->create(['date_range_begin' => now()]),
+            'count' => 7,
+        ]);
+
+        Volt::actingAs($user)->test('dashboard')
+            ->assertViewHas('trend', fn (array $trend) => array_column($trend, 'total') === [7]);
+    }
+
+    public function test_the_same_source_sending_for_two_domains_gets_a_unique_row_key_per_domain(): void
+    {
+        $user = User::factory()->create();
+        $domains = Domain::factory()->count(2)->create();
+
+        foreach ($domains as $domain) {
+            AggregateReportRecord::factory()->create([
+                'aggregate_report_id' => AggregateReport::factory()->create(['domain_id' => $domain->id, 'date_range_begin' => now()]),
+                'source_ip' => '192.0.2.10',
+                'count' => 10,
+                'dkim_result' => 'fail',
+                'spf_result' => 'fail',
+            ]);
+        }
+
+        $html = Volt::actingAs($user)->test('dashboard')->html();
+
+        foreach ($domains as $domain) {
+            $this->assertStringContainsString('wire:key="group-'.$domain->id.'-192.0.2.10"', $html);
+            $this->assertStringContainsString('wire:key="failing-'.$domain->id.'-192.0.2.10"', $html);
+        }
     }
 
     public function test_clicking_a_day_scopes_the_summary_to_that_day_only(): void
