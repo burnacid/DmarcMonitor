@@ -38,6 +38,19 @@ class DashboardDrillDownTest extends TestCase
             ->assertDontSee('other-org.test');
     }
 
+    public function test_the_trend_chart_receives_the_message_count_per_day(): void
+    {
+        $user = User::factory()->create();
+
+        AggregateReportRecord::factory()->create([
+            'aggregate_report_id' => AggregateReport::factory()->create(['date_range_begin' => now()]),
+            'count' => 7,
+        ]);
+
+        Volt::actingAs($user)->test('dashboard')
+            ->assertViewHas('trend', fn (array $trend) => array_column($trend, 'total') === [7]);
+    }
+
     public function test_the_same_source_sending_for_two_domains_gets_a_unique_row_key_per_domain(): void
     {
         $user = User::factory()->create();

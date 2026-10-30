@@ -574,6 +574,40 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
         // which sends that Proxy into infinite recursion the moment anything touches it.
         let chart = null;
 
+        // Days with far fewer messages than usual: a few failures there swing
+        // the percentage a lot, so their points and line segments are faded.
+        let lowVolume = [];
+
+        const messagesLabel = @js(__('Messages'));
+
+        const fade = (hex, alpha) => {
+            const value = parseInt(hex.slice(1), 16);
+
+            return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+        };
+
+        const lowVolumeDays = (totals) => {
+            if (!totals.length) return [];
+
+            const sorted = [...totals].sort((a, b) => a - b);
+            const middle = Math.floor(sorted.length / 2);
+            const median = sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+
+            return totals.map((total) => total < median * 0.2);
+        };
+
+        const lineStyle = (color) => ({
+            borderColor: color,
+            backgroundColor: color,
+            pointBackgroundColor: (ctx) => lowVolume[ctx.dataIndex] ? fade(color, 0.35) : color,
+            pointBorderColor: (ctx) => lowVolume[ctx.dataIndex] ? fade(color, 0.35) : color,
+            pointRadius: (ctx) => lowVolume[ctx.dataIndex] ? 1.5 : 2,
+            segment: {
+                borderColor: (ctx) => lowVolume[ctx.p0DataIndex] || lowVolume[ctx.p1DataIndex] ? fade(color, 0.35) : undefined,
+                borderDash: (ctx) => lowVolume[ctx.p0DataIndex] || lowVolume[ctx.p1DataIndex] ? [4, 3] : undefined,
+            },
+        });
+
         return {
             colors() {
                 const dark = document.documentElement.classList.contains('dark');
@@ -581,9 +615,14 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                     dmarc: dark ? '#3987e5' : '#2a78d6',
                     spf: dark ? '#d95926' : '#eb6834',
                     dkim: dark ? '#199e70' : '#1baf7a',
+                    volume: dark ? 'rgba(148, 163, 184, 0.16)' : 'rgba(100, 116, 139, 0.18)',
                     grid: dark ? 'rgba(148, 163, 184, 0.12)' : 'rgba(100, 116, 139, 0.15)',
                     ink: dark ? '#c3c2b7' : '#52514e',
                 };
+            },
+
+            volumeAxisMax(data) {
+                return Math.max(1, ...data.map((row) => row.total)) * 3;
             },
 
             init(canvas) {
@@ -618,6 +657,14 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                                 grid: { color: c.grid },
                                 border: { display: false },
                             },
+                            y1: {
+                                position: 'right',
+                                beginAtZero: true,
+                                suggestedMax: this.volumeAxisMax(initialData),
+                                ticks: { color: c.ink, precision: 0 },
+                                grid: { drawOnChartArea: false },
+                                border: { display: false },
+                            },
                             x: {
                                 ticks: { color: c.ink },
                                 grid: { display: false },
@@ -626,10 +673,22 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                         },
                         plugins: {
                             legend: {
-                                labels: { color: c.ink, usePointStyle: true, pointStyle: 'line' },
+                                labels: {
+                                    color: c.ink,
+                                    usePointStyle: true,
+                                    generateLabels: (chart) => Chart.defaults.plugins.legend.labels.generateLabels(chart).map((item) => ({
+                                        ...item,
+                                        pointStyle: chart.data.datasets[item.datasetIndex].type === 'bar' ? 'rect' : 'line',
+                                    })),
+                                },
                             },
                             tooltip: {
-                                callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}%` },
+                                itemSort: (a, b) => (b.dataset.type === 'bar') - (a.dataset.type === 'bar'),
+                                callbacks: {
+                                    label: (ctx) => ctx.dataset.type === 'bar'
+                                        ? `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()}`
+                                        : `${ctx.dataset.label}: ${ctx.parsed.y}%`,
+                                },
                             },
                         },
                     },
@@ -641,12 +700,15 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
             },
 
             buildData(data, c) {
+                lowVolume = lowVolumeDays(data.map((row) => row.total));
+
                 return {
                     labels: data.map((row) => row.date),
                     datasets: [
-                        { label: 'DMARC', data: data.map((row) => row.dmarc_pass_pct), borderColor: c.dmarc, backgroundColor: c.dmarc, tension: 0.25, borderWidth: 2, pointRadius: 2 },
-                        { label: 'SPF', data: data.map((row) => row.spf_pass_pct), borderColor: c.spf, backgroundColor: c.spf, tension: 0.25, borderWidth: 2, pointRadius: 2 },
-                        { label: 'DKIM', data: data.map((row) => row.dkim_pass_pct), borderColor: c.dkim, backgroundColor: c.dkim, tension: 0.25, borderWidth: 2, pointRadius: 2 },
+                        { label: 'DMARC', data: data.map((row) => row.dmarc_pass_pct), ...lineStyle(c.dmarc), tension: 0.25, borderWidth: 2, order: 0 },
+                        { label: 'SPF', data: data.map((row) => row.spf_pass_pct), ...lineStyle(c.spf), tension: 0.25, borderWidth: 2, order: 0 },
+                        { label: 'DKIM', data: data.map((row) => row.dkim_pass_pct), ...lineStyle(c.dkim), tension: 0.25, borderWidth: 2, order: 0 },
+                        { type: 'bar', label: messagesLabel, data: data.map((row) => row.total), yAxisID: 'y1', order: 1, backgroundColor: c.volume, borderWidth: 0, barPercentage: 0.9 },
                     ],
                 };
             },
@@ -657,6 +719,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                 const fresh = this.buildData(data, c);
                 chart.data.labels = fresh.labels;
                 chart.data.datasets.forEach((ds, i) => { ds.data = fresh.datasets[i].data; });
+                chart.options.scales.y1.suggestedMax = this.volumeAxisMax(data);
                 chart.update();
             },
 
@@ -665,14 +728,11 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                 const c = this.colors();
                 chart.options.scales.y.ticks.color = c.ink;
                 chart.options.scales.y.grid.color = c.grid;
+                chart.options.scales.y1.ticks.color = c.ink;
                 chart.options.scales.x.ticks.color = c.ink;
                 chart.options.plugins.legend.labels.color = c.ink;
-                chart.data.datasets[0].borderColor = c.dmarc;
-                chart.data.datasets[0].backgroundColor = c.dmarc;
-                chart.data.datasets[1].borderColor = c.spf;
-                chart.data.datasets[1].backgroundColor = c.spf;
-                chart.data.datasets[2].borderColor = c.dkim;
-                chart.data.datasets[2].backgroundColor = c.dkim;
+                [c.dmarc, c.spf, c.dkim].forEach((color, i) => Object.assign(chart.data.datasets[i], lineStyle(color)));
+                chart.data.datasets[3].backgroundColor = c.volume;
                 chart.update();
             },
         };
