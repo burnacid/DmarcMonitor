@@ -146,6 +146,7 @@
         <div class="chart">
             <img src="data:image/svg+xml;base64,{{ base64_encode($chartSvg) }}" alt="">
         </div>
+        <p class="muted">{{ __('Grey bars show the number of messages per day. Days with few messages are drawn faded and dashed: there, a handful of failures moves the percentage a lot.') }}</p>
     @endif
 
     <h2>{{ __('Recommended next steps') }}</h2>

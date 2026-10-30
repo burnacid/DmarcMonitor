@@ -21,6 +21,7 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 ### Changed
 
 - The dashboard's "Pass rate over time" chart now shows how many messages were reported each day, as light grey bars with their own scale on the right. Days with far fewer messages than usual are drawn faded and dashed, so a few failures on a quiet day no longer look like a big drop. Hovering a day shows its message count.
+- The management report's (PDF) "DMARC pass rate over time" chart works the same way: grey bars show the number of messages per day, with the highest count on the right, and days with few messages are drawn faded and dashed. A short note under the chart explains this.
 - The dashboard uses far less memory and loads faster when there are many reports. Only the sending sources it shows are worked out in detail, and the sending-sources table is kept for up to 10 minutes. It is refreshed as soon as a new report arrives or source names are looked up. The CSV export, the organisation PDF report and the wallboard also use less memory.
 
 ## [1.6.0]
