@@ -2,6 +2,16 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
+## [Unreleased]
+
+### Added
+
+- Admins can choose how many days of reports the "Low pass rate" flag looks at: 7, 14 or 30 days (30 by default), under Settings > Dashboard Settings > Low pass rate period. This applies to the Domains page and the management report (PDF). The Overview page and the wallboard keep using the period picked on the page itself.
+
+### Changed
+
+- The public dashboard (wallboard) now offers the same periods as the dashboard, as set under Settings > Dashboard Settings, instead of always 7, 30 and 90 days. Its default range, under Settings > Public Dashboard, is picked from those periods. If the chosen default is switched off later, the wallboard opens with the closest period that is still offered.
+
 ## [1.7.0]
 
 ### Added

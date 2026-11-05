@@ -4,6 +4,7 @@ namespace App\Services\Analytics;
 
 use App\Models\AggregateReport;
 use App\Models\AlertEvent;
+use App\Models\DashboardSetting;
 use App\Models\Domain;
 use App\Models\Organisation;
 use Carbon\Carbon;
@@ -124,10 +125,12 @@ class DomainHealthService
 
     /**
      * @param  Collection<int, Domain>  $domains  Already limited to what the viewer may see.
+     * @param  ?int  $days  Period for the pass rate; defaults to the admin's "Low pass rate" period.
      * @return Collection<int, array<string, mixed>> Keyed by domain id.
      */
-    public function forDomains(Collection $domains, int $days = 30): Collection
+    public function forDomains(Collection $domains, ?int $days = null): Collection
     {
+        $days ??= DashboardSetting::passRateDays();
         $domainIds = $domains->pluck('id')->all();
 
         if ($domainIds === []) {

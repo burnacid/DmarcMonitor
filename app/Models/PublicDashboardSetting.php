@@ -9,7 +9,8 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Whether the wallboard (/wall) is switched on, whether its organisations
  * panel scrolls by itself when it overflows, and which day range it shows
- * when the address doesn't pick one. Only a single row is ever
+ * when the address doesn't pick one. The ranges offered are the periods
+ * enabled for the dashboard (see DashboardSetting). Only a single row is ever
  * stored; managed under Settings > Public Dashboard. Off until an admin
  * enables it.
  */
@@ -17,9 +18,6 @@ class PublicDashboardSetting extends Model
 {
     /** @use HasFactory<PublicDashboardSettingFactory> */
     use HasFactory;
-
-    /** The day ranges the wallboard can show. */
-    public const array DAY_RANGES = [7, 30, 90];
 
     public const int DEFAULT_DAYS = 30;
 
@@ -68,15 +66,43 @@ class PublicDashboardSetting extends Model
         return $setting;
     }
 
-    public static function defaultDays(): int
+    /**
+     * The ranges the wallboard offers: the periods enabled for the dashboard.
+     *
+     * @return array<int, int>
+     */
+    public static function dayRanges(): array
     {
-        $days = static::current()?->default_days;
-
-        return in_array($days, self::DAY_RANGES, true) ? $days : self::DEFAULT_DAYS;
+        return DashboardSetting::dayRanges();
     }
 
-    public static function setDefaultDays(int $days): self
+    public static function offers(int $days): bool
     {
+        return in_array($days, static::dayRanges(), true);
+    }
+
+    /**
+     * The wallboard's default range. Falls back to 30 days, or the closest
+     * offered range, when the stored default is no longer offered.
+     */
+    public static function defaultDays(): int
+    {
+        $ranges = static::dayRanges();
+        $days = static::current()?->default_days ?? self::DEFAULT_DAYS;
+
+        if (in_array($days, $ranges, true)) {
+            return $days;
+        }
+
+        return collect($ranges)->sortBy(fn (int $range) => abs($range - self::DEFAULT_DAYS))->first();
+    }
+
+    public static function setDefaultDays(int $days): ?self
+    {
+        if (! static::offers($days)) {
+            return null;
+        }
+
         $setting = static::current() ?? new self;
         $setting->fill(['default_days' => $days])->save();
 

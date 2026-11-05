@@ -30,7 +30,7 @@ class PublicOverviewController extends Controller
 
     public function __invoke(Request $request, DomainHealthService $healthService, DmarcMetricsService $metrics): View
     {
-        $days = in_array($request->integer('days'), PublicDashboardSetting::DAY_RANGES, true)
+        $days = PublicDashboardSetting::offers($request->integer('days'))
             ? $request->integer('days')
             : PublicDashboardSetting::defaultDays();
 
@@ -72,6 +72,7 @@ class PublicOverviewController extends Controller
 
         return view('public.overview', [
             'days' => $days,
+            'dayRanges' => PublicDashboardSetting::dayRanges(),
             'totals' => $healthService->rollUp($health->values()),
             'problemGroups' => $groups->filter(fn (array $group) => $group['problem_domains']->isNotEmpty())->values(),
             'healthyGroups' => $groups->filter(fn (array $group) => $group['problem_domains']->isEmpty())->sortBy('name')->values(),

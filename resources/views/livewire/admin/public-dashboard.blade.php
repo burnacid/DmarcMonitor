@@ -96,11 +96,11 @@ new #[Layout('layouts.app')] class extends Component
 
     public function setDefaultDays(int $days): void
     {
-        if (! in_array($days, PublicDashboardSetting::DAY_RANGES, true)) {
+        $setting = PublicDashboardSetting::setDefaultDays($days);
+
+        if ($setting === null) {
             return;
         }
-
-        $setting = PublicDashboardSetting::setDefaultDays($days);
 
         AuditLogger::record(
             action: 'public_dashboard.default_days_changed',
@@ -117,6 +117,7 @@ new #[Layout('layouts.app')] class extends Component
             'isEnabled' => PublicDashboardSetting::isEnabled(),
             'autoScroll' => PublicDashboardSetting::autoScrolls(),
             'defaultDays' => PublicDashboardSetting::defaultDays(),
+            'dayRanges' => PublicDashboardSetting::dayRanges(),
             'trustsAnyProxy' => trim((string) config('app.trusted_proxies')) === '*',
             'allowedIps' => DashboardAllowedIp::orderBy('address')->get(),
             'currentIp' => $currentIp,
@@ -156,7 +157,7 @@ new #[Layout('layouts.app')] class extends Component
                 <p class="flex flex-wrap items-center gap-2">
                     <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('Default range') }}:</span>
                     <span class="inline-flex rounded-md shadow-sm" role="group">
-                        @foreach (PublicDashboardSetting::DAY_RANGES as $value)
+                        @foreach ($dayRanges as $value)
                             <button type="button" wire:click="setDefaultDays({{ $value }})" @class([
                                 'px-3 py-1 text-xs font-medium border first:rounded-l-md last:rounded-r-md -ml-px first:ml-0',
                                 'bg-indigo-600 text-white border-indigo-600' => $defaultDays === $value,
@@ -164,7 +165,7 @@ new #[Layout('layouts.app')] class extends Component
                             ])>{{ $value }}d</button>
                         @endforeach
                     </span>
-                    <span class="text-xs text-gray-400 dark:text-gray-500">{{ __('Shown when the wallboard address does not pick a range.') }}</span>
+                    <span class="text-xs text-gray-400 dark:text-gray-500">{{ __('Shown when the wallboard address does not pick a range. The ranges are the periods enabled under Dashboard Settings.') }}</span>
                 </p>
                 <p>
                     <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('URL') }}:</span>

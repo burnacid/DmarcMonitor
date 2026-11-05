@@ -38,11 +38,27 @@ new #[Layout('layouts.app')] class extends Component
         );
     }
 
+    public function setPassRateDays(int $days): void
+    {
+        $setting = DashboardSetting::setPassRateDays($days);
+
+        if ($setting === null) {
+            return;
+        }
+
+        AuditLogger::record(
+            action: 'dashboard.pass_rate_days_changed',
+            description: 'Set the low pass rate period to '.$days.' days',
+            subject: $setting,
+        );
+    }
+
     public function with(): array
     {
         return [
             'dayRanges' => DashboardSetting::dayRanges(),
             'defaultDays' => DashboardSetting::defaultDays(),
+            'passRateDays' => DashboardSetting::passRateDays(),
         ];
     }
 }; ?>
@@ -82,6 +98,20 @@ new #[Layout('layouts.app')] class extends Component
                         @endforeach
                     </span>
                     <p class="text-xs text-gray-400 dark:text-gray-500">{{ __('The period the dashboard opens with. Users can choose their own default on their profile page.') }}</p>
+                </div>
+
+                <div class="space-y-2">
+                    <p class="font-medium text-gray-900 dark:text-gray-100">{{ __('Low pass rate period') }}</p>
+                    <span class="inline-flex rounded-md shadow-sm" role="group">
+                        @foreach (DashboardSetting::PASS_RATE_DAY_RANGES as $value)
+                            <button type="button" wire:click="setPassRateDays({{ $value }})" @class([
+                                'px-3 py-1 text-xs font-medium border first:rounded-l-md last:rounded-r-md -ml-px first:ml-0',
+                                'bg-indigo-600 text-white border-indigo-600' => $passRateDays === $value,
+                                'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700' => $passRateDays !== $value,
+                            ])>{{ $value }}d</button>
+                        @endforeach
+                    </span>
+                    <p class="text-xs text-gray-400 dark:text-gray-500">{{ __('How many days of reports the "Low pass rate" flag on the Domains page and in the management report looks at. The Overview page uses the period picked there.') }}</p>
                 </div>
             </div>
         </div>
