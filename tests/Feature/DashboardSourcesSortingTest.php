@@ -65,7 +65,10 @@ class DashboardSourcesSortingTest extends TestCase
     {
         $this->createSources();
 
-        $this->dashboard()->assertSeeHtmlInOrder(['wire:target="sort"', __('Sorting…'), __('Sending sources')]);
+        $dashboard = $this->dashboard()->assertSeeHtmlInOrder(['wire:target="sort"', __('Sorting…'), __('Sending sources')]);
+
+        // Livewire only hides loading elements up front for its known attribute names; others (e.g. wire:loading.delay.flex) show all the time.
+        $this->assertMatchesRegularExpression('/\swire:loading\.delay\s+wire:target="sort"/', $dashboard->html());
     }
 
     private function dashboard(): Testable
