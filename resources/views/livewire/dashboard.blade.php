@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithSorting;
 use App\Models\DashboardSetting;
 use App\Models\Domain;
 use App\Models\Organisation;
@@ -7,6 +8,7 @@ use App\Services\Analytics\DmarcMetricsService;
 use App\Services\Analytics\DomainHealthService;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Collection;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Lazy;
 use Livewire\Attributes\Url;
@@ -14,6 +16,8 @@ use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] #[Lazy] class extends Component
 {
+    use WithSorting;
+
     #[Url(as: 'organisation')]
     public ?int $organisationId = null;
 
@@ -25,6 +29,64 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
     public ?int $days = null;
 
     public ?string $selectedDay = null;
+
+    /**
+     * @return array<string, 'asc'|'desc'>
+     */
+    protected function sortableColumns(): array
+    {
+        return [
+            'domain' => 'asc',
+            'source' => 'asc',
+            'volume' => 'desc',
+            'dmarc' => 'asc',
+            'spf' => 'asc',
+            'dkim' => 'asc',
+            'enforced' => 'desc',
+        ];
+    }
+
+    /**
+     * @return array{0: string, 1: 'asc'|'desc'}
+     */
+    protected function defaultSort(): array
+    {
+        return ['volume', 'desc'];
+    }
+
+    /**
+     * Orders the sending-sources rows by the chosen column; equal values
+     * keep the larger volume first.
+     *
+     * @param  Collection<int, array<string, mixed>>  $groups
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function sortSourceGroups(Collection $groups): Collection
+    {
+        ['column' => $column, 'direction' => $direction] = $this->currentSort;
+
+        $key = match ($column) {
+            'domain' => 'domain',
+            'source' => 'label',
+            'dmarc' => 'dmarc_pass_pct',
+            'spf' => 'spf_pass_pct',
+            'dkim' => 'dkim_pass_pct',
+            'enforced' => 'enforced',
+            default => 'total',
+        };
+
+        return $groups->sort(function (array $a, array $b) use ($key, $direction): int {
+            $comparison = is_string($a[$key])
+                ? strnatcasecmp($a[$key], (string) $b[$key])
+                : $a[$key] <=> $b[$key];
+
+            if ($direction === 'desc') {
+                $comparison = -$comparison;
+            }
+
+            return $comparison !== 0 ? $comparison : $b['total'] <=> $a['total'];
+        })->values();
+    }
 
     public function mount(): void
     {
@@ -193,7 +255,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
             'summary' => $service->summary($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
             'trend' => $this->trendData(),
             'failureBreakdown' => $service->failureBreakdown($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
-            'sourceGroups' => $sources['groups'],
+            'sourceGroups' => $this->sortSourceGroups($sources['groups']),
             'topFailingSources' => $sources['top_failing'],
             'hasAnyReports' => \App\Models\AggregateReport::visibleTo($user)->exists(),
             'windowFrom' => $from->toDateString(),
@@ -384,15 +446,15 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 mt-2 max-md:block max-md:mt-4">
                             <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
                                 <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Domain') }}</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Source') }}</th>
+                                    <x-sortable-th column="domain" :sort="$this->currentSort">{{ __('Domain') }}</x-sortable-th>
+                                    <x-sortable-th column="source" :sort="$this->currentSort">{{ __('Source') }}</x-sortable-th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('IP Addresses') }}</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Envelope To') }}</th>
-                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Volume') }}</th>
-                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('DMARC Pass') }}</th>
-                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('SPF Pass') }}</th>
-                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('DKIM Pass') }}</th>
-                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Enforced') }}</th>
+                                    <x-sortable-th column="volume" align="right" :sort="$this->currentSort">{{ __('Volume') }}</x-sortable-th>
+                                    <x-sortable-th column="dmarc" align="right" :sort="$this->currentSort">{{ __('DMARC Pass') }}</x-sortable-th>
+                                    <x-sortable-th column="spf" align="right" :sort="$this->currentSort">{{ __('SPF Pass') }}</x-sortable-th>
+                                    <x-sortable-th column="dkim" align="right" :sort="$this->currentSort">{{ __('DKIM Pass') }}</x-sortable-th>
+                                    <x-sortable-th column="enforced" align="right" :sort="$this->currentSort">{{ __('Enforced') }}</x-sortable-th>
                                     <th class="px-6 py-3"></th>
                                 </tr>
                             </thead>

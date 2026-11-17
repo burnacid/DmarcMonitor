@@ -25,7 +25,7 @@ new #[Layout('layouts.app')] class extends Component
                     {{ __('The Dashboard summarizes DMARC pass/fail volume from ingested aggregate reports over a chosen date range, filterable by organisation and domain. It answers "is mail claiming to be from us passing authentication, and where is it coming from" at a glance, before you drill into individual reports.') }}
                 </p>
                 <p>
-                    {{ __('The trend chart tracks pass/fail volume over time so a sudden change (a new sending source going unauthenticated, or an authentication regression) stands out. The sending-sources breakdown lists the source IPs/organisations behind the volume, enriched with country and ASN/organisation info where available.') }}
+                    {{ __('The trend chart tracks pass/fail volume over time so a sudden change (a new sending source going unauthenticated, or an authentication regression) stands out. The sending-sources breakdown lists the source IPs/organisations behind the volume, enriched with country and ASN/organisation info where available. It shows the 25 largest sources, ordered by volume; click a column header to sort them by that column instead.') }}
                 </p>
                 <p>
                     {{ __('The filters (organisation, domain and period) are kept in the address bar, so a filtered dashboard can be bookmarked or shared.') }}

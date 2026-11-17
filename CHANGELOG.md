@@ -7,6 +7,7 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 ### Added
 
 - Admins can choose how many days of reports the "Low pass rate" flag looks at: 7, 14 or 30 days (30 by default), under Settings > Dashboard Settings > Low pass rate period. This applies to the Domains page and the management report (PDF). The Overview page and the wallboard keep using the period picked on the page itself.
+- The dashboard's sending-sources table can be sorted by clicking a column header: Domain, Source, Volume, DMARC Pass, SPF Pass, DKIM Pass or Enforced. Click the same header again to reverse the order. The table still shows the 25 largest sources and sorts those. The chosen order is kept in the page address, so it survives a refresh or bookmark.
 
 ### Changed
 
