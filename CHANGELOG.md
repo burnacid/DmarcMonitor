@@ -8,6 +8,7 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 
 - Admins can choose how many days of reports the "Low pass rate" flag looks at: 7, 14 or 30 days (30 by default), under Settings > Dashboard Settings > Low pass rate period. This applies to the Domains page and the management report (PDF). The Overview page and the wallboard keep using the period picked on the page itself.
 - The dashboard's sending-sources table can be sorted by clicking a column header: Domain, Source, Volume, DMARC Pass, SPF Pass, DKIM Pass or Enforced. Click the same header again to reverse the order. The table still shows the 25 largest sources and sorts those. The chosen order is kept in the page address, so it survives a refresh or bookmark. While the table is being sorted, it is greyed out and shows "Sorting…".
+- Click a slice of the dashboard's "Why DMARC fails" chart (Both pass, SPF fail only, DKIM fail only or Both fail) to show only those messages. The stat tiles, the top failing sources, the sending-sources table and its CSV export then only count those messages. The chart itself keeps showing every slice, with the picked one highlighted. Click the slice again, or the × on the "Showing:" label, to show all messages again. The filter works together with a day picked in the trend chart, and is kept in the page address.
 
 ### Changed
 

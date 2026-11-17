@@ -27,6 +27,25 @@ class DmarcMetricsService
     private const DASHBOARD_CACHE_MINUTES = 10;
 
     /**
+     * The slices of failureBreakdown(), each with the record condition that
+     * puts a record in it. Passing one of these keys as $failureCategory
+     * narrows a query to just those records.
+     *
+     * @var array<string, string>
+     */
+    public const FAILURE_CATEGORIES = [
+        'both_pass' => "aggregate_report_records.spf_result = 'pass' AND aggregate_report_records.dkim_result = 'pass'",
+        'spf_fail_only' => "aggregate_report_records.spf_result != 'pass' AND aggregate_report_records.dkim_result = 'pass'",
+        'dkim_fail_only' => "aggregate_report_records.spf_result = 'pass' AND aggregate_report_records.dkim_result != 'pass'",
+        'both_fail' => "aggregate_report_records.spf_result != 'pass' AND aggregate_report_records.dkim_result != 'pass'",
+    ];
+
+    public static function isFailureCategory(?string $category): bool
+    {
+        return $category !== null && array_key_exists($category, self::FAILURE_CATEGORIES);
+    }
+
+    /**
      * Invalidates all cached metrics; call after report data changes.
      */
     public static function flushCache(): void
@@ -81,9 +100,9 @@ class DmarcMetricsService
      *
      * @return Collection<int, array<string, mixed>>
      */
-    private function sourceRows(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null): Collection
+    private function sourceRows(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, ?string $failureCategory = null): Collection
     {
-        $rows = $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds)
+        $rows = $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds, failureCategory: $failureCategory)
             ->selectRaw('aggregate_report_records.source_ip')
             ->selectRaw('aggregate_reports.domain_id')
             ->selectRaw('MAX(domains.fqdn) as domain')
@@ -143,9 +162,9 @@ class DmarcMetricsService
      *
      * @return Collection<int, array<string, mixed>>
      */
-    private function envelopeStatsBySourceIp(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId, ?array $allowedDomainIds = null, ?array $sourceIps = null): Collection
+    private function envelopeStatsBySourceIp(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId, ?array $allowedDomainIds = null, ?array $sourceIps = null, ?string $failureCategory = null): Collection
     {
-        return $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds)
+        return $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds, failureCategory: $failureCategory)
             ->when($sourceIps !== null, fn (Builder $query) => $query->whereIn('aggregate_report_records.source_ip', $sourceIps))
             ->selectRaw('aggregate_report_records.source_ip')
             ->selectRaw('aggregate_reports.domain_id')
@@ -182,9 +201,9 @@ class DmarcMetricsService
      *
      * @return Collection<int, array<string, mixed>>
      */
-    public function groupedSourceBreakdown(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, bool $withEnvelopes = true): Collection
+    public function groupedSourceBreakdown(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, bool $withEnvelopes = true, ?string $failureCategory = null): Collection
     {
-        $groups = $this->sourceRows($domainId, $from, $to, $organisationId, $allowedDomainIds)
+        $groups = $this->sourceRows($domainId, $from, $to, $organisationId, $allowedDomainIds, $failureCategory)
             ->groupBy(fn ($source) => $source['domain_id'].'|'.($source['asn_org'] ?? $source['ptr_hostname'] ?? $source['source_ip']))
             ->map(function (Collection $ips) {
                 $total = $ips->sum('total');
@@ -213,7 +232,7 @@ class DmarcMetricsService
             return $groups;
         }
 
-        return $this->withEnvelopeSplit($groups, $this->envelopeStatsBySourceIp($domainId, $from, $to, $organisationId, $allowedDomainIds));
+        return $this->withEnvelopeSplit($groups, $this->envelopeStatsBySourceIp($domainId, $from, $to, $organisationId, $allowedDomainIds, failureCategory: $failureCategory));
     }
 
     /**
@@ -223,7 +242,7 @@ class DmarcMetricsService
      * @param  Collection<int, array<string, mixed>>  $groups
      * @return Collection<int, array<string, mixed>>
      */
-    public function attachEnvelopes(Collection $groups, ?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null): Collection
+    public function attachEnvelopes(Collection $groups, ?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, ?string $failureCategory = null): Collection
     {
         if ($groups->isEmpty()) {
             return $groups;
@@ -235,7 +254,7 @@ class DmarcMetricsService
             ->flatMap(fn (array $group) => $group['ips']->pluck('source_ip'))
             ->unique()
             ->chunk(500)
-            ->flatMap(fn (Collection $sourceIps) => $this->envelopeStatsBySourceIp($domainId, $from, $to, $organisationId, $allowedDomainIds, $sourceIps->values()->all()));
+            ->flatMap(fn (Collection $sourceIps) => $this->envelopeStatsBySourceIp($domainId, $from, $to, $organisationId, $allowedDomainIds, $sourceIps->values()->all(), $failureCategory));
 
         return $this->withEnvelopeSplit($groups, $envelopeStats);
     }
@@ -286,8 +305,10 @@ class DmarcMetricsService
      *
      * @return array{groups: Collection<int, array<string, mixed>>, top_failing: Collection<int, array<string, mixed>>}
      */
-    public function dashboardSources(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, int $limit = 25): array
+    public function dashboardSources(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, int $limit = 25, ?string $failureCategory = null): array
     {
+        $failureCategory = self::isFailureCategory($failureCategory) ? $failureCategory : null;
+
         $key = 'dashboard-sources-v2:'.md5(serialize([
             Cache::get(self::CACHE_VERSION_KEY, 0),
             $domainId,
@@ -296,16 +317,17 @@ class DmarcMetricsService
             $organisationId,
             $allowedDomainIds,
             $limit,
+            $failureCategory,
         ]));
 
         // Cached as plain arrays: the cache refuses to unserialize objects
         // (cache.serializable_classes), so Collections are rebuilt on read.
-        $cached = Cache::remember($key, now()->addMinutes(self::DASHBOARD_CACHE_MINUTES), function () use ($domainId, $from, $to, $organisationId, $allowedDomainIds, $limit) {
-            $groups = $this->groupedSourceBreakdown($domainId, $from, $to, $organisationId, $allowedDomainIds, withEnvelopes: false);
+        $cached = Cache::remember($key, now()->addMinutes(self::DASHBOARD_CACHE_MINUTES), function () use ($domainId, $from, $to, $organisationId, $allowedDomainIds, $limit, $failureCategory) {
+            $groups = $this->groupedSourceBreakdown($domainId, $from, $to, $organisationId, $allowedDomainIds, withEnvelopes: false, failureCategory: $failureCategory);
             $dehydrate = fn (Collection $groups): array => $groups->map(fn (array $group) => [...$group, 'ips' => $group['ips']->all()])->all();
 
             return [
-                'groups' => $dehydrate($this->attachEnvelopes($groups->take($limit)->values(), $domainId, $from, $to, $organisationId, $allowedDomainIds)),
+                'groups' => $dehydrate($this->attachEnvelopes($groups->take($limit)->values(), $domainId, $from, $to, $organisationId, $allowedDomainIds, $failureCategory)),
                 'top_failing' => $dehydrate($this->topFailingSources($groups)),
             ];
         });
@@ -346,13 +368,14 @@ class DmarcMetricsService
      */
     public function failureBreakdown(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null): array
     {
-        $row = $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds)
-            ->selectRaw('SUM(aggregate_report_records.count) as total')
-            ->selectRaw("SUM(CASE WHEN aggregate_report_records.spf_result = 'pass' AND aggregate_report_records.dkim_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as both_pass")
-            ->selectRaw("SUM(CASE WHEN aggregate_report_records.spf_result != 'pass' AND aggregate_report_records.dkim_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as spf_fail_only")
-            ->selectRaw("SUM(CASE WHEN aggregate_report_records.spf_result = 'pass' AND aggregate_report_records.dkim_result != 'pass' THEN aggregate_report_records.count ELSE 0 END) as dkim_fail_only")
-            ->selectRaw("SUM(CASE WHEN aggregate_report_records.spf_result != 'pass' AND aggregate_report_records.dkim_result != 'pass' THEN aggregate_report_records.count ELSE 0 END) as both_fail")
-            ->first();
+        $query = $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds)
+            ->selectRaw('SUM(aggregate_report_records.count) as total');
+
+        foreach (self::FAILURE_CATEGORIES as $category => $condition) {
+            $query->selectRaw("SUM(CASE WHEN {$condition} THEN aggregate_report_records.count ELSE 0 END) as {$category}");
+        }
+
+        $row = $query->first();
 
         return [
             'total' => (int) ($row->total ?? 0),
@@ -374,9 +397,9 @@ class DmarcMetricsService
      *
      * @return array{total: int, dmarc_pass_pct: float, spf_pass_pct: float, dkim_pass_pct: float, distinct_sources: int}
      */
-    public function summary(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, string $dateColumn = 'date_range_begin'): array
+    public function summary(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, string $dateColumn = 'date_range_begin', ?string $failureCategory = null): array
     {
-        $row = $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds, $dateColumn)
+        $row = $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds, $dateColumn, $failureCategory)
             ->selectRaw('SUM(aggregate_report_records.count) as total')
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.dkim_result = 'pass' OR aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as dmarc_pass")
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as spf_pass")
@@ -485,10 +508,11 @@ class DmarcMetricsService
 
     /**
      * Records joined to their report and domain, filtered to the window and
-     * scope. A base query builder, so aggregate rows come back as plain
-     * objects rather than hydrated (and far heavier) Eloquent models.
+     * scope, and optionally to one of the FAILURE_CATEGORIES. A base query
+     * builder, so aggregate rows come back as plain objects rather than
+     * hydrated (and far heavier) Eloquent models.
      */
-    private function baseQuery(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, string $dateColumn = 'date_range_begin'): Builder
+    private function baseQuery(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, string $dateColumn = 'date_range_begin', ?string $failureCategory = null): Builder
     {
         $query = AggregateReportRecord::query()
             ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
@@ -507,6 +531,10 @@ class DmarcMetricsService
 
         if ($allowedDomainIds !== null) {
             $query->whereIn('aggregate_reports.domain_id', $allowedDomainIds);
+        }
+
+        if (self::isFailureCategory($failureCategory)) {
+            $query->whereRaw('('.self::FAILURE_CATEGORIES[$failureCategory].')');
         }
 
         return $query;

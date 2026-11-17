@@ -30,6 +30,23 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
 
     public ?string $selectedDay = null;
 
+    /** One of DmarcMetricsService::FAILURE_CATEGORIES, picked by clicking a slice of the "Why DMARC fails" chart. */
+    #[Url(as: 'failure')]
+    public ?string $failureCategory = null;
+
+    /**
+     * @return array<string, string>
+     */
+    public function failureCategoryLabels(): array
+    {
+        return [
+            'both_pass' => __('Both pass'),
+            'spf_fail_only' => __('SPF fail only'),
+            'dkim_fail_only' => __('DKIM fail only'),
+            'both_fail' => __('Both fail'),
+        ];
+    }
+
     /**
      * @return array<string, 'asc'|'desc'>
      */
@@ -162,7 +179,9 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
      * The trend chart is keyed off the rolling window and only needs
      * refreshing when that window changes; the failure-breakdown chart is
      * keyed off the drill-down-aware effective window, so it also needs
-     * refreshing when a day is selected/cleared.
+     * refreshing when a day is selected/cleared. It is never narrowed to the
+     * picked failure category itself (the other slices must stay clickable),
+     * it only highlights the picked slice.
      */
     private function dispatchChartUpdates(bool $trendChanged): void
     {
@@ -170,7 +189,28 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
             $this->dispatch('trend-updated', trend: $this->trendData());
         }
 
-        $this->dispatch('failure-breakdown-updated', breakdown: $this->failureBreakdownData());
+        $this->dispatch('failure-breakdown-updated', breakdown: $this->failureBreakdownData(), selected: $this->failureCategory);
+    }
+
+    /**
+     * Called when a slice of the "Why DMARC fails" chart is clicked, to narrow
+     * the stat tiles and source tables to those messages. Clicking the same
+     * slice again clears the filter.
+     */
+    public function selectFailureCategory(string $category): void
+    {
+        if (! DmarcMetricsService::isFailureCategory($category)) {
+            return;
+        }
+
+        $this->failureCategory = $this->failureCategory === $category ? null : $category;
+        $this->dispatchChartUpdates(trendChanged: false);
+    }
+
+    public function clearFailureCategory(): void
+    {
+        $this->failureCategory = null;
+        $this->dispatchChartUpdates(trendChanged: false);
     }
 
     public function updatedOrganisationId(): void
@@ -224,6 +264,10 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
 
         $this->ensureOfferedDays();
 
+        if (! DmarcMetricsService::isFailureCategory($this->failureCategory)) {
+            $this->failureCategory = null;
+        }
+
         if ($this->organisationId !== null && ! $user->canAccessOrganisation($this->organisationId)) {
             $this->organisationId = null;
         }
@@ -246,13 +290,13 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
             $domains->where('organisation_id', $this->organisationId);
         }
 
-        $sources = $service->dashboardSources($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds);
+        $sources = $service->dashboardSources($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds, failureCategory: $this->failureCategory);
 
         return [
             'dayRanges' => DashboardSetting::dayRanges(),
             'organisations' => Organisation::visibleTo($user)->orderBy('name')->get(),
             'domains' => $domains->get(),
-            'summary' => $service->summary($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
+            'summary' => $service->summary($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds, failureCategory: $this->failureCategory),
             'trend' => $this->trendData(),
             'failureBreakdown' => $service->failureBreakdown($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
             'sourceGroups' => $this->sortSourceGroups($sources['groups']),
@@ -321,13 +365,21 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                     </p>
                 </div>
             @else
-                @if ($selectedDay)
-                    <div class="flex items-center gap-2 text-sm">
+                @if ($selectedDay || $failureCategory)
+                    <div class="flex flex-wrap items-center gap-2 text-sm">
                         <span class="text-gray-500 dark:text-gray-400">{{ __('Showing:') }}</span>
-                        <span class="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 dark:bg-indigo-900 px-3 py-1 text-xs font-medium text-indigo-800 dark:text-indigo-200">
-                            {{ \Illuminate\Support\Carbon::parse($selectedDay)->format('M j, Y') }}
-                            <button type="button" wire:click="clearSelectedDay" class="hover:text-indigo-900 dark:hover:text-indigo-100" aria-label="{{ __('Clear day filter') }}">&times;</button>
-                        </span>
+                        @if ($selectedDay)
+                            <span class="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 dark:bg-indigo-900 px-3 py-1 text-xs font-medium text-indigo-800 dark:text-indigo-200">
+                                {{ \Illuminate\Support\Carbon::parse($selectedDay)->format('M j, Y') }}
+                                <button type="button" wire:click="clearSelectedDay" class="hover:text-indigo-900 dark:hover:text-indigo-100" aria-label="{{ __('Clear day filter') }}">&times;</button>
+                            </span>
+                        @endif
+                        @if ($failureCategory)
+                            <span class="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 dark:bg-indigo-900 px-3 py-1 text-xs font-medium text-indigo-800 dark:text-indigo-200">
+                                {{ $this->failureCategoryLabels()[$failureCategory] }}
+                                <button type="button" wire:click="clearFailureCategory" class="hover:text-indigo-900 dark:hover:text-indigo-100" aria-label="{{ __('Clear failure filter') }}">&times;</button>
+                            </span>
+                        @endif
                     </div>
                 @endif
 
@@ -377,11 +429,14 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
                     <div
                         wire:ignore
-                        x-data="dmarcFailureChart(@js($failureBreakdown))"
+                        x-data="dmarcFailureChart(@js($failureBreakdown), @js($failureCategory))"
                         x-init="init($el.querySelector('canvas'))"
                         class="bg-white dark:bg-gray-800 shadow-sm rounded-lg p-4"
                     >
-                        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{{ __('Why DMARC fails') }}</h3>
+                        <div class="flex items-baseline justify-between mb-3">
+                            <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Why DMARC fails') }}</h3>
+                            <span class="text-xs text-gray-400 dark:text-gray-500">{{ __('Click a slice to filter') }}</span>
+                        </div>
                         <div class="relative" style="height: 200px">
                             <canvas></canvas>
                             <p x-show="isEmpty" x-cloak class="absolute inset-0 flex items-center justify-center text-sm text-gray-400 dark:text-gray-500">{{ __('No messages in this window.') }}</p>
@@ -451,7 +506,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                     <div class="flex items-center justify-between px-6 pt-4">
                         <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Sending sources') }}</h3>
                         <a
-                            href="{{ route('dashboard.export-sources', ['domain_id' => $domainId, 'organisation_id' => $organisationId, 'from' => $windowFrom, 'to' => $windowTo]) }}"
+                            href="{{ route('dashboard.export-sources', ['domain_id' => $domainId, 'organisation_id' => $organisationId, 'from' => $windowFrom, 'to' => $windowTo, 'failure' => $failureCategory]) }}"
                             class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 uppercase tracking-widest"
                         >{{ __('Export CSV') }}</a>
                     </div>
@@ -813,12 +868,32 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
         };
     });
 
-    Alpine.data('dmarcFailureChart', (initialBreakdown) => {
+    Alpine.data('dmarcFailureChart', (initialBreakdown, initialSelected) => {
         // See dmarcTrendChart above for why this is a plain closure variable.
         let chart = null;
 
+        // Slice order, matching buildData(); sent to selectFailureCategory() on click.
+        const categories = ['both_pass', 'spf_fail_only', 'dkim_fail_only', 'both_fail'];
+
         return {
             isEmpty: initialBreakdown.total === 0,
+            selected: initialSelected,
+
+            /**
+             * Slice colours, with the slices other than the picked one faded
+             * out so the active filter stands out.
+             */
+            sliceColors(c) {
+                const colors = [c.bothPass, c.spfFailOnly, c.dkimFailOnly, c.bothFail];
+
+                if (!this.selected) return colors;
+
+                return colors.map((color, index) => categories[index] === this.selected ? color : `${color}40`);
+            },
+
+            sliceOffsets() {
+                return categories.map((category) => category === this.selected ? 10 : 0);
+            },
 
             colors() {
                 const dark = document.documentElement.classList.contains('dark');
@@ -846,6 +921,16 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        // Room for the picked slice to pop out without being clipped.
+                        layout: { padding: 10 },
+                        onClick: (evt, elements) => {
+                            if (!elements.length) return;
+
+                            this.$wire.call('selectFailureCategory', categories[elements[0].index]);
+                        },
+                        onHover: (evt, elements) => {
+                            evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+                        },
                         plugins: {
                             legend: {
                                 position: 'bottom',
@@ -867,27 +952,31 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
 
                 window.addEventListener('theme-changed', () => this.restyle());
 
-                window.Livewire.on('failure-breakdown-updated', (event) => this.update(event.breakdown));
+                window.Livewire.on('failure-breakdown-updated', (event) => this.update(event.breakdown, event.selected));
             },
 
             buildData(breakdown, c) {
                 return {
                     labels: ['Both pass', 'SPF fail only', 'DKIM fail only', 'Both fail'],
                     datasets: [{
-                        data: [breakdown.both_pass, breakdown.spf_fail_only, breakdown.dkim_fail_only, breakdown.both_fail],
-                        backgroundColor: [c.bothPass, c.spfFailOnly, c.dkimFailOnly, c.bothFail],
+                        data: categories.map((category) => breakdown[category]),
+                        backgroundColor: this.sliceColors(c),
+                        offset: this.sliceOffsets(),
                         borderColor: c.border,
                         borderWidth: 2,
                     }],
                 };
             },
 
-            update(breakdown) {
+            update(breakdown, selected) {
                 this.isEmpty = breakdown.total === 0;
+                this.selected = selected ?? null;
                 if (!chart) return;
                 const c = this.colors();
                 const fresh = this.buildData(breakdown, c);
                 chart.data.datasets[0].data = fresh.datasets[0].data;
+                chart.data.datasets[0].backgroundColor = fresh.datasets[0].backgroundColor;
+                chart.data.datasets[0].offset = fresh.datasets[0].offset;
                 chart.update();
             },
 
@@ -895,7 +984,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                 if (!chart) return;
                 const c = this.colors();
                 chart.options.plugins.legend.labels.color = c.ink;
-                chart.data.datasets[0].backgroundColor = [c.bothPass, c.spfFailOnly, c.dkimFailOnly, c.bothFail];
+                chart.data.datasets[0].backgroundColor = this.sliceColors(c);
                 chart.data.datasets[0].borderColor = c.border;
                 chart.update();
             },

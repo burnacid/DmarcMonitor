@@ -13,7 +13,8 @@ class DashboardSourcesExportController extends Controller
 {
     /**
      * CSV of the dashboard's grouped sending-sources table for the given
-     * domain/organisation/window — a distinct filter set from the reports
+     * domain/organisation/window (and "Why DMARC fails" slice, if one is
+     * picked) — a distinct filter set from the reports
      * list (see ReportsExportController), so kept as its own small export
      * rather than forced into one shared query.
      */
@@ -25,6 +26,7 @@ class DashboardSourcesExportController extends Controller
         $organisationId = $request->integer('organisation_id') ?: null;
         $from = Carbon::parse($request->string('from', now()->subDays(29)->toDateString()))->startOfDay();
         $to = Carbon::parse($request->string('to', now()->toDateString()))->endOfDay();
+        $failureCategory = DmarcMetricsService::isFailureCategory($request->query('failure')) ? $request->query('failure') : null;
 
         if ($domainId !== null && ! Domain::visibleTo($user)->whereKey($domainId)->exists()) {
             abort(404);
@@ -36,14 +38,14 @@ class DashboardSourcesExportController extends Controller
 
         $allowedDomainIds = $user->hasOrganisationScope() ? Domain::visibleTo($user)->pluck('id')->all() : null;
 
-        return response()->streamDownload(function () use ($service, $domainId, $from, $to, $organisationId, $allowedDomainIds) {
+        return response()->streamDownload(function () use ($service, $domainId, $from, $to, $organisationId, $allowedDomainIds, $failureCategory) {
             $handle = fopen('php://output', 'w');
 
             fputcsv($handle, [
                 'Domain', 'Source', 'IP Count', 'Volume', 'DMARC Pass %', 'SPF Pass %', 'DKIM Pass %', 'Enforced',
             ]);
 
-            foreach ($service->groupedSourceBreakdown($domainId, $from, $to, $organisationId, $allowedDomainIds, withEnvelopes: false) as $group) {
+            foreach ($service->groupedSourceBreakdown($domainId, $from, $to, $organisationId, $allowedDomainIds, withEnvelopes: false, failureCategory: $failureCategory) as $group) {
                 fputcsv($handle, CsvRow::safe([
                     $group['domain'],
                     $group['label'],
