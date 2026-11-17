@@ -61,6 +61,13 @@ class DashboardSourcesSortingTest extends TestCase
         $this->assertSourceOrder(['Bravo', 'Charlie', 'Alpha'], $dashboard);
     }
 
+    public function test_the_sending_sources_table_shows_an_overlay_while_sorting(): void
+    {
+        $this->createSources();
+
+        $this->dashboard()->assertSeeHtmlInOrder(['wire:target="sort"', __('Sorting…'), __('Sending sources')]);
+    }
+
     private function dashboard(): Testable
     {
         return Volt::actingAs(User::factory()->create())->test('dashboard');

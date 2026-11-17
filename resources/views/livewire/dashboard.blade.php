@@ -434,7 +434,18 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                 </div>
 
                 {{-- Source breakdown --}}
-                <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="relative bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
+                    <div
+                        wire:loading.delay.flex
+                        wire:target="sort"
+                        class="absolute inset-0 z-10 items-start justify-center pt-16 bg-white/70 dark:bg-gray-800/70"
+                        role="status"
+                    >
+                        <span class="inline-flex items-center gap-2 rounded-md bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-500 dark:text-gray-300 shadow">
+                            <x-spinner class="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                            {{ __('Sorting…') }}
+                        </span>
+                    </div>
                     <div class="flex items-center justify-between px-6 pt-4">
                         <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Sending sources') }}</h3>
                         <a
