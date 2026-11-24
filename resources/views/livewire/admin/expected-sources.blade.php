@@ -26,6 +26,7 @@ new #[Layout('layouts.app')] class extends Component
     public string $note = '';
     public bool $null_sender_only = false;
     public bool $exclude_from_alerts = true;
+    public bool $hide_from_dashboard = false;
     public bool $is_active = true;
 
     /** Whether the form was prefilled from the address, e.g. from a report's "Mark as expected" link. */
@@ -58,6 +59,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->reset(['editingId', 'organisation_id', 'domain_id', 'label', 'match_value', 'note', 'null_sender_only']);
         $this->match_type = ExpectedSourceMatch::HeloDomain->value;
         $this->exclude_from_alerts = true;
+        $this->hide_from_dashboard = false;
         $this->is_active = true;
         $this->resetValidation();
 
@@ -82,6 +84,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->note = (string) $source->note;
         $this->null_sender_only = $source->null_sender_only;
         $this->exclude_from_alerts = $source->exclude_from_alerts;
+        $this->hide_from_dashboard = $source->hide_from_dashboard;
         $this->is_active = $source->is_active;
         $this->resetValidation();
 
@@ -127,6 +130,7 @@ new #[Layout('layouts.app')] class extends Component
             'note' => 'nullable|string|max:2000',
             'null_sender_only' => 'boolean',
             'exclude_from_alerts' => 'boolean',
+            'hide_from_dashboard' => 'boolean',
             'is_active' => 'boolean',
         ]);
 
@@ -246,7 +250,7 @@ new #[Layout('layouts.app')] class extends Component
     <div class="py-8">
         <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8">
             <div class="flex flex-wrap items-start justify-between gap-4 mb-4">
-                <p class="max-w-3xl text-sm text-gray-500 dark:text-gray-400">{{ __('Sources you know about and expect to fail DMARC, such as a mail security gateway that sends notifications with your From domain. Their messages are labelled on the dashboard and on reports, and can be left out of alerts. They still count in the pass rates, because receivers still treat them as failing.') }}</p>
+                <p class="max-w-3xl text-sm text-gray-500 dark:text-gray-400">{{ __('Sources you know about and expect to fail DMARC, such as a mail security gateway that sends notifications with your From domain. Their messages are labelled on the dashboard and on reports, and can be left out of alerts. They still count in the pass rates unless you hide them from the dashboard and DMARC scores.') }}</p>
                 <x-primary-button wire:click="create">{{ __('New Expected Source') }}</x-primary-button>
             </div>
 
@@ -258,7 +262,7 @@ new #[Layout('layouts.app')] class extends Component
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Matches') }}</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Applies to') }}</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Messages matched') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Alerts') }}</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Handling') }}</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Status') }}</th>
                             <th class="px-6 py-3"></th>
                         </tr>
@@ -284,7 +288,14 @@ new #[Layout('layouts.app')] class extends Component
                                 </td>
                                 <td data-label="{{ __('Applies to') }}" class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $source->domain?->fqdn ?? $source->organisation?->name ?? __('All organisations') }}</td>
                                 <td data-label="{{ __('Messages matched') }}" class="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ number_format((int) $source->records_sum_count) }}</td>
-                                <td data-label="{{ __('Alerts') }}" class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $source->exclude_from_alerts ? __('Left out') : __('Included') }}</td>
+                                <td data-label="{{ __('Handling') }}" class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
+                                    <span>
+                                        {{ $source->exclude_from_alerts ? __('Left out of alerts') : __('In alerts') }}
+                                        @if ($source->hide_from_dashboard)
+                                            <span class="block text-xs text-gray-400 dark:text-gray-500">{{ __('Hidden from dashboard and scores') }}</span>
+                                        @endif
+                                    </span>
+                                </td>
                                 <td data-label="{{ __('Status') }}" class="px-6 py-4 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                     @if ($source->is_active)
                                         <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">{{ __('Active') }}</span>
@@ -384,6 +395,13 @@ new #[Layout('layouts.app')] class extends Component
                     <div class="flex items-center">
                         <input wire:model="exclude_from_alerts" id="exclude_from_alerts" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
                         <label for="exclude_from_alerts" class="ml-2 text-sm text-gray-700 dark:text-gray-300">{{ __('Leave out of alerts (pass rate drop, SPF/DKIM fail spike, new sending source)') }}</label>
+                    </div>
+                    <div class="flex items-start">
+                        <input wire:model="hide_from_dashboard" id="hide_from_dashboard" type="checkbox" class="mt-0.5 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                        <label for="hide_from_dashboard" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                            {{ __('Hide from the dashboard and DMARC scores') }}
+                            <span class="block text-xs text-gray-400 dark:text-gray-500">{{ __('Leaves these messages out of the dashboard, its CSV export, the pass rates on the Domains and Overview pages, the wallboard and the PDF reports. They stay visible on the Reports pages.') }}</span>
+                        </label>
                     </div>
                     <div class="flex items-center">
                         <input wire:model="is_active" id="is_active" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">

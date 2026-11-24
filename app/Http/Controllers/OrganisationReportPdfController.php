@@ -25,6 +25,8 @@ class OrganisationReportPdfController extends Controller
     {
         abort_unless($request->user()->canAccessOrganisation($organisation->id), 404);
 
+        $service = $service->hidingExpectedSources();
+
         $to = $request->filled('to') ? Carbon::parse($request->string('to'))->endOfDay() : now()->endOfDay();
         $from = $request->filled('from') ? Carbon::parse($request->string('from'))->startOfDay() : $to->copy()->subDays(29)->startOfDay();
 

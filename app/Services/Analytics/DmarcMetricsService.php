@@ -27,6 +27,38 @@ class DmarcMetricsService
 
     private const DASHBOARD_CACHE_MINUTES = 10;
 
+    /** Whether records of expected sources set to "hide from dashboard" are left out. */
+    private bool $hidesExpectedSources = false;
+
+    /**
+     * A copy of the service that leaves out the records of expected sources
+     * set to be hidden from the dashboard, in every figure it computes.
+     */
+    public function hidingExpectedSources(): static
+    {
+        $service = clone $this;
+        $service->hidesExpectedSources = true;
+
+        return $service;
+    }
+
+    /**
+     * Messages in the window that belong to expected sources hidden from the
+     * dashboard, so the dashboard can say how much it leaves out.
+     */
+    public function hiddenExpectedMessageCount(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null): int
+    {
+        $service = clone $this;
+        $service->hidesExpectedSources = false;
+
+        return (int) $service->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds)
+            ->whereExists(fn (Builder $expected) => $expected->selectRaw('1')
+                ->from('expected_sources')
+                ->whereColumn('expected_sources.id', 'aggregate_report_records.expected_source_id')
+                ->where('expected_sources.hide_from_dashboard', true))
+            ->sum('aggregate_report_records.count');
+    }
+
     /**
      * The slices of failureBreakdown(), each with the record condition that
      * puts a record in it. Passing one of these keys as $failureCategory
@@ -332,6 +364,7 @@ class DmarcMetricsService
             $allowedDomainIds,
             $limit,
             $failureCategory,
+            $this->hidesExpectedSources,
         ]));
 
         // Cached as plain arrays: the cache refuses to unserialize objects
@@ -553,6 +586,13 @@ class DmarcMetricsService
 
         if (self::isFailureCategory($failureCategory)) {
             $query->whereRaw('('.self::FAILURE_CATEGORIES[$failureCategory].')');
+        }
+
+        if ($this->hidesExpectedSources) {
+            $query->whereNotExists(fn (Builder $expected) => $expected->selectRaw('1')
+                ->from('expected_sources')
+                ->whereColumn('expected_sources.id', 'aggregate_report_records.expected_source_id')
+                ->where('expected_sources.hide_from_dashboard', true));
         }
 
         return $query;

@@ -30,6 +30,8 @@ class PublicOverviewController extends Controller
 
     public function __invoke(Request $request, DomainHealthService $healthService, DmarcMetricsService $metrics): View
     {
+        $metrics = $metrics->hidingExpectedSources();
+
         $days = PublicDashboardSetting::offers($request->integer('days'))
             ? $request->integer('days')
             : PublicDashboardSetting::defaultDays();

@@ -23,10 +23,17 @@ class OrganisationManagementReport
     /** Issues that become actions, in priority order. */
     private const array ACTION_ISSUES = ['dmarc_missing', 'no_reports', 'low_pass_rate', 'spf_missing', 'spf_broken_split', 'spf_too_many_lookups', 'dkim_missing'];
 
+    private DmarcMetricsService $metrics;
+
+    /**
+     * Expected sources hidden from the dashboard are left out of the report too.
+     */
     public function __construct(
-        private DmarcMetricsService $metrics,
+        DmarcMetricsService $metrics,
         private DomainHealthService $health,
-    ) {}
+    ) {
+        $this->metrics = $metrics->hidingExpectedSources();
+    }
 
     /**
      * @return array{

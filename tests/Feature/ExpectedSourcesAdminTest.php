@@ -45,12 +45,14 @@ class ExpectedSourcesAdminTest extends TestCase
             ->set('match_value', 'inkyphishfence.com')
             ->set('organisation_id', $organisation->id)
             ->set('null_sender_only', true)
+            ->set('hide_from_dashboard', true)
             ->call('save')
             ->assertHasNoErrors();
 
         $source = ExpectedSource::sole();
         $this->assertSame(ExpectedSourceMatch::HeloDomain, $source->match_type);
         $this->assertTrue($source->exclude_from_alerts);
+        $this->assertTrue($source->hide_from_dashboard);
         $this->assertSame($source->id, $record->fresh()->expected_source_id);
         $this->assertDatabaseHas('audit_logs', ['action' => 'expected_source.created']);
     }

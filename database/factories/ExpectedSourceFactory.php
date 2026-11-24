@@ -28,6 +28,7 @@ class ExpectedSourceFactory extends Factory
             'note' => null,
             'null_sender_only' => false,
             'exclude_from_alerts' => true,
+            'hide_from_dashboard' => false,
             'is_active' => true,
         ];
     }

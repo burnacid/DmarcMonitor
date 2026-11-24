@@ -8,6 +8,7 @@ use App\Models\Domain;
 use App\Models\ExpectedSource;
 use App\Models\Organisation;
 use App\Models\User;
+use App\Services\Analytics\DomainHealthService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
 use Livewire\Livewire;
@@ -82,6 +83,48 @@ class NullSenderDisplayTest extends TestCase
             ->assertSee('Expected: INKY')
             ->assertDontSee('via ipw.inkyphishfence.com')
             ->assertDontSee('Null sender');
+    }
+
+    public function test_expected_sources_hidden_from_the_dashboard_are_left_out_of_its_figures(): void
+    {
+        $this->inkyRecord(ExpectedSource::factory()->create(['label' => 'INKY', 'hide_from_dashboard' => true]));
+        $healthy = AggregateReportRecord::factory()->enriched('Google LLC')->create(['aggregate_report_id' => $this->report->id, 'count' => 20]);
+
+        Volt::actingAs(User::factory()->create())->test('dashboard')
+            ->assertViewHas('summary', fn (array $summary) => $summary['total'] === 20 && $summary['dmarc_pass_pct'] === 100.0)
+            ->assertViewHas('failureBreakdown', fn (array $breakdown) => $breakdown['both_fail'] === 0)
+            ->assertViewHas('sourceGroups', fn (Collection $groups) => $groups->pluck('label')->all() === ['Google LLC'])
+            ->assertViewHas('hiddenExpectedMessages', AggregateReportRecord::whereKeyNot($healthy->id)->sole()->count)
+            ->assertSee('from expected sources are hidden');
+    }
+
+    public function test_expected_sources_not_hidden_still_count_on_the_dashboard(): void
+    {
+        $this->inkyRecord(ExpectedSource::factory()->create(['hide_from_dashboard' => false]));
+
+        Volt::actingAs(User::factory()->create())->test('dashboard')
+            ->assertViewHas('summary', fn (array $summary) => $summary['dmarc_pass_pct'] === 0.0)
+            ->assertViewHas('hiddenExpectedMessages', 0)
+            ->assertDontSee('from expected sources are hidden');
+    }
+
+    public function test_hidden_expected_sources_do_not_lower_a_domains_dmarc_score(): void
+    {
+        $this->inkyRecord(ExpectedSource::factory()->create(['hide_from_dashboard' => true]));
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $this->report->id, 'count' => 20]);
+
+        $health = app(DomainHealthService::class)->forDomains(Domain::whereKey($this->report->domain_id)->get());
+
+        $this->assertSame(100.0, $health->first()['dmarc_pass_pct']);
+    }
+
+    public function test_the_sources_export_leaves_out_hidden_expected_sources(): void
+    {
+        $this->inkyRecord(ExpectedSource::factory()->create(['hide_from_dashboard' => true]));
+
+        $response = $this->actingAs(User::factory()->create())->get(route('dashboard.export-sources'));
+
+        $this->assertCount(1, array_filter(explode("\n", trim($response->streamedContent()))));
     }
 
     public function test_the_sources_export_includes_the_null_sender_columns(): void

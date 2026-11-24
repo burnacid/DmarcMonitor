@@ -22,13 +22,14 @@ class ExpectedSource extends Model
 
     protected $fillable = [
         'organisation_id', 'domain_id', 'label', 'match_type', 'match_value', 'note',
-        'null_sender_only', 'exclude_from_alerts', 'is_active',
+        'null_sender_only', 'exclude_from_alerts', 'hide_from_dashboard', 'is_active',
     ];
 
     protected $casts = [
         'match_type' => ExpectedSourceMatch::class,
         'null_sender_only' => 'boolean',
         'exclude_from_alerts' => 'boolean',
+        'hide_from_dashboard' => 'boolean',
         'is_active' => 'boolean',
     ];
 

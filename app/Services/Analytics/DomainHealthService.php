@@ -58,7 +58,16 @@ class DomainHealthService
     /** Worth knowing, but not a reason for a domain to need attention. */
     public const array REMARKS = ['rarely_sends', 'no_mail_seen'];
 
-    public function __construct(private DmarcMetricsService $metrics) {}
+    private DmarcMetricsService $metrics;
+
+    /**
+     * Pass rates leave out expected sources hidden from the dashboard, so a
+     * domain's score isn't dragged down by traffic someone already accepted.
+     */
+    public function __construct(DmarcMetricsService $metrics)
+    {
+        $this->metrics = $metrics->hidingExpectedSources();
+    }
 
     public static function passStatus(float $pct): string
     {

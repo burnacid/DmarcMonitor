@@ -165,14 +165,14 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
     {
         [$from, $to] = $this->window();
 
-        return app(DmarcMetricsService::class)->trend($this->domainId, $from, $to, $this->organisationId, $this->allowedDomainIds())->all();
+        return app(DmarcMetricsService::class)->hidingExpectedSources()->trend($this->domainId, $from, $to, $this->organisationId, $this->allowedDomainIds())->all();
     }
 
     private function failureBreakdownData(): array
     {
         [$from, $to] = $this->effectiveWindow();
 
-        return app(DmarcMetricsService::class)->failureBreakdown($this->domainId, $from, $to, $this->organisationId, $this->allowedDomainIds());
+        return app(DmarcMetricsService::class)->hidingExpectedSources()->failureBreakdown($this->domainId, $from, $to, $this->organisationId, $this->allowedDomainIds());
     }
 
     /**
@@ -280,7 +280,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
             }
         }
 
-        $service = app(DmarcMetricsService::class);
+        $service = app(DmarcMetricsService::class)->hidingExpectedSources();
         $allowedDomainIds = $this->allowedDomainIds();
         [$from, $to] = $this->effectiveWindow();
 
@@ -301,6 +301,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
             'failureBreakdown' => $service->failureBreakdown($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
             'sourceGroups' => $this->sortSourceGroups($sources['groups']),
             'topFailingSources' => $sources['top_failing'],
+            'hiddenExpectedMessages' => $service->hiddenExpectedMessageCount($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
             'hasAnyReports' => \App\Models\AggregateReport::visibleTo($user)->exists(),
             'windowFrom' => $from->toDateString(),
             'windowTo' => $to->toDateString(),
@@ -381,6 +382,15 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                             </span>
                         @endif
                     </div>
+                @endif
+
+                @if ($hiddenExpectedMessages > 0)
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                        {{ trans_choice(':count message from expected sources is hidden from these figures.|:count messages from expected sources are hidden from these figures.', $hiddenExpectedMessages, ['count' => number_format($hiddenExpectedMessages)]) }}
+                        @if (auth()->user()->canManage())
+                            <a href="{{ route('admin.expected-sources') }}" wire:navigate class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Expected Sources') }}</a>
+                        @endif
+                    </p>
                 @endif
 
                 {{-- Stat tiles --}}

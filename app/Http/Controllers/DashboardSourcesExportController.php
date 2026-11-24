@@ -20,6 +20,7 @@ class DashboardSourcesExportController extends Controller
      */
     public function __invoke(Request $request, DmarcMetricsService $service): StreamedResponse
     {
+        $service = $service->hidingExpectedSources();
         $user = $request->user();
 
         $domainId = $request->integer('domain_id') ?: null;
