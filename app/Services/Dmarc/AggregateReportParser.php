@@ -4,6 +4,7 @@ namespace App\Services\Dmarc;
 
 use App\Jobs\EnrichReportRecordsJob;
 use App\Models\AggregateReport;
+use App\Models\AggregateReportRecord;
 use App\Models\Domain;
 use App\Models\ImapAccount;
 use App\Models\Microsoft365MailAccount;
@@ -138,6 +139,7 @@ class AggregateReportParser
             'spf_domain' => $spf?->domain,
             'spf_scope' => $spf?->scope,
             'spf_auth_result' => $spf?->result->value,
+            'is_null_sender' => AggregateReportRecord::isNullSenderValues($record->identifiers->envelope_from, $spf?->scope),
         ]);
     }
 

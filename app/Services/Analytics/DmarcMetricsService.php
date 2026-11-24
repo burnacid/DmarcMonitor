@@ -3,6 +3,7 @@
 namespace App\Services\Analytics;
 
 use App\Models\AggregateReportRecord;
+use App\Models\ExpectedSource;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
@@ -114,6 +115,9 @@ class DmarcMetricsService
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as spf_pass")
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.dkim_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as dkim_pass")
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.disposition != 'none' AND aggregate_report_records.disposition != 'pass' THEN aggregate_report_records.count ELSE 0 END) as enforced")
+            ->selectRaw('SUM(CASE WHEN aggregate_report_records.is_null_sender = ? THEN aggregate_report_records.count ELSE 0 END) as null_sender', [true])
+            ->selectRaw("MAX(CASE WHEN aggregate_report_records.spf_scope = 'helo' THEN aggregate_report_records.spf_domain END) as helo_domain")
+            ->selectRaw('MAX(aggregate_report_records.expected_source_id) as expected_source_id')
             ->groupBy('aggregate_report_records.source_ip', 'aggregate_reports.domain_id')
             ->orderByDesc('total')
             ->get();
@@ -134,6 +138,9 @@ class DmarcMetricsService
             'spf_pass_pct' => $this->percentage($row->spf_pass, $row->total),
             'dkim_pass_pct' => $this->percentage($row->dkim_pass, $row->total),
             'enforced' => (int) $row->enforced,
+            'null_sender' => (int) $row->null_sender,
+            'helo_domain' => $row->helo_domain,
+            'expected_source_id' => $row->expected_source_id !== null ? (int) $row->expected_source_id : null,
         ]);
     }
 
@@ -203,9 +210,12 @@ class DmarcMetricsService
      */
     public function groupedSourceBreakdown(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, bool $withEnvelopes = true, ?string $failureCategory = null): Collection
     {
-        $groups = $this->sourceRows($domainId, $from, $to, $organisationId, $allowedDomainIds, $failureCategory)
+        $rows = $this->sourceRows($domainId, $from, $to, $organisationId, $allowedDomainIds, $failureCategory);
+        $expectedLabels = ExpectedSource::whereIn('id', $rows->pluck('expected_source_id')->filter()->unique()->values())->pluck('label', 'id');
+
+        $groups = $rows
             ->groupBy(fn ($source) => $source['domain_id'].'|'.($source['asn_org'] ?? $source['ptr_hostname'] ?? $source['source_ip']))
-            ->map(function (Collection $ips) {
+            ->map(function (Collection $ips) use ($expectedLabels) {
                 $total = $ips->sum('total');
 
                 return [
@@ -220,6 +230,10 @@ class DmarcMetricsService
                     'spf_pass_pct' => $this->percentage($ips->sum('spf_pass'), $total),
                     'dkim_pass_pct' => $this->percentage($ips->sum('dkim_pass'), $total),
                     'enforced' => $ips->sum('enforced'),
+                    'null_sender' => $ips->sum('null_sender'),
+                    'helo_domains' => $ips->pluck('helo_domain')->filter()->unique()->sort()->values()->all(),
+                    'expected_labels' => $ips->pluck('expected_source_id')->filter()->unique()
+                        ->map(fn (int $id) => $expectedLabels->get($id))->filter()->unique()->sort()->values()->all(),
                     'envelopes' => [],
                     'envelope_count' => 0,
                 ];
@@ -309,7 +323,7 @@ class DmarcMetricsService
     {
         $failureCategory = self::isFailureCategory($failureCategory) ? $failureCategory : null;
 
-        $key = 'dashboard-sources-v2:'.md5(serialize([
+        $key = 'dashboard-sources-v3:'.md5(serialize([
             Cache::get(self::CACHE_VERSION_KEY, 0),
             $domainId,
             $from->toDateTimeString(),
@@ -397,9 +411,10 @@ class DmarcMetricsService
      *
      * @return array{total: int, dmarc_pass_pct: float, spf_pass_pct: float, dkim_pass_pct: float, distinct_sources: int}
      */
-    public function summary(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, string $dateColumn = 'date_range_begin', ?string $failureCategory = null): array
+    public function summary(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, string $dateColumn = 'date_range_begin', ?string $failureCategory = null, bool $excludeExpected = false): array
     {
         $row = $this->baseQuery($domainId, $from, $to, $organisationId, $allowedDomainIds, $dateColumn, $failureCategory)
+            ->when($excludeExpected, fn (Builder $query) => $this->withoutExpectedSources($query))
             ->selectRaw('SUM(aggregate_report_records.count) as total')
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.dkim_result = 'pass' OR aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as dmarc_pass")
             ->selectRaw("SUM(CASE WHEN aggregate_report_records.spf_result = 'pass' THEN aggregate_report_records.count ELSE 0 END) as spf_pass")
@@ -473,13 +488,16 @@ class DmarcMetricsService
      *
      * @return Collection<string, list<string>>
      */
-    public function newSourceCandidates(int $domainId, CarbonInterface $from, CarbonInterface $to, string $dateColumn = 'date_range_begin', bool $asnResolved = true): Collection
+    public function newSourceCandidates(int $domainId, CarbonInterface $from, CarbonInterface $to, string $dateColumn = 'date_range_begin', bool $asnResolved = true, bool $excludeExpected = false): Collection
     {
         return AggregateReportRecord::query()
             ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
             ->where('aggregate_reports.domain_id', $domainId)
             ->whereBetween("aggregate_reports.{$dateColumn}", [$from, $to])
             ->whereNotNull('aggregate_report_records.enriched_at')
+            ->when($excludeExpected, function ($query) {
+                $this->withoutExpectedSources($query->getQuery());
+            })
             ->when(
                 $asnResolved,
                 fn ($query) => $query->whereNotNull('aggregate_report_records.asn_org'),
@@ -538,6 +556,18 @@ class DmarcMetricsService
         }
 
         return $query;
+    }
+
+    /**
+     * Leaves out records of expected sources that are set to be left out of
+     * alerts.
+     */
+    private function withoutExpectedSources(Builder $query): Builder
+    {
+        return $query->whereNotExists(fn (Builder $expected) => $expected->selectRaw('1')
+            ->from('expected_sources')
+            ->whereColumn('expected_sources.id', 'aggregate_report_records.expected_source_id')
+            ->where('expected_sources.exclude_from_alerts', true));
     }
 
     private function percentage(int|string|null $part, int|string|null $total): float

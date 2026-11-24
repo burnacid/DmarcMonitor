@@ -459,7 +459,12 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                                 @forelse ($topFailingSources as $group)
                                     @php($status = $this->statusFor($group['dmarc_pass_pct']))
                                     <tr wire:key="failing-{{ $group['domain_id'] }}-{{ $group['label'] }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
-                                        <td data-label="{{ __('Source') }}" class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $group['label'] }}</td>
+                                        <td data-label="{{ __('Source') }}" class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
+                                            <span>
+                                                {{ $group['label'] }}
+                                                <x-source-badges :null-sender="($group['null_sender'] ?? 0) > 0" :helo-domains="$group['helo_domains'] ?? []" :expected-labels="$group['expected_labels'] ?? []" class="ml-1" />
+                                            </span>
+                                        </td>
                                         <td data-label="{{ __('Domain') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $group['domain'] }}</td>
                                         <td data-label="{{ __('Volume') }}" class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ number_format($group['total']) }}</td>
                                         <td data-label="{{ __('DMARC Pass') }}" class="px-6 py-3 whitespace-nowrap text-right text-sm tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
@@ -553,7 +558,13 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                                                 @else
                                                     <span class="inline-block w-3.5"></span>
                                                 @endif
-                                                <span class="whitespace-nowrap">{{ $group['label'] }}</span>
+                                                <span>
+                                                    <span class="whitespace-nowrap">{{ $group['label'] }}</span>
+                                                    @if ($group['helo_domains'] ?? [])
+                                                        <span class="block text-xs text-gray-400 dark:text-gray-500">{{ __('via :helo', ['helo' => implode(', ', $group['helo_domains'])]) }}</span>
+                                                    @endif
+                                                    <x-source-badges :null-sender="($group['null_sender'] ?? 0) > 0" :helo-domains="$group['helo_domains'] ?? []" :expected-labels="$group['expected_labels'] ?? []" class="mt-0.5" />
+                                                </span>
                                             </div>
                                         </td>
                                         <td data-label="{{ __('IP Addresses') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">

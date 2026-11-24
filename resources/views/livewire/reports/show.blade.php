@@ -36,7 +36,7 @@ new #[Layout('layouts.app')] class extends Component
 
         abort_unless(auth()->user()->canAccessOrganisation($report->domain?->organisation_id), 404);
 
-        $this->report = $report->load(['domain', 'records']);
+        $this->report = $report->load(['domain', 'records.expectedSource']);
     }
 
     public function clearFilters(): void
@@ -287,7 +287,20 @@ new #[Layout('layouts.app')] class extends Component
                                         ])>{{ $record->spf_result }}</span>
                                     </td>
                                     <td data-label="{{ __('Header From') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $record->header_from ?? '—' }}</td>
-                                    <td data-label="{{ __('Envelope From') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $record->envelope_from ?? '—' }}</td>
+                                    <td data-label="{{ __('Envelope From') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
+                                        <span class="max-md:text-right">
+                                            {{ $record->envelope_from ?? '—' }}
+                                            <x-source-badges
+                                                :null-sender="$record->is_null_sender"
+                                                :helo-domains="$record->spf_scope === 'helo' ? [$record->spf_domain] : []"
+                                                :expected-labels="$record->expectedSource ? [$record->expectedSource->label] : []"
+                                                class="ml-1"
+                                            />
+                                            @if ($record->is_null_sender && $record->expectedSource === null && $record->spf_domain && auth()->user()->canManage())
+                                                <a href="{{ route('admin.expected-sources', ['match_type' => 'helo_domain', 'match_value' => $record->spf_domain, 'organisation_id' => $report->domain?->organisation_id, 'null_sender_only' => 1]) }}" x-on:click.stop class="block text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Mark as expected') }}</a>
+                                            @endif
+                                        </span>
+                                    </td>
                                     <td data-label="{{ __('Envelope To') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $record->envelope_to ?? '—' }}</td>
                                 </tr>
                                 @if ($expandedRecordId === $record->id)

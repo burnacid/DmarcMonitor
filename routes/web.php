@@ -57,6 +57,7 @@ Route::middleware(['auth', 'verified', 'role:admin,editor'])->prefix('admin')->n
     Route::get('domains/dmarc-records', DmarcRecordExportController::class)->name('domains.dmarc-records');
     Volt::route('geoip', 'admin.geoip')->name('geoip');
     Volt::route('alert-rules', 'admin.alert-rules')->name('alert-rules');
+    Volt::route('expected-sources', 'admin.expected-sources')->name('expected-sources');
     Volt::route('alert-events', 'admin.alert-events')->name('alert-events');
 });
 

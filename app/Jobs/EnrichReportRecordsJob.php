@@ -2,8 +2,10 @@
 
 namespace App\Jobs;
 
+use App\Models\AggregateReport;
 use App\Models\AggregateReportRecord;
 use App\Services\Analytics\DmarcMetricsService;
+use App\Services\Analytics\ExpectedSourceMatcher;
 use App\Services\Enrichment\IpEnrichmentService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -16,7 +18,7 @@ class EnrichReportRecordsJob implements ShouldQueue
         public readonly int $aggregateReportId,
     ) {}
 
-    public function handle(IpEnrichmentService $service): void
+    public function handle(IpEnrichmentService $service, ExpectedSourceMatcher $matcher): void
     {
         $records = AggregateReportRecord::where('aggregate_report_id', $this->aggregateReportId)->get();
 
@@ -32,6 +34,13 @@ class EnrichReportRecordsJob implements ShouldQueue
                 'country' => $enrichment['country'],
                 'enriched_at' => now(),
             ]);
+        }
+
+        // Expected sources can match on the hostname or ASN found above.
+        $report = AggregateReport::find($this->aggregateReportId);
+
+        if ($report !== null) {
+            $matcher->applyToReport($report);
         }
 
         // Enrichment changes how sources are named and grouped.

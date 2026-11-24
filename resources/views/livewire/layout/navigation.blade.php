@@ -103,7 +103,7 @@ new class extends Component
                 </a>
 
                 @php
-                    $settingsActive = request()->routeIs(['admin.organisations', 'admin.domains', 'admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.microsoft365-app', 'admin.geoip', 'admin.alert-rules', 'admin.users', 'admin.scheduled-tasks', 'admin.audit-log', 'admin.report-branding', 'admin.dashboard-settings', 'admin.public-dashboard']);
+                    $settingsActive = request()->routeIs(['admin.organisations', 'admin.domains', 'admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.microsoft365-app', 'admin.geoip', 'admin.alert-rules', 'admin.expected-sources', 'admin.users', 'admin.scheduled-tasks', 'admin.audit-log', 'admin.report-branding', 'admin.dashboard-settings', 'admin.public-dashboard']);
                 @endphp
                 @if (auth()->user()->canManage() || auth()->user()->isAdmin())
                     <x-dropdown align="right" width="48">
@@ -146,6 +146,9 @@ new class extends Component
 
                                 <x-dropdown-link :href="route('admin.alert-rules')" wire:navigate>
                                     {{ __('Alert Rules') }}
+                                </x-dropdown-link>
+                                <x-dropdown-link :href="route('admin.expected-sources')" wire:navigate>
+                                    {{ __('Expected Sources') }}
                                 </x-dropdown-link>
                             @endif
                             @if (auth()->user()->isAdmin())
@@ -296,7 +299,7 @@ new class extends Component
                 {{ __('Help') }}
             </x-responsive-nav-link>
             @php
-                $settingsActive = request()->routeIs(['admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.microsoft365-app', 'admin.geoip', 'admin.alert-rules', 'admin.users', 'admin.report-branding', 'admin.dashboard-settings', 'admin.public-dashboard']);
+                $settingsActive = request()->routeIs(['admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.microsoft365-app', 'admin.geoip', 'admin.alert-rules', 'admin.expected-sources', 'admin.users', 'admin.report-branding', 'admin.dashboard-settings', 'admin.public-dashboard']);
             @endphp
             @if (auth()->user()->canManage() || auth()->user()->isAdmin())
                 <div x-data="{ settingsOpen: {{ $settingsActive ? 'true' : 'false' }} }">
@@ -334,6 +337,9 @@ new class extends Component
 
                             <x-responsive-nav-link :href="route('admin.alert-rules')" :active="request()->routeIs('admin.alert-rules')" wire:navigate class="ps-6">
                                 {{ __('Alert Rules') }}
+                            </x-responsive-nav-link>
+                            <x-responsive-nav-link :href="route('admin.expected-sources')" :active="request()->routeIs('admin.expected-sources')" wire:navigate class="ps-6">
+                                {{ __('Expected Sources') }}
                             </x-responsive-nav-link>
                         @endif
                         @if (auth()->user()->isAdmin())

@@ -43,6 +43,7 @@ class DashboardSourcesExportController extends Controller
 
             fputcsv($handle, [
                 'Domain', 'Source', 'IP Count', 'Volume', 'DMARC Pass %', 'SPF Pass %', 'DKIM Pass %', 'Enforced',
+                'Null Sender', 'HELO Domain', 'Expected Source',
             ]);
 
             foreach ($service->groupedSourceBreakdown($domainId, $from, $to, $organisationId, $allowedDomainIds, withEnvelopes: false, failureCategory: $failureCategory) as $group) {
@@ -55,6 +56,9 @@ class DashboardSourcesExportController extends Controller
                     $group['spf_pass_pct'],
                     $group['dkim_pass_pct'],
                     $group['enforced'],
+                    $group['null_sender'],
+                    implode(', ', $group['helo_domains']),
+                    implode(', ', $group['expected_labels']),
                 ]));
             }
 
