@@ -73,16 +73,15 @@ class NullSenderDisplayTest extends TestCase
             ->assertDontSee('Mark as expected');
     }
 
-    public function test_the_dashboard_shows_the_helo_name_and_labels_of_a_source(): void
+    public function test_the_dashboard_shows_only_the_expected_source_label_of_a_source(): void
     {
         $this->inkyRecord(ExpectedSource::factory()->create(['label' => 'INKY']));
 
         Volt::actingAs(User::factory()->create())->test('dashboard')
-            ->assertViewHas('sourceGroups', fn (Collection $groups) => $groups->sole()['null_sender'] > 0
-                && $groups->sole()['helo_domains'] === ['ipw.inkyphishfence.com']
-                && $groups->sole()['expected_labels'] === ['INKY'])
-            ->assertSee('via ipw.inkyphishfence.com')
-            ->assertSee('Expected: INKY');
+            ->assertViewHas('sourceGroups', fn (Collection $groups) => $groups->sole()['expected_labels'] === ['INKY'])
+            ->assertSee('Expected: INKY')
+            ->assertDontSee('via ipw.inkyphishfence.com')
+            ->assertDontSee('Null sender');
     }
 
     public function test_the_sources_export_includes_the_null_sender_columns(): void
