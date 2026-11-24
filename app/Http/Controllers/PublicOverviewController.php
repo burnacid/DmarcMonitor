@@ -30,7 +30,9 @@ class PublicOverviewController extends Controller
 
     public function __invoke(Request $request, DomainHealthService $healthService, DmarcMetricsService $metrics): View
     {
-        $days = in_array($request->integer('days'), PublicDashboardSetting::DAY_RANGES, true)
+        $metrics = $metrics->hidingExpectedSources();
+
+        $days = PublicDashboardSetting::offers($request->integer('days'))
             ? $request->integer('days')
             : PublicDashboardSetting::defaultDays();
 
@@ -70,9 +72,14 @@ class PublicOverviewController extends Controller
             withEnvelopes: false,
         );
 
+        $totals = $healthService->rollUp($health->values());
+
         return view('public.overview', [
             'days' => $days,
-            'totals' => $healthService->rollUp($health->values()),
+            'dayRanges' => PublicDashboardSetting::dayRanges(),
+            'totals' => $totals,
+            'enforcedPolicy' => PublicDashboardSetting::enforcedPolicy(),
+            'enforcedCount' => PublicDashboardSetting::enforcedCount($totals['policies']),
             'problemGroups' => $groups->filter(fn (array $group) => $group['problem_domains']->isNotEmpty())->values(),
             'healthyGroups' => $groups->filter(fn (array $group) => $group['problem_domains']->isEmpty())->sortBy('name')->values(),
             'alerts' => (clone $openAlerts)->with(['domain.organisation', 'alertRule'])->latest('fired_at')->limit(self::ALERT_LIMIT)->get(),

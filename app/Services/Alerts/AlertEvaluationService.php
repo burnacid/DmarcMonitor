@@ -58,7 +58,7 @@ class AlertEvaluationService
     private function checkPassRate(AlertRule $rule, Domain $domain): void
     {
         $from = $this->windowStart($rule->lookback_window);
-        $summary = $this->metrics->summary($domain->id, $from, now(), dateColumn: 'created_at');
+        $summary = $this->metrics->summary($domain->id, $from, now(), dateColumn: 'created_at', excludeExpected: true);
 
         if ($summary['total'] === 0) {
             return;
@@ -78,7 +78,7 @@ class AlertEvaluationService
     private function checkFailRate(AlertRule $rule, Domain $domain, string $passMetricKey): void
     {
         $from = $this->windowStart($rule->lookback_window);
-        $summary = $this->metrics->summary($domain->id, $from, now(), dateColumn: 'created_at');
+        $summary = $this->metrics->summary($domain->id, $from, now(), dateColumn: 'created_at', excludeExpected: true);
 
         if ($summary['total'] === 0) {
             return;
@@ -112,9 +112,9 @@ class AlertEvaluationService
         $knownBeforeWindow = $this->metrics->sourceNamesBefore($domain->id, $windowStart, 'created_at')->flip();
         $knownBeforeGraceWindow = $this->metrics->sourceNamesBefore($domain->id, $graceWindowStart, 'created_at')->flip();
 
-        $resolved = $this->metrics->newSourceCandidates($domain->id, $windowStart, now(), 'created_at')
+        $resolved = $this->metrics->newSourceCandidates($domain->id, $windowStart, now(), 'created_at', excludeExpected: true)
             ->reject(fn (array $ips, string $name) => $knownBeforeWindow->has($name));
-        $unresolved = $this->metrics->newSourceCandidates($domain->id, $graceWindowStart, now()->subHours(self::UNRESOLVED_SOURCE_GRACE_HOURS), 'created_at', asnResolved: false)
+        $unresolved = $this->metrics->newSourceCandidates($domain->id, $graceWindowStart, now()->subHours(self::UNRESOLVED_SOURCE_GRACE_HOURS), 'created_at', asnResolved: false, excludeExpected: true)
             ->reject(fn (array $ips, string $name) => $knownBeforeGraceWindow->has($name));
 
         foreach ($resolved->union($unresolved) as $name => $ips) {

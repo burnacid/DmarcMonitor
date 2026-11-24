@@ -57,6 +57,25 @@ class AggregateReportParserTest extends TestCase
         $this->assertEquals('example.com', $record->spf_domain);
     }
 
+    public function test_it_flags_records_with_an_empty_envelope_sender_as_null_sender(): void
+    {
+        $report = (new AggregateReportParser)->parseFile($this->fixture('null-sender-helo.xml'));
+
+        $nullSender = $report->records->firstWhere('source_ip', '34.249.87.65');
+        $this->assertSame('<>', $nullSender->envelope_from);
+        $this->assertSame('helo', $nullSender->spf_scope);
+        $this->assertTrue($nullSender->is_null_sender);
+
+        $this->assertFalse($report->records->firstWhere('source_ip', '209.85.220.41')->is_null_sender);
+    }
+
+    public function test_a_record_without_an_envelope_from_is_not_a_null_sender(): void
+    {
+        $report = (new AggregateReportParser)->parseFile($this->fixture('google-single-record.xml'));
+
+        $this->assertFalse($report->records->first()->is_null_sender);
+    }
+
     public function test_it_resolves_an_existing_active_domain_instead_of_creating_a_new_one(): void
     {
         $domain = Domain::create(['fqdn' => 'example.com', 'is_active' => true]);

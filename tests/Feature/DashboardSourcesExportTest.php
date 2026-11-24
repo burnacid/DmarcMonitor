@@ -38,6 +38,18 @@ class DashboardSourcesExportTest extends TestCase
         $this->assertEquals('Domain', $rows[0][0]);
     }
 
+    public function test_export_only_lists_sources_in_the_picked_failure_category(): void
+    {
+        $user = User::factory()->create();
+        $report = AggregateReport::factory()->create(['date_range_begin' => now()]);
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id, 'source_ip' => '203.0.113.9', 'spf_result' => 'fail']);
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id, 'source_ip' => '203.0.113.10']);
+
+        $rows = $this->csvRows($this->actingAs($user)->get(route('dashboard.export-sources', ['failure' => 'spf_fail_only'])));
+
+        $this->assertSame(['203.0.113.9'], array_column(array_slice($rows, 1), 1));
+    }
+
     public function test_a_scoped_user_cannot_export_another_organisations_domain_by_id(): void
     {
         $orgA = Organisation::factory()->create();

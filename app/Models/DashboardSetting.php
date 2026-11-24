@@ -24,7 +24,12 @@ class DashboardSetting extends Model
 
     public const int DEFAULT_DAYS = 30;
 
-    protected $fillable = ['day_ranges', 'default_days'];
+    /** Periods an admin can pick for judging a domain's "Low pass rate". */
+    public const array PASS_RATE_DAY_RANGES = [7, 14, 30];
+
+    public const int DEFAULT_PASS_RATE_DAYS = 30;
+
+    protected $fillable = ['day_ranges', 'default_days', 'pass_rate_days'];
 
     /**
      * @return array<string, string>
@@ -34,6 +39,7 @@ class DashboardSetting extends Model
         return [
             'day_ranges' => 'array',
             'default_days' => 'integer',
+            'pass_rate_days' => 'integer',
         ];
     }
 
@@ -111,6 +117,29 @@ class DashboardSetting extends Model
 
         $setting = static::current() ?? new self;
         $setting->fill(['default_days' => $days])->save();
+
+        return $setting;
+    }
+
+    /**
+     * How many days of reports the "Low pass rate" flag on the Domains page
+     * and in the management report looks at.
+     */
+    public static function passRateDays(): int
+    {
+        $days = static::current()?->pass_rate_days;
+
+        return in_array($days, self::PASS_RATE_DAY_RANGES, true) ? $days : self::DEFAULT_PASS_RATE_DAYS;
+    }
+
+    public static function setPassRateDays(int $days): ?self
+    {
+        if (! in_array($days, self::PASS_RATE_DAY_RANGES, true)) {
+            return null;
+        }
+
+        $setting = static::current() ?? new self;
+        $setting->fill(['pass_rate_days' => $days])->save();
 
         return $setting;
     }

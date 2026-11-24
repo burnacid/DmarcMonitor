@@ -108,4 +108,16 @@ class DashboardSettingsTest extends TestCase
 
         $this->assertNull($user->fresh()->dashboard_default_days);
     }
+
+    public function test_admin_can_change_the_low_pass_rate_period(): void
+    {
+        $this->assertSame(30, DashboardSetting::passRateDays());
+
+        Volt::actingAs(User::factory()->create())->test('admin.dashboard-settings')
+            ->call('setPassRateDays', 14)
+            ->assertViewHas('passRateDays', 14)
+            ->call('setPassRateDays', 90);
+
+        $this->assertSame(14, DashboardSetting::passRateDays());
+    }
 }

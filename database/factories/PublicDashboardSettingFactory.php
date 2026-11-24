@@ -21,6 +21,7 @@ class PublicDashboardSettingFactory extends Factory
             'is_enabled' => true,
             'auto_scroll' => true,
             'default_days' => 30,
+            'enforced_policy' => 'reject',
         ];
     }
 

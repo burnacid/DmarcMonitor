@@ -8,11 +8,13 @@ use App\Models\AggregateReportRecord;
 use App\Models\AlertEvent;
 use App\Models\AlertRule;
 use App\Models\Domain;
+use App\Models\ExpectedSource;
 use App\Models\Organisation;
 use App\Services\Alerts\AlertEvaluationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class AlertEvaluationServiceTest extends TestCase
@@ -52,6 +54,42 @@ class AlertEvaluationServiceTest extends TestCase
         $this->assertEquals(['email'], $event->notified_channels);
 
         Mail::assertQueued(AlertTriggered::class);
+    }
+
+    /**
+     * @return array<string, array{bool, int}>
+     */
+    public static function expectedSourceAlertCases(): array
+    {
+        return [
+            'left out of alerts' => [true, 0],
+            'included in alerts' => [false, 1],
+        ];
+    }
+
+    #[DataProvider('expectedSourceAlertCases')]
+    public function test_pass_rate_drop_rule_respects_whether_expected_sources_are_left_out(bool $excludeFromAlerts, int $expectedEvents): void
+    {
+        Mail::fake();
+
+        $org = Organisation::factory()->create();
+        $domain = Domain::factory()->create(['organisation_id' => $org->id]);
+        $report = AggregateReport::factory()->create(['domain_id' => $domain->id, 'date_range_begin' => now()->subHours(2)]);
+        $expected = ExpectedSource::factory()->create(['organisation_id' => $org->id, 'exclude_from_alerts' => $excludeFromAlerts]);
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id, 'count' => 98]);
+        AggregateReportRecord::factory()->create([
+            'aggregate_report_id' => $report->id,
+            'count' => 10,
+            'dkim_result' => 'fail',
+            'spf_result' => 'fail',
+            'expected_source_id' => $expected->id,
+        ]);
+
+        $rule = AlertRule::factory()->create(['organisation_id' => $org->id, 'type' => 'pass_rate_drop', 'threshold_percent' => 95]);
+
+        app(AlertEvaluationService::class)->evaluate($rule);
+
+        $this->assertDatabaseCount('alert_events', $expectedEvents);
     }
 
     public function test_organisation_scoped_rule_evaluates_every_domain_in_the_organisation(): void
@@ -245,6 +283,21 @@ class AlertEvaluationServiceTest extends TestCase
         $this->assertSame('New Sender LLC', $details['source']);
         $this->assertSame(['198.51.100.8', '198.51.100.9'], $details['source_ips']);
         $this->assertSame(2, $details['ip_count']);
+    }
+
+    public function test_new_source_detected_rule_ignores_expected_sources_left_out_of_alerts(): void
+    {
+        Mail::fake();
+        [$recentReport, $rule] = $this->newSourceScenario();
+        $expected = ExpectedSource::factory()->create(['organisation_id' => $rule->organisation_id, 'match_value' => 'inkyphishfence.com']);
+        AggregateReportRecord::factory()->enriched('Amazon.com, Inc.')->create([
+            'aggregate_report_id' => $recentReport->id,
+            'expected_source_id' => $expected->id,
+        ]);
+
+        app(AlertEvaluationService::class)->evaluate($rule);
+
+        $this->assertDatabaseCount('alert_events', 0);
     }
 
     public function test_new_source_detected_rule_waits_for_enrichment(): void

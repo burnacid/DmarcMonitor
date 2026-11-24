@@ -6,6 +6,7 @@ use App\Models\AggregateReport;
 use App\Models\AggregateReportRecord;
 use App\Models\AlertEvent;
 use App\Models\AlertRule;
+use App\Models\DashboardSetting;
 use App\Models\Domain;
 use App\Services\Analytics\DomainHealthService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -152,6 +153,22 @@ class DomainHealthServiceTest extends TestCase
         $this->assertSame(['spf_missing', 'low_pass_rate', 'open_alerts', 'not_reporting_here'], $health['issues']);
         $this->assertSame(1, $health['open_alerts']);
         $this->assertSame('critical', $health['pass_status']);
+    }
+
+    public function test_low_pass_rate_uses_the_admins_period_when_none_is_given(): void
+    {
+        config(['dmarc.rua_address' => 'dmarc@msp.test']);
+        $domain = $this->healthyDomain();
+        $this->addReport($domain, 5, 15, begin: now()->subDays(20));
+        $this->addReport($domain, 100, begin: now()->subDays(2));
+
+        $this->assertContains('low_pass_rate', app(DomainHealthService::class)->forDomains(collect([$domain]))->get($domain->id)['issues']);
+
+        DashboardSetting::setPassRateDays(7);
+
+        $health = app(DomainHealthService::class)->forDomains(collect([$domain]))->get($domain->id);
+        $this->assertNotContains('low_pass_rate', $health['issues']);
+        $this->assertSame(100, $health['total']);
     }
 
     public function test_an_spf_record_over_the_lookup_limit_is_an_issue_and_blocks_readiness(): void

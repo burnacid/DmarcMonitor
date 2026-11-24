@@ -6,6 +6,7 @@ use App\Models\AggregateReport;
 use App\Models\AggregateReportRecord;
 use App\Models\AlertEvent;
 use App\Models\DashboardAllowedIp;
+use App\Models\DashboardSetting;
 use App\Models\Domain;
 use App\Models\Organisation;
 use App\Models\PublicDashboardSetting;
@@ -144,6 +145,44 @@ class PublicOverviewTest extends TestCase
             ->get(route('public.overview', ['days' => 90]))
             ->assertOk()
             ->assertViewHas('days', 90);
+    }
+
+    public function test_it_offers_the_periods_enabled_for_the_dashboard(): void
+    {
+        DashboardAllowedIp::factory()->create(['address' => '203.0.113.7']);
+        DashboardSetting::factory()->create(['day_ranges' => [7, 14, 60]]);
+        PublicDashboardSetting::setDefaultDays(14);
+
+        $this->getWall()->assertOk()->assertViewHas('dayRanges', [7, 14, 60])->assertViewHas('days', 14);
+
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.7'])
+            ->get(route('public.overview', ['days' => 90]))
+            ->assertOk()
+            ->assertViewHas('days', 14);
+    }
+
+    public function test_the_enforced_tile_counts_the_configured_policies(): void
+    {
+        DashboardAllowedIp::factory()->create(['address' => '203.0.113.7']);
+        Domain::factory()->create(['dmarc_record' => 'v=DMARC1; p=reject']);
+        Domain::factory()->count(2)->create(['dmarc_record' => 'v=DMARC1; p=quarantine']);
+        Domain::factory()->create(['dmarc_record' => 'v=DMARC1; p=none']);
+
+        $this->getWall()->assertOk()->assertViewHas('enforcedCount', 1)->assertSee('Enforced (p=reject)');
+
+        PublicDashboardSetting::setEnforcedPolicy('quarantine');
+        $this->getWall()->assertOk()->assertViewHas('enforcedCount', 2)->assertSee('Enforced (p=quarantine)');
+
+        PublicDashboardSetting::setEnforcedPolicy('both');
+        $this->getWall()->assertOk()->assertViewHas('enforcedCount', 3)->assertSee('Enforced (quarantine or reject)');
+    }
+
+    public function test_a_default_range_that_is_no_longer_offered_falls_back_to_the_closest_one(): void
+    {
+        PublicDashboardSetting::setDefaultDays(90);
+        DashboardSetting::factory()->create(['day_ranges' => [7, 14, 60]]);
+
+        $this->assertSame(14, PublicDashboardSetting::defaultDays());
     }
 
     public function test_cidr_ranges_are_matched(): void

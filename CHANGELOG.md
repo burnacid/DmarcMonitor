@@ -2,6 +2,22 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
+## [1.8.0]
+
+### Added
+
+- Admins can choose how many days of reports the "Low pass rate" flag looks at: 7, 14 or 30 days (30 by default), under Settings > Dashboard Settings > Low pass rate period. This applies to the Domains page and the management report (PDF). The Overview page and the wallboard keep using the period picked on the page itself.
+- The dashboard's sending-sources table can be sorted by clicking a column header: Domain, Source, Volume, DMARC Pass, SPF Pass, DKIM Pass or Enforced. Click the same header again to reverse the order. The table still shows the 25 largest sources and sorts those. The chosen order is kept in the page address, so it survives a refresh or bookmark. While the table is being sorted, it is greyed out and shows "Sorting…".
+- Click a slice of the dashboard's "Why DMARC fails" chart (Both pass, SPF fail only, DKIM fail only or Both fail) to show only those messages. The stat tiles, the top failing sources, the sending-sources table and its CSV export then only count those messages. The chart itself keeps showing every slice, with the picked one highlighted. Click the slice again, or the × on the "Showing:" label, to show all messages again. The filter works together with a day picked in the trend chart, and is kept in the page address.
+- **Null senders**: records of messages sent with an empty envelope sender (`<>`), such as bounces and automatic notifications, are labelled "Null sender" on a report's page. For these messages SPF is checked on the sending server's HELO name, which can't match the From domain, so only DKIM can make them pass. Existing reports are labelled too.
+- **Expected sources**: under Settings > Expected Sources, admins and editors can mark a source they know about as expected, for example a mail security gateway such as INKY that sends notifications with your From domain. A source is matched on its SPF/HELO domain (including subdomains), hostname (PTR), IP address or range, or ASN, for all organisations, one organisation or one domain, and can be limited to null sender messages only. Its messages are labelled "Expected: <label>" on reports and in the dashboard's sending-sources and top-failing-sources tables, and are left out of the pass rate drop, SPF/DKIM fail spike and new sending source alerts unless you switch that off. They still count in the pass rates, unless "Hide from the dashboard and DMARC scores" is switched on for the source: its messages are then left out of the dashboard and its CSV export, the pass rates on the Domains and Overview pages, the wallboard and the PDF reports, and the dashboard says how many messages it hides. A null sender record on a report has a "Mark as expected" link that opens the form already filled in. Adding, changing or removing an expected source also updates existing reports. The sending-sources CSV export has new Null Sender, HELO Domain and Expected Source columns.
+
+- Admins can choose what the wallboard's "Enforced" tile counts: domains on p=reject (the default), on p=quarantine, or both. The setting is under Settings > Public Dashboard > Enforced tile counts, and the tile's label follows the choice.
+
+### Changed
+
+- The public dashboard (wallboard) now offers the same periods as the dashboard, as set under Settings > Dashboard Settings, instead of always 7, 30 and 90 days. Its default range, under Settings > Public Dashboard, is picked from those periods. If the chosen default is switched off later, the wallboard opens with the closest period that is still offered.
+
 ## [1.7.0]
 
 ### Added

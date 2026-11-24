@@ -4,6 +4,7 @@ namespace App\Services\Analytics;
 
 use App\Models\AggregateReport;
 use App\Models\AlertEvent;
+use App\Models\DashboardSetting;
 use App\Models\Domain;
 use App\Models\Organisation;
 use Carbon\Carbon;
@@ -57,7 +58,16 @@ class DomainHealthService
     /** Worth knowing, but not a reason for a domain to need attention. */
     public const array REMARKS = ['rarely_sends', 'no_mail_seen'];
 
-    public function __construct(private DmarcMetricsService $metrics) {}
+    private DmarcMetricsService $metrics;
+
+    /**
+     * Pass rates leave out expected sources hidden from the dashboard, so a
+     * domain's score isn't dragged down by traffic someone already accepted.
+     */
+    public function __construct(DmarcMetricsService $metrics)
+    {
+        $this->metrics = $metrics->hidingExpectedSources();
+    }
 
     public static function passStatus(float $pct): string
     {
@@ -124,10 +134,12 @@ class DomainHealthService
 
     /**
      * @param  Collection<int, Domain>  $domains  Already limited to what the viewer may see.
+     * @param  ?int  $days  Period for the pass rate; defaults to the admin's "Low pass rate" period.
      * @return Collection<int, array<string, mixed>> Keyed by domain id.
      */
-    public function forDomains(Collection $domains, int $days = 30): Collection
+    public function forDomains(Collection $domains, ?int $days = null): Collection
     {
+        $days ??= DashboardSetting::passRateDays();
         $domainIds = $domains->pluck('id')->all();
 
         if ($domainIds === []) {

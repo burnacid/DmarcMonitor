@@ -41,12 +41,12 @@
 
                     <div class="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
                         <div class="inline-flex rounded-md shadow-sm" role="group">
-                            @foreach ([7 => '7d', 30 => '30d', 90 => '90d'] as $value => $label)
+                            @foreach ($dayRanges as $value)
                                 <a href="{{ route('public.overview', ['days' => $value]) }}" @class([
                                     'px-3 py-1.5 text-sm font-medium border first:rounded-l-md last:rounded-r-md -ml-px first:ml-0',
                                     'bg-indigo-600 text-white border-indigo-600' => $days === $value,
                                     'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700' => $days !== $value,
-                                ])>{{ $label }}</a>
+                                ])>{{ $value }}d</a>
                             @endforeach
                         </div>
                         <span>{!! __('Updated :time', ['time' => '<time id="updated-at" datetime="'.e(now()->toIso8601String()).'">'.e(now()->format('H:i')).'</time>']) !!}</span>
@@ -74,7 +74,11 @@
                         ['label' => __('Active domains'), 'value' => number_format($totals['domains']), 'alert' => false],
                         ['label' => __('Need attention'), 'value' => number_format($totals['domains_with_issues']), 'alert' => $totals['domains_with_issues'] > 0],
                         ['label' => __('DMARC pass rate (:days d)', ['days' => $days]), 'value' => $totals['dmarc_pass_pct'] !== null ? $totals['dmarc_pass_pct'].'%' : '—', 'alert' => false],
-                        ['label' => __('Enforced (p=reject)'), 'value' => number_format($totals['policies']['reject'] ?? 0).' / '.number_format($totals['domains']), 'alert' => false],
+                        ['label' => match ($enforcedPolicy) {
+                            'quarantine' => __('Enforced (p=quarantine)'),
+                            'both' => __('Enforced (quarantine or reject)'),
+                            default => __('Enforced (p=reject)'),
+                        }, 'value' => number_format($enforcedCount).' / '.number_format($totals['domains']), 'alert' => false],
                         ['label' => __('Open alerts'), 'value' => number_format($alertCount), 'alert' => $alertCount > 0],
                     ] as $tile)
                         <div class="bg-white dark:bg-gray-800 shadow-sm rounded-lg p-4">

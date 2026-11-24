@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\WithSorting;
 use App\Models\DashboardSetting;
 use App\Models\Domain;
 use App\Models\Organisation;
@@ -7,6 +8,7 @@ use App\Services\Analytics\DmarcMetricsService;
 use App\Services\Analytics\DomainHealthService;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Collection;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Lazy;
 use Livewire\Attributes\Url;
@@ -14,6 +16,8 @@ use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] #[Lazy] class extends Component
 {
+    use WithSorting;
+
     #[Url(as: 'organisation')]
     public ?int $organisationId = null;
 
@@ -25,6 +29,81 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
     public ?int $days = null;
 
     public ?string $selectedDay = null;
+
+    /** One of DmarcMetricsService::FAILURE_CATEGORIES, picked by clicking a slice of the "Why DMARC fails" chart. */
+    #[Url(as: 'failure')]
+    public ?string $failureCategory = null;
+
+    /**
+     * @return array<string, string>
+     */
+    public function failureCategoryLabels(): array
+    {
+        return [
+            'both_pass' => __('Both pass'),
+            'spf_fail_only' => __('SPF fail only'),
+            'dkim_fail_only' => __('DKIM fail only'),
+            'both_fail' => __('Both fail'),
+        ];
+    }
+
+    /**
+     * @return array<string, 'asc'|'desc'>
+     */
+    protected function sortableColumns(): array
+    {
+        return [
+            'domain' => 'asc',
+            'source' => 'asc',
+            'volume' => 'desc',
+            'dmarc' => 'asc',
+            'spf' => 'asc',
+            'dkim' => 'asc',
+            'enforced' => 'desc',
+        ];
+    }
+
+    /**
+     * @return array{0: string, 1: 'asc'|'desc'}
+     */
+    protected function defaultSort(): array
+    {
+        return ['volume', 'desc'];
+    }
+
+    /**
+     * Orders the sending-sources rows by the chosen column; equal values
+     * keep the larger volume first.
+     *
+     * @param  Collection<int, array<string, mixed>>  $groups
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function sortSourceGroups(Collection $groups): Collection
+    {
+        ['column' => $column, 'direction' => $direction] = $this->currentSort;
+
+        $key = match ($column) {
+            'domain' => 'domain',
+            'source' => 'label',
+            'dmarc' => 'dmarc_pass_pct',
+            'spf' => 'spf_pass_pct',
+            'dkim' => 'dkim_pass_pct',
+            'enforced' => 'enforced',
+            default => 'total',
+        };
+
+        return $groups->sort(function (array $a, array $b) use ($key, $direction): int {
+            $comparison = is_string($a[$key])
+                ? strnatcasecmp($a[$key], (string) $b[$key])
+                : $a[$key] <=> $b[$key];
+
+            if ($direction === 'desc') {
+                $comparison = -$comparison;
+            }
+
+            return $comparison !== 0 ? $comparison : $b['total'] <=> $a['total'];
+        })->values();
+    }
 
     public function mount(): void
     {
@@ -86,21 +165,23 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
     {
         [$from, $to] = $this->window();
 
-        return app(DmarcMetricsService::class)->trend($this->domainId, $from, $to, $this->organisationId, $this->allowedDomainIds())->all();
+        return app(DmarcMetricsService::class)->hidingExpectedSources()->trend($this->domainId, $from, $to, $this->organisationId, $this->allowedDomainIds())->all();
     }
 
     private function failureBreakdownData(): array
     {
         [$from, $to] = $this->effectiveWindow();
 
-        return app(DmarcMetricsService::class)->failureBreakdown($this->domainId, $from, $to, $this->organisationId, $this->allowedDomainIds());
+        return app(DmarcMetricsService::class)->hidingExpectedSources()->failureBreakdown($this->domainId, $from, $to, $this->organisationId, $this->allowedDomainIds());
     }
 
     /**
      * The trend chart is keyed off the rolling window and only needs
      * refreshing when that window changes; the failure-breakdown chart is
      * keyed off the drill-down-aware effective window, so it also needs
-     * refreshing when a day is selected/cleared.
+     * refreshing when a day is selected/cleared. It is never narrowed to the
+     * picked failure category itself (the other slices must stay clickable),
+     * it only highlights the picked slice.
      */
     private function dispatchChartUpdates(bool $trendChanged): void
     {
@@ -108,7 +189,28 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
             $this->dispatch('trend-updated', trend: $this->trendData());
         }
 
-        $this->dispatch('failure-breakdown-updated', breakdown: $this->failureBreakdownData());
+        $this->dispatch('failure-breakdown-updated', breakdown: $this->failureBreakdownData(), selected: $this->failureCategory);
+    }
+
+    /**
+     * Called when a slice of the "Why DMARC fails" chart is clicked, to narrow
+     * the stat tiles and source tables to those messages. Clicking the same
+     * slice again clears the filter.
+     */
+    public function selectFailureCategory(string $category): void
+    {
+        if (! DmarcMetricsService::isFailureCategory($category)) {
+            return;
+        }
+
+        $this->failureCategory = $this->failureCategory === $category ? null : $category;
+        $this->dispatchChartUpdates(trendChanged: false);
+    }
+
+    public function clearFailureCategory(): void
+    {
+        $this->failureCategory = null;
+        $this->dispatchChartUpdates(trendChanged: false);
     }
 
     public function updatedOrganisationId(): void
@@ -162,6 +264,10 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
 
         $this->ensureOfferedDays();
 
+        if (! DmarcMetricsService::isFailureCategory($this->failureCategory)) {
+            $this->failureCategory = null;
+        }
+
         if ($this->organisationId !== null && ! $user->canAccessOrganisation($this->organisationId)) {
             $this->organisationId = null;
         }
@@ -174,7 +280,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
             }
         }
 
-        $service = app(DmarcMetricsService::class);
+        $service = app(DmarcMetricsService::class)->hidingExpectedSources();
         $allowedDomainIds = $this->allowedDomainIds();
         [$from, $to] = $this->effectiveWindow();
 
@@ -184,17 +290,18 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
             $domains->where('organisation_id', $this->organisationId);
         }
 
-        $sources = $service->dashboardSources($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds);
+        $sources = $service->dashboardSources($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds, failureCategory: $this->failureCategory);
 
         return [
             'dayRanges' => DashboardSetting::dayRanges(),
             'organisations' => Organisation::visibleTo($user)->orderBy('name')->get(),
             'domains' => $domains->get(),
-            'summary' => $service->summary($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
+            'summary' => $service->summary($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds, failureCategory: $this->failureCategory),
             'trend' => $this->trendData(),
             'failureBreakdown' => $service->failureBreakdown($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
-            'sourceGroups' => $sources['groups'],
+            'sourceGroups' => $this->sortSourceGroups($sources['groups']),
             'topFailingSources' => $sources['top_failing'],
+            'hiddenExpectedMessages' => $service->hiddenExpectedMessageCount($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
             'hasAnyReports' => \App\Models\AggregateReport::visibleTo($user)->exists(),
             'windowFrom' => $from->toDateString(),
             'windowTo' => $to->toDateString(),
@@ -259,14 +366,31 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                     </p>
                 </div>
             @else
-                @if ($selectedDay)
-                    <div class="flex items-center gap-2 text-sm">
+                @if ($selectedDay || $failureCategory)
+                    <div class="flex flex-wrap items-center gap-2 text-sm">
                         <span class="text-gray-500 dark:text-gray-400">{{ __('Showing:') }}</span>
-                        <span class="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 dark:bg-indigo-900 px-3 py-1 text-xs font-medium text-indigo-800 dark:text-indigo-200">
-                            {{ \Illuminate\Support\Carbon::parse($selectedDay)->format('M j, Y') }}
-                            <button type="button" wire:click="clearSelectedDay" class="hover:text-indigo-900 dark:hover:text-indigo-100" aria-label="{{ __('Clear day filter') }}">&times;</button>
-                        </span>
+                        @if ($selectedDay)
+                            <span class="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 dark:bg-indigo-900 px-3 py-1 text-xs font-medium text-indigo-800 dark:text-indigo-200">
+                                {{ \Illuminate\Support\Carbon::parse($selectedDay)->format('M j, Y') }}
+                                <button type="button" wire:click="clearSelectedDay" class="hover:text-indigo-900 dark:hover:text-indigo-100" aria-label="{{ __('Clear day filter') }}">&times;</button>
+                            </span>
+                        @endif
+                        @if ($failureCategory)
+                            <span class="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 dark:bg-indigo-900 px-3 py-1 text-xs font-medium text-indigo-800 dark:text-indigo-200">
+                                {{ $this->failureCategoryLabels()[$failureCategory] }}
+                                <button type="button" wire:click="clearFailureCategory" class="hover:text-indigo-900 dark:hover:text-indigo-100" aria-label="{{ __('Clear failure filter') }}">&times;</button>
+                            </span>
+                        @endif
                     </div>
+                @endif
+
+                @if ($hiddenExpectedMessages > 0)
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                        {{ trans_choice(':count message from expected sources is hidden from these figures.|:count messages from expected sources are hidden from these figures.', $hiddenExpectedMessages, ['count' => number_format($hiddenExpectedMessages)]) }}
+                        @if (auth()->user()->canManage())
+                            <a href="{{ route('admin.expected-sources') }}" wire:navigate class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Expected Sources') }}</a>
+                        @endif
+                    </p>
                 @endif
 
                 {{-- Stat tiles --}}
@@ -315,11 +439,14 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
                     <div
                         wire:ignore
-                        x-data="dmarcFailureChart(@js($failureBreakdown))"
+                        x-data="dmarcFailureChart(@js($failureBreakdown), @js($failureCategory))"
                         x-init="init($el.querySelector('canvas'))"
                         class="bg-white dark:bg-gray-800 shadow-sm rounded-lg p-4"
                     >
-                        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{{ __('Why DMARC fails') }}</h3>
+                        <div class="flex items-baseline justify-between mb-3">
+                            <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Why DMARC fails') }}</h3>
+                            <span class="text-xs text-gray-400 dark:text-gray-500">{{ __('Click a slice to filter') }}</span>
+                        </div>
                         <div class="relative" style="height: 200px">
                             <canvas></canvas>
                             <p x-show="isEmpty" x-cloak class="absolute inset-0 flex items-center justify-center text-sm text-gray-400 dark:text-gray-500">{{ __('No messages in this window.') }}</p>
@@ -342,7 +469,12 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                                 @forelse ($topFailingSources as $group)
                                     @php($status = $this->statusFor($group['dmarc_pass_pct']))
                                     <tr wire:key="failing-{{ $group['domain_id'] }}-{{ $group['label'] }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
-                                        <td data-label="{{ __('Source') }}" class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $group['label'] }}</td>
+                                        <td data-label="{{ __('Source') }}" class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
+                                            <span>
+                                                {{ $group['label'] }}
+                                                <x-source-badges :expected-labels="$group['expected_labels'] ?? []" class="ml-1" />
+                                            </span>
+                                        </td>
                                         <td data-label="{{ __('Domain') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $group['domain'] }}</td>
                                         <td data-label="{{ __('Volume') }}" class="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ number_format($group['total']) }}</td>
                                         <td data-label="{{ __('DMARC Pass') }}" class="px-6 py-3 whitespace-nowrap text-right text-sm tabular-nums max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:text-left max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
@@ -372,11 +504,24 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                 </div>
 
                 {{-- Source breakdown --}}
-                <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="relative bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
+                    <div
+                        wire:loading.delay
+                        wire:target="sort"
+                        class="absolute inset-0 z-10 bg-white/70 dark:bg-gray-800/70"
+                        role="status"
+                    >
+                        <div class="flex h-full w-full items-center justify-center">
+                            <span class="inline-flex items-center gap-2 rounded-md bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-500 dark:text-gray-300 shadow">
+                                <x-spinner class="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                                {{ __('Sorting…') }}
+                            </span>
+                        </div>
+                    </div>
                     <div class="flex items-center justify-between px-6 pt-4">
                         <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Sending sources') }}</h3>
                         <a
-                            href="{{ route('dashboard.export-sources', ['domain_id' => $domainId, 'organisation_id' => $organisationId, 'from' => $windowFrom, 'to' => $windowTo]) }}"
+                            href="{{ route('dashboard.export-sources', ['domain_id' => $domainId, 'organisation_id' => $organisationId, 'from' => $windowFrom, 'to' => $windowTo, 'failure' => $failureCategory]) }}"
                             class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 uppercase tracking-widest"
                         >{{ __('Export CSV') }}</a>
                     </div>
@@ -384,15 +529,15 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 mt-2 max-md:block max-md:mt-4">
                             <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
                                 <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Domain') }}</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Source') }}</th>
+                                    <x-sortable-th column="domain" :sort="$this->currentSort">{{ __('Domain') }}</x-sortable-th>
+                                    <x-sortable-th column="source" :sort="$this->currentSort">{{ __('Source') }}</x-sortable-th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('IP Addresses') }}</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Envelope To') }}</th>
-                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Volume') }}</th>
-                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('DMARC Pass') }}</th>
-                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('SPF Pass') }}</th>
-                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('DKIM Pass') }}</th>
-                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Enforced') }}</th>
+                                    <x-sortable-th column="volume" align="right" :sort="$this->currentSort">{{ __('Volume') }}</x-sortable-th>
+                                    <x-sortable-th column="dmarc" align="right" :sort="$this->currentSort">{{ __('DMARC Pass') }}</x-sortable-th>
+                                    <x-sortable-th column="spf" align="right" :sort="$this->currentSort">{{ __('SPF Pass') }}</x-sortable-th>
+                                    <x-sortable-th column="dkim" align="right" :sort="$this->currentSort">{{ __('DKIM Pass') }}</x-sortable-th>
+                                    <x-sortable-th column="enforced" align="right" :sort="$this->currentSort">{{ __('Enforced') }}</x-sortable-th>
                                     <th class="px-6 py-3"></th>
                                 </tr>
                             </thead>
@@ -423,7 +568,10 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                                                 @else
                                                     <span class="inline-block w-3.5"></span>
                                                 @endif
-                                                <span class="whitespace-nowrap">{{ $group['label'] }}</span>
+                                                <span>
+                                                    <span class="whitespace-nowrap">{{ $group['label'] }}</span>
+                                                    <x-source-badges :expected-labels="$group['expected_labels'] ?? []" class="mt-0.5" />
+                                                </span>
                                             </div>
                                         </td>
                                         <td data-label="{{ __('IP Addresses') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
@@ -738,12 +886,32 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
         };
     });
 
-    Alpine.data('dmarcFailureChart', (initialBreakdown) => {
+    Alpine.data('dmarcFailureChart', (initialBreakdown, initialSelected) => {
         // See dmarcTrendChart above for why this is a plain closure variable.
         let chart = null;
 
+        // Slice order, matching buildData(); sent to selectFailureCategory() on click.
+        const categories = ['both_pass', 'spf_fail_only', 'dkim_fail_only', 'both_fail'];
+
         return {
             isEmpty: initialBreakdown.total === 0,
+            selected: initialSelected,
+
+            /**
+             * Slice colours, with the slices other than the picked one faded
+             * out so the active filter stands out.
+             */
+            sliceColors(c) {
+                const colors = [c.bothPass, c.spfFailOnly, c.dkimFailOnly, c.bothFail];
+
+                if (!this.selected) return colors;
+
+                return colors.map((color, index) => categories[index] === this.selected ? color : `${color}40`);
+            },
+
+            sliceOffsets() {
+                return categories.map((category) => category === this.selected ? 10 : 0);
+            },
 
             colors() {
                 const dark = document.documentElement.classList.contains('dark');
@@ -771,6 +939,16 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        // Room for the picked slice to pop out without being clipped.
+                        layout: { padding: 10 },
+                        onClick: (evt, elements) => {
+                            if (!elements.length) return;
+
+                            this.$wire.call('selectFailureCategory', categories[elements[0].index]);
+                        },
+                        onHover: (evt, elements) => {
+                            evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+                        },
                         plugins: {
                             legend: {
                                 position: 'bottom',
@@ -792,27 +970,31 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
 
                 window.addEventListener('theme-changed', () => this.restyle());
 
-                window.Livewire.on('failure-breakdown-updated', (event) => this.update(event.breakdown));
+                window.Livewire.on('failure-breakdown-updated', (event) => this.update(event.breakdown, event.selected));
             },
 
             buildData(breakdown, c) {
                 return {
                     labels: ['Both pass', 'SPF fail only', 'DKIM fail only', 'Both fail'],
                     datasets: [{
-                        data: [breakdown.both_pass, breakdown.spf_fail_only, breakdown.dkim_fail_only, breakdown.both_fail],
-                        backgroundColor: [c.bothPass, c.spfFailOnly, c.dkimFailOnly, c.bothFail],
+                        data: categories.map((category) => breakdown[category]),
+                        backgroundColor: this.sliceColors(c),
+                        offset: this.sliceOffsets(),
                         borderColor: c.border,
                         borderWidth: 2,
                     }],
                 };
             },
 
-            update(breakdown) {
+            update(breakdown, selected) {
                 this.isEmpty = breakdown.total === 0;
+                this.selected = selected ?? null;
                 if (!chart) return;
                 const c = this.colors();
                 const fresh = this.buildData(breakdown, c);
                 chart.data.datasets[0].data = fresh.datasets[0].data;
+                chart.data.datasets[0].backgroundColor = fresh.datasets[0].backgroundColor;
+                chart.data.datasets[0].offset = fresh.datasets[0].offset;
                 chart.update();
             },
 
@@ -820,7 +1002,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                 if (!chart) return;
                 const c = this.colors();
                 chart.options.plugins.legend.labels.color = c.ink;
-                chart.data.datasets[0].backgroundColor = [c.bothPass, c.spfFailOnly, c.dkimFailOnly, c.bothFail];
+                chart.data.datasets[0].backgroundColor = this.sliceColors(c);
                 chart.data.datasets[0].borderColor = c.border;
                 chart.update();
             },

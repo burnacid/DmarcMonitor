@@ -83,6 +83,22 @@ class PublicDashboardAdminTest extends TestCase
         $this->assertSame(90, PublicDashboardSetting::defaultDays());
     }
 
+    public function test_admin_can_choose_what_the_enforced_tile_counts(): void
+    {
+        $admin = User::factory()->create();
+
+        $this->assertSame('reject', PublicDashboardSetting::enforcedPolicy());
+
+        Volt::actingAs($admin)->test('admin.public-dashboard')->call('setEnforcedPolicy', 'both');
+
+        $this->assertSame('both', PublicDashboardSetting::enforcedPolicy());
+        $this->assertDatabaseHas('audit_logs', ['action' => 'public_dashboard.enforced_policy_changed', 'user_id' => $admin->id]);
+
+        Volt::actingAs($admin)->test('admin.public-dashboard')->call('setEnforcedPolicy', 'none');
+
+        $this->assertSame('both', PublicDashboardSetting::enforcedPolicy());
+    }
+
     public function test_admin_can_add_and_remove_addresses(): void
     {
         $admin = User::factory()->create();
