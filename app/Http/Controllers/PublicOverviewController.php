@@ -72,10 +72,14 @@ class PublicOverviewController extends Controller
             withEnvelopes: false,
         );
 
+        $totals = $healthService->rollUp($health->values());
+
         return view('public.overview', [
             'days' => $days,
             'dayRanges' => PublicDashboardSetting::dayRanges(),
-            'totals' => $healthService->rollUp($health->values()),
+            'totals' => $totals,
+            'enforcedPolicy' => PublicDashboardSetting::enforcedPolicy(),
+            'enforcedCount' => PublicDashboardSetting::enforcedCount($totals['policies']),
             'problemGroups' => $groups->filter(fn (array $group) => $group['problem_domains']->isNotEmpty())->values(),
             'healthyGroups' => $groups->filter(fn (array $group) => $group['problem_domains']->isEmpty())->sortBy('name')->values(),
             'alerts' => (clone $openAlerts)->with(['domain.organisation', 'alertRule'])->latest('fired_at')->limit(self::ALERT_LIMIT)->get(),

@@ -109,6 +109,21 @@ new #[Layout('layouts.app')] class extends Component
         );
     }
 
+    public function setEnforcedPolicy(string $policy): void
+    {
+        $setting = PublicDashboardSetting::setEnforcedPolicy($policy);
+
+        if ($setting === null) {
+            return;
+        }
+
+        AuditLogger::record(
+            action: 'public_dashboard.enforced_policy_changed',
+            description: 'Set the Enforced tile of the public dashboard to count '.$policy,
+            subject: $setting,
+        );
+    }
+
     public function with(): array
     {
         $currentIp = request()->ip();
@@ -117,6 +132,12 @@ new #[Layout('layouts.app')] class extends Component
             'isEnabled' => PublicDashboardSetting::isEnabled(),
             'autoScroll' => PublicDashboardSetting::autoScrolls(),
             'defaultDays' => PublicDashboardSetting::defaultDays(),
+            'enforcedPolicy' => PublicDashboardSetting::enforcedPolicy(),
+            'enforcedPolicyOptions' => [
+                'reject' => __('Reject'),
+                'quarantine' => __('Quarantine'),
+                'both' => __('Both'),
+            ],
             'dayRanges' => PublicDashboardSetting::dayRanges(),
             'trustsAnyProxy' => trim((string) config('app.trusted_proxies')) === '*',
             'allowedIps' => DashboardAllowedIp::orderBy('address')->get(),
@@ -166,6 +187,19 @@ new #[Layout('layouts.app')] class extends Component
                         @endforeach
                     </span>
                     <span class="text-xs text-gray-400 dark:text-gray-500">{{ __('Shown when the wallboard address does not pick a range. The ranges are the periods enabled under Dashboard Settings.') }}</span>
+                </p>
+                <p class="flex flex-wrap items-center gap-2">
+                    <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('Enforced tile counts') }}:</span>
+                    <span class="inline-flex rounded-md shadow-sm" role="group">
+                        @foreach ($enforcedPolicyOptions as $value => $label)
+                            <button type="button" wire:click="setEnforcedPolicy('{{ $value }}')" @class([
+                                'px-3 py-1 text-xs font-medium border first:rounded-l-md last:rounded-r-md -ml-px first:ml-0',
+                                'bg-indigo-600 text-white border-indigo-600' => $enforcedPolicy === $value,
+                                'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700' => $enforcedPolicy !== $value,
+                            ])>{{ $label }}</button>
+                        @endforeach
+                    </span>
+                    <span class="text-xs text-gray-400 dark:text-gray-500">{{ __('Which DMARC policies count as enforced on the wallboard: p=reject, p=quarantine, or both.') }}</span>
                 </p>
                 <p>
                     <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('URL') }}:</span>

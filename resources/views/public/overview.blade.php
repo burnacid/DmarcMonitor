@@ -74,7 +74,11 @@
                         ['label' => __('Active domains'), 'value' => number_format($totals['domains']), 'alert' => false],
                         ['label' => __('Need attention'), 'value' => number_format($totals['domains_with_issues']), 'alert' => $totals['domains_with_issues'] > 0],
                         ['label' => __('DMARC pass rate (:days d)', ['days' => $days]), 'value' => $totals['dmarc_pass_pct'] !== null ? $totals['dmarc_pass_pct'].'%' : '—', 'alert' => false],
-                        ['label' => __('Enforced (p=reject)'), 'value' => number_format($totals['policies']['reject'] ?? 0).' / '.number_format($totals['domains']), 'alert' => false],
+                        ['label' => match ($enforcedPolicy) {
+                            'quarantine' => __('Enforced (p=quarantine)'),
+                            'both' => __('Enforced (quarantine or reject)'),
+                            default => __('Enforced (p=reject)'),
+                        }, 'value' => number_format($enforcedCount).' / '.number_format($totals['domains']), 'alert' => false],
                         ['label' => __('Open alerts'), 'value' => number_format($alertCount), 'alert' => $alertCount > 0],
                     ] as $tile)
                         <div class="bg-white dark:bg-gray-800 shadow-sm rounded-lg p-4">

@@ -161,6 +161,22 @@ class PublicOverviewTest extends TestCase
             ->assertViewHas('days', 14);
     }
 
+    public function test_the_enforced_tile_counts_the_configured_policies(): void
+    {
+        DashboardAllowedIp::factory()->create(['address' => '203.0.113.7']);
+        Domain::factory()->create(['dmarc_record' => 'v=DMARC1; p=reject']);
+        Domain::factory()->count(2)->create(['dmarc_record' => 'v=DMARC1; p=quarantine']);
+        Domain::factory()->create(['dmarc_record' => 'v=DMARC1; p=none']);
+
+        $this->getWall()->assertOk()->assertViewHas('enforcedCount', 1)->assertSee('Enforced (p=reject)');
+
+        PublicDashboardSetting::setEnforcedPolicy('quarantine');
+        $this->getWall()->assertOk()->assertViewHas('enforcedCount', 2)->assertSee('Enforced (p=quarantine)');
+
+        PublicDashboardSetting::setEnforcedPolicy('both');
+        $this->getWall()->assertOk()->assertViewHas('enforcedCount', 3)->assertSee('Enforced (quarantine or reject)');
+    }
+
     public function test_a_default_range_that_is_no_longer_offered_falls_back_to_the_closest_one(): void
     {
         PublicDashboardSetting::setDefaultDays(90);
