@@ -2,7 +2,7 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
-## [2.0.0]
+## [Unreleased]
 
 ### Added
 
