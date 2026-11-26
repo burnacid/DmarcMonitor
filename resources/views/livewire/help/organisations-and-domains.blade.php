@@ -25,7 +25,7 @@ new #[Layout('layouts.app')] class extends Component
                     {{ __('An Organisation is a grouping of domains — typically a client or business unit — used to keep reporting, users and settings separated when this app monitors domains for more than one party. Every domain belongs to exactly one organisation, or none ("Unassigned").') }}
                 </p>
                 <p>
-                    {{ __('The Organisations page can be searched by name or notes. The domain count links to that organisation\'s domains, "Add domains" opens bulk add with the organisation already chosen, and "PDF Report" downloads a report for a period (this month, last month, the last 30 or 90 days, a specific month or your own dates) with message volume, DMARC/SPF/DKIM pass rates, why DMARC fails, a daily trend and the top sending sources.') }}
+                    {{ __('The Organisations page can be searched by name or notes. The domain count links to that organisation\'s domains, "Add domains" opens bulk add with the organisation already chosen, and "PDF Report" downloads a report for a period (this month, last month, the last 30 or 90 days, a specific month or your own dates), for all of the organisation\'s domains or just one, with message volume, DMARC/SPF/DKIM pass rates, why DMARC fails, a daily trend and the top sending sources.') }}
                 </p>
             </div>
 

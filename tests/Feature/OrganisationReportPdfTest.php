@@ -81,6 +81,38 @@ class OrganisationReportPdfTest extends TestCase
         // to parse); the underlying data path is covered by DmarcMetricsServiceTest.
     }
 
+    public function test_it_can_cover_a_single_domain_of_the_organisation_only(): void
+    {
+        $user = User::factory()->create();
+        $organisation = Organisation::factory()->create();
+        $domain = Domain::factory()->create(['organisation_id' => $organisation->id, 'fqdn' => 'shop.example.com']);
+        $otherOrganisationsDomain = Domain::factory()->create(['organisation_id' => Organisation::factory()->create()->id]);
+
+        $response = $this->actingAs($user)->get(route('organisations.report-pdf', ['organisation' => $organisation, 'domain' => $domain->id]));
+
+        $response->assertOk();
+        $this->assertStringContainsString('shopexamplecom-dmarc-report-', $response->headers->get('Content-Disposition'));
+
+        $this->actingAs($user)
+            ->get(route('organisations.report-pdf', ['organisation' => $organisation, 'domain' => $otherOrganisationsDomain->id]))
+            ->assertNotFound();
+    }
+
+    public function test_the_report_modal_links_to_the_chosen_domain_and_resets_on_reopen(): void
+    {
+        $organisation = Organisation::factory()->create();
+        $domain = Domain::factory()->create(['organisation_id' => $organisation->id]);
+
+        Volt::actingAs(User::factory()->create())->test('admin.organisations')
+            ->call('openReportModal', $organisation->id)
+            ->assertSee($domain->fqdn)
+            ->set('reportDomainId', (string) $domain->id)
+            ->assertSee('domain='.$domain->id)
+            ->call('openReportModal', $organisation->id)
+            ->assertSet('reportDomainId', '')
+            ->assertDontSee('domain='.$domain->id);
+    }
+
     public function test_opening_the_report_modal_defaults_to_the_last_30_days(): void
     {
         $admin = User::factory()->create();

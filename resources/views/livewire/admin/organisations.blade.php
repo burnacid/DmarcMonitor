@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Domain;
 use App\Models\Organisation;
 use App\Support\AuditLogger;
 use Carbon\Carbon;
@@ -23,6 +24,9 @@ new #[Layout('layouts.app')] class extends Component
     public ?int $reportOrganisationId = null;
 
     public string $reportOrganisationName = '';
+
+    /** Empty for every domain of the organisation, or one domain id. */
+    public string $reportDomainId = '';
 
     public string $reportFrom = '';
 
@@ -104,6 +108,7 @@ new #[Layout('layouts.app')] class extends Component
 
         $this->reportOrganisationId = $id;
         $this->reportOrganisationName = Organisation::findOrFail($id)->name;
+        $this->reportDomainId = '';
         $this->reportMonthInput = '';
         $this->applyReportPreset('last_30');
         $this->dispatch('open-modal', 'organisation-report');
@@ -159,6 +164,7 @@ new #[Layout('layouts.app')] class extends Component
         return [
             'organisations' => $organisations,
             'organisationScoped' => auth()->user()->hasOrganisationScope(),
+            'reportDomains' => $this->reportOrganisationId ? Domain::where('organisation_id', $this->reportOrganisationId)->orderBy('fqdn')->get(['id', 'fqdn']) : collect(),
         ];
     }
 }; ?>
@@ -256,6 +262,16 @@ new #[Layout('layouts.app')] class extends Component
                 {{ __('PDF report for :name', ['name' => $reportOrganisationName]) }}
             </h2>
 
+            <div class="mt-4">
+                <x-input-label for="report_domain" :value="__('Domain')" />
+                <select wire:model.live="reportDomainId" id="report_domain" class="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
+                    <option value="">{{ __('All domains') }}</option>
+                    @foreach ($reportDomains as $reportDomain)
+                        <option value="{{ $reportDomain->id }}">{{ $reportDomain->fqdn }}</option>
+                    @endforeach
+                </select>
+            </div>
+
             <div class="mt-4 flex flex-wrap gap-2">
                 @foreach ([
                     'this_month' => 'This month',
@@ -288,12 +304,12 @@ new #[Layout('layouts.app')] class extends Component
             <div class="mt-6 flex justify-end space-x-3">
                 <x-secondary-button type="button" x-on:click="show = false">{{ __('Cancel') }}</x-secondary-button>
                 <a
-                    href="{{ $reportOrganisationId ? route('organisations.report-pdf', ['organisation' => $reportOrganisationId, 'from' => $reportFrom, 'to' => $reportTo]) : '#' }}"
+                    href="{{ $reportOrganisationId ? route('organisations.report-pdf', ['organisation' => $reportOrganisationId, 'domain' => $reportDomainId ?: null, 'from' => $reportFrom, 'to' => $reportTo]) : '#' }}"
                     target="_blank"
                     class="inline-flex items-center px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-500 rounded-md font-semibold text-xs text-gray-700 dark:text-gray-300 uppercase tracking-widest shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700"
                 >{{ __('Technical PDF') }}</a>
                 <a
-                    href="{{ $reportOrganisationId ? route('organisations.management-report-pdf', ['organisation' => $reportOrganisationId, 'from' => $reportFrom, 'to' => $reportTo]) : '#' }}"
+                    href="{{ $reportOrganisationId ? route('organisations.management-report-pdf', ['organisation' => $reportOrganisationId, 'domain' => $reportDomainId ?: null, 'from' => $reportFrom, 'to' => $reportTo]) : '#' }}"
                     target="_blank"
                     class="inline-flex items-center px-4 py-2 bg-gray-800 dark:bg-gray-200 border border-transparent rounded-md font-semibold text-xs text-white dark:text-gray-800 uppercase tracking-widest hover:bg-gray-700 dark:hover:bg-white"
                 >{{ __('Management PDF') }}</a>

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>{{ $organisation->name }} — DMARC Report</title>
+    <title>{{ $domain?->fqdn ?? $organisation->name }} — DMARC Report</title>
     <style>
         @page { margin: 28px 32px; }
         body { font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #1f2937; }
@@ -50,7 +50,7 @@
             <h1>{{ $organisation->name }}</h1>
             <div class="header-meta">
                 DMARC Report &middot; {{ $from->toDateString() }} to {{ $to->toDateString() }}
-                &middot; {{ $domainCount }} {{ \Illuminate\Support\Str::plural('domain', $domainCount) }}
+                &middot; {{ $domain ? $domain->fqdn : $domainCount.' '.\Illuminate\Support\Str::plural('domain', $domainCount) }}
                 &middot; Generated {{ $generatedAt->format('Y-m-d H:i') }}
             </div>
         </td>

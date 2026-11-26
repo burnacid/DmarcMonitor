@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>{{ $organisation->name }} — Email Security Report</title>
+    <title>{{ $domain?->fqdn ?? $organisation->name }} — Email Security Report</title>
     <style>
         @page { margin: 0; }
         body { margin: 0; font-family: Helvetica, Arial, sans-serif; font-size: 10.5px; color: #111827; line-height: 1.45; }
@@ -105,7 +105,7 @@
                 <div class="eyebrow">{{ __('Email security report') }}</div>
                 <h1>{{ $organisation->name }}</h1>
                 <div class="meta">
-                    {{ $period($from, $to) }} &middot; {{ $domainCount }} {{ \Illuminate\Support\Str::plural('domain', $domainCount) }}
+                    {{ $period($from, $to) }} &middot; {{ $domain ? $domain->fqdn : $domainCount.' '.\Illuminate\Support\Str::plural('domain', $domainCount) }}
                 </div>
             </td>
             @if ($branding['logo'])
