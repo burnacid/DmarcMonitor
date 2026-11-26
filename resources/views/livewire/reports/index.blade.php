@@ -42,6 +42,10 @@ new #[Layout('layouts.app')] class extends Component
     #[Url]
     public string $disposition = '';
 
+    /** Records tab only: leaves out records that match an expected source. */
+    #[Url(as: 'hide_expected')]
+    public bool $hideExpected = false;
+
     /** "reports" lists one row per report, "records" one row per record across reports. */
     #[Url]
     public string $view = 'reports';
@@ -74,7 +78,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function clearFilters(): void
     {
-        $this->reset(['domain_id', 'ip', 'envelope', 'from', 'to', 'search', 'spf_result', 'dkim_result', 'disposition']);
+        $this->reset(['domain_id', 'ip', 'envelope', 'from', 'to', 'search', 'spf_result', 'dkim_result', 'disposition', 'hideExpected']);
     }
 
     /**
@@ -115,6 +119,7 @@ new #[Layout('layouts.app')] class extends Component
             'spf_result' => $this->spf_result,
             'dkim_result' => $this->dkim_result,
             'disposition' => $this->disposition,
+            'hide_expected' => $this->view === 'records' && $this->hideExpected,
         ];
     }
 
@@ -246,7 +251,14 @@ new #[Layout('layouts.app')] class extends Component
                     </select>
                 </div>
 
-                @if ($domain_id || $ip || $envelope || $from || $to || $search || $spf_result || $dkim_result || $disposition)
+                @if ($view === 'records')
+                    <label class="inline-flex items-center gap-2 pb-2 text-sm text-gray-700 dark:text-gray-300" title="{{ __('Leave out records that match a source marked as expected under Settings > Expected Sources.') }}">
+                        <input wire:model.live="hideExpected" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                        {{ __('Hide expected') }}
+                    </label>
+                @endif
+
+                @if ($domain_id || $ip || $envelope || $from || $to || $search || $spf_result || $dkim_result || $disposition || ($view === 'records' && $hideExpected))
                     <x-secondary-button wire:click="clearFilters">{{ __('Clear filters') }}</x-secondary-button>
                 @endif
 

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AggregateReport;
 use App\Models\AggregateReportRecord;
 use App\Models\Domain;
+use App\Models\ExpectedSource;
 use App\Models\Organisation;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -76,6 +77,19 @@ class ReportRecordsViewTest extends TestCase
         $this->assertSame(['203.0.113.1'], $this->listedIps($this->recordsView($user, ['search' => 'cloudflare'])));
         $this->assertSame(['203.0.113.1'], $this->listedIps($this->recordsView($user, ['search' => 'AS13335'])));
         $this->assertSame(['203.0.113.2'], $this->listedIps($this->recordsView($user, ['search' => 'Microsoft'])));
+    }
+
+    public function test_hide_expected_leaves_out_records_of_expected_sources_in_the_list_and_export(): void
+    {
+        $report = $this->report();
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id, 'source_ip' => '203.0.113.1', 'expected_source_id' => ExpectedSource::factory()->create()->id]);
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id, 'source_ip' => '203.0.113.2']);
+
+        $user = User::factory()->create();
+
+        $this->assertEqualsCanonicalizing(['203.0.113.1', '203.0.113.2'], $this->listedIps($this->recordsView($user)));
+        $this->assertSame(['203.0.113.2'], $this->listedIps($this->recordsView($user, ['hide_expected' => '1'])));
+        $this->assertSame(['203.0.113.2'], $this->exportedIps($this->actingAs($user)->get(route('reports.export', ['view' => 'records', 'hide_expected' => 1]))));
     }
 
     public function test_domain_and_date_filters_apply_to_the_records_report(): void

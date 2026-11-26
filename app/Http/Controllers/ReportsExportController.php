@@ -23,7 +23,7 @@ class ReportsExportController extends Controller
         $user = $request->user();
 
         $filters = $request->only([
-            'domain_id', 'ip', 'envelope', 'from', 'to', 'search', 'spf_result', 'dkim_result', 'disposition',
+            'domain_id', 'ip', 'envelope', 'from', 'to', 'search', 'spf_result', 'dkim_result', 'disposition', 'hide_expected',
         ]);
 
         $records = $request->query('view') === 'records'
