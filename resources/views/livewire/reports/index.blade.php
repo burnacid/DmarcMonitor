@@ -2,6 +2,7 @@
 
 use App\Livewire\Concerns\WithSorting;
 use App\Models\AggregateReport;
+use App\Models\AggregateReportRecord;
 use App\Models\Domain;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -41,8 +42,33 @@ new #[Layout('layouts.app')] class extends Component
     #[Url]
     public string $disposition = '';
 
+    /** "reports" lists one row per report, "records" one row per record across reports. */
+    #[Url]
+    public string $view = 'reports';
+
+    public const array VIEWS = ['reports', 'records'];
+
+    public function mount(): void
+    {
+        if (! in_array($this->view, self::VIEWS, true)) {
+            $this->view = 'reports';
+        }
+    }
+
     public function updated(): void
     {
+        $this->resetPage();
+    }
+
+    /**
+     * Switches between the reports and records lists. The filters are kept;
+     * the sort is cleared, since each list sorts on its own columns.
+     */
+    public function selectTab(string $tab): void
+    {
+        $this->view = in_array($tab, self::VIEWS, true) ? $tab : 'reports';
+        $this->reset(['sortBy', 'sortDirection']);
+        unset($this->currentSort);
         $this->resetPage();
     }
 
@@ -56,6 +82,13 @@ new #[Layout('layouts.app')] class extends Component
      */
     protected function sortableColumns(): array
     {
+        if ($this->view === 'records') {
+            return [
+                'date' => 'desc', 'domain' => 'asc', 'org_name' => 'asc', 'source_ip' => 'asc', 'count' => 'desc',
+                'disposition' => 'asc', 'dkim_result' => 'asc', 'spf_result' => 'asc', 'header_from' => 'asc',
+            ];
+        }
+
         return ['domain' => 'asc', 'org_name' => 'asc', 'date' => 'desc', 'records' => 'desc', 'messages' => 'desc'];
     }
 
@@ -98,20 +131,46 @@ new #[Layout('layouts.app')] class extends Component
         };
     }
 
+    private function applyRecordSort(Builder $query): void
+    {
+        ['column' => $column, 'direction' => $direction] = $this->currentSort;
+
+        match ($column) {
+            'domain' => $query->orderBy(DB::table('domains')->select('fqdn')->whereColumn('domains.id', 'aggregate_reports.domain_id'), $direction),
+            'org_name' => $query->orderBy('aggregate_reports.org_name', $direction),
+            'date' => $query->orderBy('aggregate_reports.date_range_begin', $direction),
+            default => $query->orderBy("aggregate_report_records.{$column}", $direction),
+        };
+    }
+
     public function with(): array
     {
-        $reports = AggregateReport::query()
-            ->visibleTo(auth()->user())
-            ->filter($this->filters())
-            ->with('domain')
-            ->withCount('records')
-            ->withSum('records as message_count', 'count')
-            ->tap(fn (Builder $query) => $this->applySort($query))
-            ->orderByDesc('id')
-            ->paginate(15);
+        $records = $this->view === 'records'
+            ? AggregateReportRecord::query()
+                ->filter($this->filters(), auth()->user())
+                ->join('aggregate_reports', 'aggregate_reports.id', '=', 'aggregate_report_records.aggregate_report_id')
+                ->select('aggregate_report_records.*')
+                ->with(['aggregateReport.domain', 'expectedSource'])
+                ->tap(fn (Builder $query) => $this->applyRecordSort($query))
+                ->orderByDesc('aggregate_report_records.id')
+                ->paginate(50)
+            : null;
+
+        $reports = $this->view === 'reports'
+            ? AggregateReport::query()
+                ->visibleTo(auth()->user())
+                ->filter($this->filters())
+                ->with('domain')
+                ->withCount('records')
+                ->withSum('records as message_count', 'count')
+                ->tap(fn (Builder $query) => $this->applySort($query))
+                ->orderByDesc('id')
+                ->paginate(15)
+            : null;
 
         return [
             'reports' => $reports,
+            'records' => $records,
             'domains' => Domain::visibleTo(auth()->user())->orderBy('fqdn')->get(),
         ];
     }
@@ -124,6 +183,8 @@ new #[Layout('layouts.app')] class extends Component
 
     <div class="py-8">
         <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8 space-y-4">
+            <x-tabs :tabs="['reports' => __('Reports'), 'records' => __('Records')]" :active="$view" />
+
             <div class="flex flex-wrap items-end gap-3">
                 <div>
                     <x-input-label for="domain_id" :value="__('Domain')" />
@@ -141,7 +202,7 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
 
                 <div class="flex-1 min-w-[12rem]">
-                    <x-input-label for="search" :value="__('Search (org or report ID)')" />
+                    <x-input-label for="search" :value="$view === 'records' ? __('Search (IP, hostname, ASN, domain or org)') : __('Search (org or report ID)')" />
                     <x-text-input wire:model.live.debounce.400ms="search" id="search" type="text" class="mt-1 block w-full text-sm" />
                 </div>
 
@@ -189,11 +250,12 @@ new #[Layout('layouts.app')] class extends Component
                     <x-secondary-button wire:click="clearFilters">{{ __('Clear filters') }}</x-secondary-button>
                 @endif
 
-                <a href="{{ route('reports.export', $this->filters()) }}" class="inline-flex items-center px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md font-semibold text-xs text-gray-700 dark:text-gray-200 uppercase tracking-widest shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700">
+                <a href="{{ route('reports.export', array_merge($this->filters(), $view === 'records' ? ['view' => 'records'] : [])) }}" class="inline-flex items-center px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md font-semibold text-xs text-gray-700 dark:text-gray-200 uppercase tracking-widest shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700">
                     {{ __('Export CSV') }}
                 </a>
             </div>
 
+            @if ($view === 'reports')
             <div class="bg-white dark:bg-gray-800 overflow-x-auto shadow-sm sm:rounded-lg">
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 max-md:block">
                     <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
@@ -230,6 +292,91 @@ new #[Layout('layouts.app')] class extends Component
             <div>
                 {{ $reports->links() }}
             </div>
+            @else
+                @php
+                    $cell = 'px-6 py-3 text-sm max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:font-sans max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400 max-md:before:shrink-0';
+                    $resultPill = fn (?string $result) => match ($result) {
+                        'pass' => 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200',
+                        'fail' => 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200',
+                        default => '',
+                    };
+                @endphp
+                <div class="bg-white dark:bg-gray-800 overflow-x-auto shadow-sm sm:rounded-lg">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 max-md:block">
+                        <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
+                            <tr>
+                                <x-sortable-th column="date" :sort="$this->currentSort">{{ __('Date range') }}</x-sortable-th>
+                                <x-sortable-th column="domain" :sort="$this->currentSort">{{ __('Domain') }}</x-sortable-th>
+                                <x-sortable-th column="org_name" :sort="$this->currentSort">{{ __('Reporting org') }}</x-sortable-th>
+                                <x-sortable-th column="source_ip" :sort="$this->currentSort">{{ __('Source IP') }}</x-sortable-th>
+                                <x-sortable-th column="count" align="right" :sort="$this->currentSort">{{ __('Count') }}</x-sortable-th>
+                                <x-sortable-th column="disposition" :sort="$this->currentSort">{{ __('Disposition') }}</x-sortable-th>
+                                <x-sortable-th column="dkim_result" :sort="$this->currentSort">{{ __('DKIM') }}</x-sortable-th>
+                                <x-sortable-th column="spf_result" :sort="$this->currentSort">{{ __('SPF') }}</x-sortable-th>
+                                <x-sortable-th column="header_from" :sort="$this->currentSort">{{ __('Header From') }}</x-sortable-th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Envelope From') }}</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Envelope To') }}</th>
+                                <th class="px-6 py-3"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:space-y-3 max-md:p-3">
+                            @forelse ($records as $record)
+                                @php($report = $record->aggregateReport)
+                                <tr wire:key="record-{{ $record->id }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
+                                    <td data-label="{{ __('Date range') }}" class="{{ $cell }} whitespace-nowrap text-gray-500 dark:text-gray-400">{{ $report->date_range_begin->format('Y-m-d') }} &rarr; {{ $report->date_range_end->format('Y-m-d') }}</td>
+                                    <td data-label="{{ __('Domain') }}" class="{{ $cell }} whitespace-nowrap font-medium text-gray-900 dark:text-gray-100">{{ $report->domain?->fqdn }}</td>
+                                    <td data-label="{{ __('Reporting org') }}" class="{{ $cell }} whitespace-nowrap text-gray-500 dark:text-gray-400">{{ $report->org_name }}</td>
+                                    <td data-label="{{ __('Source IP') }}" class="{{ $cell }} whitespace-nowrap font-mono text-gray-900 dark:text-gray-100 max-md:items-start">
+                                        <span class="max-md:text-right">
+                                            <x-country-flag :code="$record->country" /> {{ $record->source_ip }}
+                                            @if ($record->ptr_hostname)
+                                                <div class="font-sans text-xs text-gray-400 dark:text-gray-500">{{ $record->ptr_hostname }}</div>
+                                            @endif
+                                            @if ($record->asn_org)
+                                                <div class="font-sans text-xs text-gray-400 dark:text-gray-500">{{ $record->asn_org }}</div>
+                                            @endif
+                                        </span>
+                                    </td>
+                                    <td data-label="{{ __('Count') }}" class="{{ $cell }} whitespace-nowrap text-right text-gray-500 dark:text-gray-400 tabular-nums max-md:text-left">{{ number_format($record->count) }}</td>
+                                    <td data-label="{{ __('Disposition') }}" class="{{ $cell }} whitespace-nowrap">
+                                        <x-disposition-badge :disposition="$record->disposition" />
+                                    </td>
+                                    <td data-label="{{ __('DKIM') }}" class="{{ $cell }} whitespace-nowrap">
+                                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $resultPill($record->dkim_result) }}">{{ $record->dkim_result }}</span>
+                                    </td>
+                                    <td data-label="{{ __('SPF') }}" class="{{ $cell }} whitespace-nowrap">
+                                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $resultPill($record->spf_result) }}">{{ $record->spf_result }}</span>
+                                    </td>
+                                    <td data-label="{{ __('Header From') }}" class="{{ $cell }} whitespace-nowrap text-gray-500 dark:text-gray-400">{{ $record->header_from ?? '—' }}</td>
+                                    <td data-label="{{ __('Envelope From') }}" class="{{ $cell }} whitespace-nowrap text-gray-500 dark:text-gray-400">
+                                        <span class="max-md:text-right">
+                                            {{ $record->envelope_from ?? '—' }}
+                                            <x-source-badges
+                                                :null-sender="$record->is_null_sender"
+                                                :helo-domains="$record->spf_scope === 'helo' ? [$record->spf_domain] : []"
+                                                :expected-labels="$record->expectedSource ? [$record->expectedSource->label] : []"
+                                                class="ml-1"
+                                            />
+                                        </span>
+                                    </td>
+                                    <td data-label="{{ __('Envelope To') }}" class="{{ $cell }} whitespace-nowrap text-gray-500 dark:text-gray-400">{{ $record->envelope_to ?? '—' }}</td>
+                                    <td class="px-6 py-3 whitespace-nowrap text-right text-sm max-md:block max-md:px-0 max-md:py-0 max-md:pt-1">
+                                        <a href="{{ route('reports.show', ['report' => $report, 'spf_result' => $record->spf_result, 'dkim_result' => $record->dkim_result, 'disposition' => $record->disposition]) }}" wire:navigate class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('View report') }}</a>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="12" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No records match these filters.') }}</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                <div>
+                    {{ $records->links() }}
+                </div>
+            @endif
         </div>
     </div>
 </div>

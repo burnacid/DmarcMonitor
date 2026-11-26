@@ -55,7 +55,7 @@ new #[Layout('layouts.app')] class extends Component
 
     <div class="py-8">
         <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8 space-y-4">
-            <x-settings-tabs :tabs="$tabs" :active="$tab" :badges="$badges" />
+            <x-tabs :tabs="$tabs" :active="$tab" :badges="$badges" />
 
             <livewire:dynamic-component :is="$component" :key="$tab" />
         </div>

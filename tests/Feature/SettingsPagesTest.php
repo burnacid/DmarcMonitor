@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 use Livewire\Volt\Volt;
 use Tests\TestCase;
 
@@ -40,8 +41,8 @@ class SettingsPagesTest extends TestCase
 
     public function test_an_unknown_tab_falls_back_to_the_first_one(): void
     {
-        Volt::actingAs(User::factory()->create())->withQueryParams(['tab' => 'bogus'])->test('admin.settings')->assertSet('tab', 'dashboard');
-        Volt::actingAs(User::factory()->create())->withQueryParams(['tab' => 'bogus'])->test('admin.microsoft365')->assertSet('tab', 'mailboxes');
+        Livewire::withQueryParams(['tab' => 'bogus'])->actingAs(User::factory()->create())->test('admin.settings')->assertSet('tab', 'dashboard');
+        Livewire::withQueryParams(['tab' => 'bogus'])->actingAs(User::factory()->create())->test('admin.microsoft365')->assertSet('tab', 'mailboxes');
     }
 
     public function test_switching_tabs_changes_the_section(): void

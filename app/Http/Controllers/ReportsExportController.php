@@ -15,7 +15,8 @@ class ReportsExportController extends Controller
      * filters match — one row per source IP/record, not per report, since
      * that's the granularity someone reviewing sending sources actually
      * wants. Streamed and chunked so a large export doesn't have to be
-     * held in memory at once.
+     * held in memory at once. From the Records tab (view=records) only
+     * the records that match the filters themselves are exported.
      */
     public function __invoke(Request $request): StreamedResponse
     {
@@ -25,7 +26,13 @@ class ReportsExportController extends Controller
             'domain_id', 'ip', 'envelope', 'from', 'to', 'search', 'spf_result', 'dkim_result', 'disposition',
         ]);
 
-        return response()->streamDownload(function () use ($user, $filters) {
+        $records = $request->query('view') === 'records'
+            ? AggregateReportRecord::query()->filter($filters, $user)
+            : AggregateReportRecord::query()->whereHas('aggregateReport', fn (Builder $query) => $query
+                ->visibleTo($user)
+                ->filter($filters));
+
+        return response()->streamDownload(function () use ($records) {
             $handle = fopen('php://output', 'w');
 
             fputcsv($handle, [
@@ -34,10 +41,7 @@ class ReportsExportController extends Controller
                 'Header From', 'Envelope From', 'Envelope To', 'PTR Hostname', 'ASN Org', 'Country',
             ]);
 
-            AggregateReportRecord::query()
-                ->whereHas('aggregateReport', fn (Builder $query) => $query
-                    ->visibleTo($user)
-                    ->filter($filters))
+            $records
                 ->with('aggregateReport.domain')
                 ->orderBy('aggregate_report_id')
                 ->chunk(500, function ($records) use ($handle) {

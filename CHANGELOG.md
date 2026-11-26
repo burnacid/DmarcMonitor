@@ -6,6 +6,8 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 
 ### Added
 
+- **Records tab on the Reports page**: switch from the list of reports to a list of their individual records, one row per source IP, across all reports you can see. Each row shows the report's period, domain and reporting organisation, the source IP with country, hostname and ASN organisation, the count, disposition, DKIM and SPF results, and the header and envelope addresses. The filters stay when you switch tabs, but in the Records tab they apply to each record. For example, SPF = Fail shows only the failing records, not every record of a report that has one. The search looks through the source IP, hostname, ASN (e.g. `AS13335`) and ASN organisation, the header, envelope, DKIM and SPF domains, and the reporting organisation. Click a column header to sort. "View report" opens the record's report filtered to its results, and Export CSV downloads exactly the listed records.
+
 - Admins can stop the "No recent reports" flag for domains whose DMARC record sends its reports to an address this app monitors, under Settings > Settings > Dashboard > Ignore missing reports for domains reporting here (off by default). Such a domain then shows the remark "Quiet, reports here" instead, on the Domains and Overview pages, and is no longer listed in the management report (PDF) for missing reports. If the record stops pointing here, or `DMARC_RUA_ADDRESS` isn't set, the flag comes back.
 
 ### Changed
