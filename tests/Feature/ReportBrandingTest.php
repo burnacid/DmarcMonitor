@@ -26,8 +26,8 @@ class ReportBrandingTest extends TestCase
 
     public function test_admins_can_reach_the_page_and_editors_cannot(): void
     {
-        $this->actingAs(User::factory()->create())->get(route('admin.report-branding'))->assertOk();
-        $this->actingAs(User::factory()->editor()->create())->get(route('admin.report-branding'))->assertForbidden();
+        $this->actingAs(User::factory()->create())->get(route('admin.settings', ['tab' => 'report-branding']))->assertOk();
+        $this->actingAs(User::factory()->editor()->create())->get(route('admin.settings', ['tab' => 'report-branding']))->assertForbidden();
     }
 
     public function test_admins_can_set_the_accent_colour(): void

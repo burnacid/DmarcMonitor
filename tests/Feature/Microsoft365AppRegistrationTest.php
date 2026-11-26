@@ -71,11 +71,11 @@ class Microsoft365AppRegistrationTest extends TestCase
     public function test_only_admins_can_open_the_page(): void
     {
         $this->actingAs(User::factory()->editor()->create())
-            ->get(route('admin.microsoft365-app'))
+            ->get(route('admin.microsoft365', ['tab' => 'app']))
             ->assertForbidden();
 
         $this->actingAs(User::factory()->create())
-            ->get(route('admin.microsoft365-app'))
+            ->get(route('admin.microsoft365', ['tab' => 'app']))
             ->assertOk()
             ->assertSee(route('admin.microsoft365.callback'));
     }

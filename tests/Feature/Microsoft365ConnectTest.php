@@ -50,7 +50,7 @@ class Microsoft365ConnectTest extends TestCase
 
         $this->actingAs(User::factory()->create())
             ->get(route('admin.microsoft365.connect', 'sending'))
-            ->assertRedirect(route('admin.microsoft365-send-account'))
+            ->assertRedirect(route('admin.microsoft365', ['tab' => 'sending']))
             ->assertSessionHas('microsoft365_connect_error');
     }
 
@@ -66,7 +66,7 @@ class Microsoft365ConnectTest extends TestCase
         $this->actingAs(User::factory()->create())
             ->withSession(['microsoft365_connect' => ['state' => 'expected-state', 'target' => 'sending']])
             ->get(route('admin.microsoft365.callback', ['tenant' => self::TENANT_ID, 'admin_consent' => 'True', 'state' => 'expected-state']))
-            ->assertRedirect(route('admin.microsoft365-send-account'))
+            ->assertRedirect(route('admin.microsoft365', ['tab' => 'sending']))
             ->assertSessionHas('microsoft365_connected_tenant', self::TENANT_ID);
 
         $this->assertTrue(AuditLog::where('action', 'microsoft365.tenant_connected')->exists());
@@ -77,7 +77,7 @@ class Microsoft365ConnectTest extends TestCase
         $this->actingAs(User::factory()->create())
             ->withSession(['microsoft365_connect' => ['state' => 'expected-state', 'target' => 'mailbox']])
             ->get(route('admin.microsoft365.callback', ['tenant' => self::TENANT_ID, 'admin_consent' => 'True', 'state' => 'forged-state']))
-            ->assertRedirect(route('admin.microsoft365-mail-accounts'))
+            ->assertRedirect(route('admin.microsoft365', ['tab' => 'mailboxes']))
             ->assertSessionHas('microsoft365_connect_error')
             ->assertSessionMissing('microsoft365_connected_tenant');
     }
@@ -87,7 +87,7 @@ class Microsoft365ConnectTest extends TestCase
         $this->actingAs(User::factory()->create())
             ->withSession(['microsoft365_connect' => ['state' => 'expected-state', 'target' => 'mailbox']])
             ->get(route('admin.microsoft365.callback', ['error' => 'access_denied', 'error_description' => 'AADSTS65004: User declined to consent.', 'state' => 'expected-state']))
-            ->assertRedirect(route('admin.microsoft365-mail-accounts'))
+            ->assertRedirect(route('admin.microsoft365', ['tab' => 'mailboxes']))
             ->assertSessionHas('microsoft365_connect_error', fn (string $message) => str_contains($message, 'Global Administrator'))
             ->assertSessionMissing('microsoft365_connected_tenant');
     }
@@ -152,7 +152,7 @@ class Microsoft365ConnectTest extends TestCase
         $account = Microsoft365SendAccount::factory()->sharedApp()->create();
 
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('Microsoft 365 App');
+        $this->expectExceptionMessage('Microsoft 365 > App');
 
         $account->graphCredentials();
     }

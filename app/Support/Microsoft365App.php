@@ -8,7 +8,7 @@ use App\Models\Microsoft365AppRegistration;
  * The installation-wide, multi-tenant Microsoft Entra app registration used by
  * "Connect with Microsoft". A tenant admin consents to it once, after which
  * accounts in that tenant authenticate with these credentials instead of an
- * app registration of their own. Managed under Settings > Microsoft 365 App.
+ * app registration of their own. Managed under Settings > Microsoft 365 > App.
  */
 class Microsoft365App
 {

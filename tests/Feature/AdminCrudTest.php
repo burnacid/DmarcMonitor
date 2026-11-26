@@ -35,8 +35,8 @@ class AdminCrudTest extends TestCase
         $admin = User::factory()->create();
 
         $this->actingAs($admin)->get('/admin/imap-accounts')->assertOk();
-        $this->actingAs($admin)->get('/admin/microsoft365-mailboxes')->assertOk();
-        $this->actingAs($admin)->get('/admin/microsoft365-sending')->assertOk();
+        $this->actingAs($admin)->get('/admin/microsoft365?tab=mailboxes')->assertOk();
+        $this->actingAs($admin)->get('/admin/microsoft365?tab=sending')->assertOk();
     }
 
     public function test_authenticated_user_can_create_an_organisation(): void

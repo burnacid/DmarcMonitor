@@ -148,111 +148,105 @@ new #[Layout('layouts.app')] class extends Component
 }; ?>
 
 <div>
-    <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-100 leading-tight">{{ __('Public Dashboard') }}</h2>
-    </x-slot>
+    <div class="space-y-4">
+        <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-3 text-sm text-gray-600 dark:text-gray-300">
+            <p>{{ __('A read-only overview of all organisations, meant for wall screens. While enabled, logged-in users can always open it; without logging in it can only be opened from the IP addresses and ranges listed below. While disabled, nobody can open it.') }}</p>
+            <p class="flex flex-wrap items-center gap-2">
+                <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('Status') }}:</span>
+                @if ($isEnabled)
+                    <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">{{ __('Enabled') }}</span>
+                @else
+                    <span class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-800 dark:text-gray-200">{{ __('Disabled') }}</span>
+                @endif
+                <button type="button" wire:click="toggleEnabled" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ $isEnabled ? __('Disable') : __('Enable') }}</button>
+            </p>
+            <p class="flex flex-wrap items-center gap-2">
+                <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('Auto-scroll organisations') }}:</span>
+                @if ($autoScroll)
+                    <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">{{ __('On') }}</span>
+                @else
+                    <span class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-800 dark:text-gray-200">{{ __('Off') }}</span>
+                @endif
+                <button type="button" wire:click="toggleAutoScroll" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ $autoScroll ? __('Turn off') : __('Turn on') }}</button>
+                <span class="text-xs text-gray-400 dark:text-gray-500">{{ __('Slowly scrolls the organisations panel when it does not fit on the screen.') }}</span>
+            </p>
+            <p class="flex flex-wrap items-center gap-2">
+                <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('Default range') }}:</span>
+                <span class="inline-flex rounded-md shadow-sm" role="group">
+                    @foreach ($dayRanges as $value)
+                        <button type="button" wire:click="setDefaultDays({{ $value }})" @class([
+                            'px-3 py-1 text-xs font-medium border first:rounded-l-md last:rounded-r-md -ml-px first:ml-0',
+                            'bg-indigo-600 text-white border-indigo-600' => $defaultDays === $value,
+                            'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700' => $defaultDays !== $value,
+                        ])>{{ $value }}d</button>
+                    @endforeach
+                </span>
+                <span class="text-xs text-gray-400 dark:text-gray-500">{{ __('Shown when the wallboard address does not pick a range. The ranges are the periods enabled on the Dashboard tab.') }}</span>
+            </p>
+            <p class="flex flex-wrap items-center gap-2">
+                <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('Enforced tile counts') }}:</span>
+                <span class="inline-flex rounded-md shadow-sm" role="group">
+                    @foreach ($enforcedPolicyOptions as $value => $label)
+                        <button type="button" wire:click="setEnforcedPolicy('{{ $value }}')" @class([
+                            'px-3 py-1 text-xs font-medium border first:rounded-l-md last:rounded-r-md -ml-px first:ml-0',
+                            'bg-indigo-600 text-white border-indigo-600' => $enforcedPolicy === $value,
+                            'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700' => $enforcedPolicy !== $value,
+                        ])>{{ $label }}</button>
+                    @endforeach
+                </span>
+                <span class="text-xs text-gray-400 dark:text-gray-500">{{ __('Which DMARC policies count as enforced on the wallboard: p=reject, p=quarantine, or both.') }}</span>
+            </p>
+            <p>
+                <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('URL') }}:</span>
+                <a href="{{ route('public.overview') }}" target="_blank" rel="noopener" class="font-mono text-indigo-600 dark:text-indigo-400 hover:underline break-all">{{ route('public.overview') }}</a>
+            </p>
+            <p class="flex flex-wrap items-center gap-2">
+                <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('Your IP') }}:</span>
+                <span class="font-mono">{{ $currentIp }}</span>
+                @if ($currentIpAllowed)
+                    <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">{{ __('Allowed') }}</span>
+                @elseif ($currentIp)
+                    <button type="button" wire:click="create('{{ $currentIp }}')" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Add my IP') }}</button>
+                @endif
+            </p>
+        </div>
 
-    <div class="py-8">
-        <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8 space-y-4">
-            <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-3 text-sm text-gray-600 dark:text-gray-300">
-                <p>{{ __('A read-only overview of all organisations, meant for wall screens. While enabled, logged-in users can always open it; without logging in it can only be opened from the IP addresses and ranges listed below. While disabled, nobody can open it.') }}</p>
-                <p class="flex flex-wrap items-center gap-2">
-                    <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('Status') }}:</span>
-                    @if ($isEnabled)
-                        <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">{{ __('Enabled') }}</span>
-                    @else
-                        <span class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-800 dark:text-gray-200">{{ __('Disabled') }}</span>
-                    @endif
-                    <button type="button" wire:click="toggleEnabled" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ $isEnabled ? __('Disable') : __('Enable') }}</button>
-                </p>
-                <p class="flex flex-wrap items-center gap-2">
-                    <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('Auto-scroll organisations') }}:</span>
-                    @if ($autoScroll)
-                        <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">{{ __('On') }}</span>
-                    @else
-                        <span class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-800 dark:text-gray-200">{{ __('Off') }}</span>
-                    @endif
-                    <button type="button" wire:click="toggleAutoScroll" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ $autoScroll ? __('Turn off') : __('Turn on') }}</button>
-                    <span class="text-xs text-gray-400 dark:text-gray-500">{{ __('Slowly scrolls the organisations panel when it does not fit on the screen.') }}</span>
-                </p>
-                <p class="flex flex-wrap items-center gap-2">
-                    <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('Default range') }}:</span>
-                    <span class="inline-flex rounded-md shadow-sm" role="group">
-                        @foreach ($dayRanges as $value)
-                            <button type="button" wire:click="setDefaultDays({{ $value }})" @class([
-                                'px-3 py-1 text-xs font-medium border first:rounded-l-md last:rounded-r-md -ml-px first:ml-0',
-                                'bg-indigo-600 text-white border-indigo-600' => $defaultDays === $value,
-                                'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700' => $defaultDays !== $value,
-                            ])>{{ $value }}d</button>
-                        @endforeach
-                    </span>
-                    <span class="text-xs text-gray-400 dark:text-gray-500">{{ __('Shown when the wallboard address does not pick a range. The ranges are the periods enabled under Dashboard Settings.') }}</span>
-                </p>
-                <p class="flex flex-wrap items-center gap-2">
-                    <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('Enforced tile counts') }}:</span>
-                    <span class="inline-flex rounded-md shadow-sm" role="group">
-                        @foreach ($enforcedPolicyOptions as $value => $label)
-                            <button type="button" wire:click="setEnforcedPolicy('{{ $value }}')" @class([
-                                'px-3 py-1 text-xs font-medium border first:rounded-l-md last:rounded-r-md -ml-px first:ml-0',
-                                'bg-indigo-600 text-white border-indigo-600' => $enforcedPolicy === $value,
-                                'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700' => $enforcedPolicy !== $value,
-                            ])>{{ $label }}</button>
-                        @endforeach
-                    </span>
-                    <span class="text-xs text-gray-400 dark:text-gray-500">{{ __('Which DMARC policies count as enforced on the wallboard: p=reject, p=quarantine, or both.') }}</span>
-                </p>
-                <p>
-                    <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('URL') }}:</span>
-                    <a href="{{ route('public.overview') }}" target="_blank" rel="noopener" class="font-mono text-indigo-600 dark:text-indigo-400 hover:underline break-all">{{ route('public.overview') }}</a>
-                </p>
-                <p class="flex flex-wrap items-center gap-2">
-                    <span class="font-medium text-gray-900 dark:text-gray-100">{{ __('Your IP') }}:</span>
-                    <span class="font-mono">{{ $currentIp }}</span>
-                    @if ($currentIpAllowed)
-                        <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">{{ __('Allowed') }}</span>
-                    @elseif ($currentIp)
-                        <button type="button" wire:click="create('{{ $currentIp }}')" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Add my IP') }}</button>
-                    @endif
-                </p>
+        @if ($trustsAnyProxy && $allowedIps->isNotEmpty())
+            <div class="rounded-md bg-amber-50 dark:bg-amber-950 p-4 text-sm text-amber-800 dark:text-amber-200">
+                {{ __('TRUSTED_PROXIES is set to "*", so the X-Forwarded-For header of every request is believed. Anyone who can reach the app without going through your reverse proxy can pretend to come from an allowed address. Set TRUSTED_PROXIES to the address of your proxy (or the Docker network range) instead.') }}
             </div>
+        @endif
 
-            @if ($trustsAnyProxy && $allowedIps->isNotEmpty())
-                <div class="rounded-md bg-amber-50 dark:bg-amber-950 p-4 text-sm text-amber-800 dark:text-amber-200">
-                    {{ __('TRUSTED_PROXIES is set to "*", so the X-Forwarded-For header of every request is believed. Anyone who can reach the app without going through your reverse proxy can pretend to come from an allowed address. Set TRUSTED_PROXIES to the address of your proxy (or the Docker network range) instead.') }}
-                </div>
-            @endif
+        <div class="flex justify-end">
+            <x-primary-button wire:click="create">{{ __('Add address') }}</x-primary-button>
+        </div>
 
-            <div class="flex justify-end">
-                <x-primary-button wire:click="create">{{ __('Add address') }}</x-primary-button>
-            </div>
-
-            <div class="bg-white dark:bg-gray-800 overflow-x-auto shadow-sm sm:rounded-lg">
-                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead class="bg-gray-50 dark:bg-gray-700">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Address / range') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Description') }}</th>
-                            <th class="px-6 py-3"></th>
+        <div class="bg-white dark:bg-gray-800 overflow-x-auto shadow-sm sm:rounded-lg">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Address / range') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Description') }}</th>
+                        <th class="px-6 py-3"></th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    @forelse ($allowedIps as $allowedIp)
+                        <tr wire:key="allowed-ip-{{ $allowedIp->id }}">
+                            <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-900 dark:text-gray-100">{{ $allowedIp->address }}</td>
+                            <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ $allowedIp->description }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm space-x-3">
+                                <button wire:click="edit({{ $allowedIp->id }})" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Edit') }}</button>
+                                <button wire:click="delete({{ $allowedIp->id }})" wire:confirm="{{ __('Remove this address?') }}" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">{{ __('Delete') }}</button>
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                        @forelse ($allowedIps as $allowedIp)
-                            <tr wire:key="allowed-ip-{{ $allowedIp->id }}">
-                                <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-900 dark:text-gray-100">{{ $allowedIp->address }}</td>
-                                <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ $allowedIp->description }}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-right text-sm space-x-3">
-                                    <button wire:click="edit({{ $allowedIp->id }})" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Edit') }}</button>
-                                    <button wire:click="delete({{ $allowedIp->id }})" wire:confirm="{{ __('Remove this address?') }}" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">{{ __('Delete') }}</button>
-                                </td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="3" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No addresses yet — only logged-in users can open the wallboard.') }}</td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
+                    @empty
+                        <tr>
+                            <td colspan="3" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No addresses yet — only logged-in users can open the wallboard.') }}</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
         </div>
     </div>
 

@@ -103,7 +103,7 @@ new class extends Component
                 </a>
 
                 @php
-                    $settingsActive = request()->routeIs(['admin.organisations', 'admin.domains', 'admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.microsoft365-app', 'admin.geoip', 'admin.alert-rules', 'admin.expected-sources', 'admin.users', 'admin.scheduled-tasks', 'admin.audit-log', 'admin.report-branding', 'admin.dashboard-settings', 'admin.public-dashboard']);
+                    $settingsActive = request()->routeIs(['admin.organisations', 'admin.domains', 'admin.imap-accounts', 'admin.microsoft365', 'admin.geoip', 'admin.alert-rules', 'admin.expected-sources', 'admin.users', 'admin.scheduled-tasks', 'admin.audit-log', 'admin.settings']);
                 @endphp
                 @if (auth()->user()->canManage() || auth()->user()->isAdmin())
                     <x-dropdown align="right" width="48">
@@ -160,29 +160,17 @@ new class extends Component
                                         <span class="ml-1.5 inline-flex items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-medium leading-none text-white">{{ $failingImapCount }}</span>
                                     @endif
                                 </x-dropdown-link>
-                                <x-dropdown-link :href="route('admin.microsoft365-mail-accounts')" wire:navigate>
-                                    {{ __('Microsoft 365 Mailboxes') }}
+                                <x-dropdown-link :href="route('admin.microsoft365')" wire:navigate>
+                                    {{ __('Microsoft 365') }}
                                     @if ($failingMicrosoft365Count > 0)
                                         <span class="ml-1.5 inline-flex items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-medium leading-none text-white">{{ $failingMicrosoft365Count }}</span>
                                     @endif
                                 </x-dropdown-link>
-                                <x-dropdown-link :href="route('admin.microsoft365-send-account')" wire:navigate>
-                                    {{ __('Microsoft 365 Sending Account') }}
-                                </x-dropdown-link>
-                                <x-dropdown-link :href="route('admin.microsoft365-app')" wire:navigate>
-                                    {{ __('Microsoft 365 App') }}
-                                </x-dropdown-link>
 
                                 <div class="my-1 border-t border-gray-200 dark:border-gray-600"></div>
 
-                                <x-dropdown-link :href="route('admin.report-branding')" wire:navigate>
-                                    {{ __('Report Branding') }}
-                                </x-dropdown-link>
-                                <x-dropdown-link :href="route('admin.dashboard-settings')" wire:navigate>
-                                    {{ __('Dashboard Settings') }}
-                                </x-dropdown-link>
-                                <x-dropdown-link :href="route('admin.public-dashboard')" wire:navigate>
-                                    {{ __('Public Dashboard') }}
+                                <x-dropdown-link :href="route('admin.settings')" wire:navigate>
+                                    {{ __('Settings') }}
                                 </x-dropdown-link>
                                 <x-dropdown-link :href="route('admin.scheduled-tasks')" wire:navigate>
                                     {{ __('Scheduled Tasks') }}
@@ -299,7 +287,7 @@ new class extends Component
                 {{ __('Help') }}
             </x-responsive-nav-link>
             @php
-                $settingsActive = request()->routeIs(['admin.imap-accounts', 'admin.microsoft365-mail-accounts', 'admin.microsoft365-send-account', 'admin.microsoft365-app', 'admin.geoip', 'admin.alert-rules', 'admin.expected-sources', 'admin.users', 'admin.report-branding', 'admin.dashboard-settings', 'admin.public-dashboard']);
+                $settingsActive = request()->routeIs(['admin.imap-accounts', 'admin.microsoft365', 'admin.geoip', 'admin.alert-rules', 'admin.expected-sources', 'admin.users', 'admin.settings']);
             @endphp
             @if (auth()->user()->canManage() || auth()->user()->isAdmin())
                 <div x-data="{ settingsOpen: {{ $settingsActive ? 'true' : 'false' }} }">
@@ -351,29 +339,17 @@ new class extends Component
                                     <span class="ml-1.5 inline-flex items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-medium leading-none text-white">{{ $failingImapCount }}</span>
                                 @endif
                             </x-responsive-nav-link>
-                            <x-responsive-nav-link :href="route('admin.microsoft365-mail-accounts')" :active="request()->routeIs('admin.microsoft365-mail-accounts')" wire:navigate class="ps-6">
-                                {{ __('Microsoft 365 Mailboxes') }}
+                            <x-responsive-nav-link :href="route('admin.microsoft365')" :active="request()->routeIs('admin.microsoft365')" wire:navigate class="ps-6">
+                                {{ __('Microsoft 365') }}
                                 @if ($failingMicrosoft365Count > 0)
                                     <span class="ml-1.5 inline-flex items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-medium leading-none text-white">{{ $failingMicrosoft365Count }}</span>
                                 @endif
                             </x-responsive-nav-link>
-                            <x-responsive-nav-link :href="route('admin.microsoft365-send-account')" :active="request()->routeIs('admin.microsoft365-send-account')" wire:navigate class="ps-6">
-                                {{ __('Microsoft 365 Sending Account') }}
-                            </x-responsive-nav-link>
-                            <x-responsive-nav-link :href="route('admin.microsoft365-app')" :active="request()->routeIs('admin.microsoft365-app')" wire:navigate class="ps-6">
-                                {{ __('Microsoft 365 App') }}
-                            </x-responsive-nav-link>
 
                             <div class="my-1 border-t border-gray-200 dark:border-gray-700"></div>
 
-                            <x-responsive-nav-link :href="route('admin.report-branding')" :active="request()->routeIs('admin.report-branding')" wire:navigate class="ps-6">
-                                {{ __('Report Branding') }}
-                            </x-responsive-nav-link>
-                            <x-responsive-nav-link :href="route('admin.dashboard-settings')" :active="request()->routeIs('admin.dashboard-settings')" wire:navigate class="ps-6">
-                                {{ __('Dashboard Settings') }}
-                            </x-responsive-nav-link>
-                            <x-responsive-nav-link :href="route('admin.public-dashboard')" :active="request()->routeIs('admin.public-dashboard')" wire:navigate class="ps-6">
-                                {{ __('Public Dashboard') }}
+                            <x-responsive-nav-link :href="route('admin.settings')" :active="request()->routeIs('admin.settings')" wire:navigate class="ps-6">
+                                {{ __('Settings') }}
                             </x-responsive-nav-link>
                             <x-responsive-nav-link :href="route('admin.users')" :active="request()->routeIs('admin.users')" wire:navigate class="ps-6">
                                 {{ __('Users') }}

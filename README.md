@@ -201,7 +201,7 @@ There is no `.env` file in the image: every setting is a container environment v
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `MAIL_MAILER` | `log` | `log`, `smtp`, `sendmail`, ... or `microsoft365` to send via Microsoft Graph using the account set under Settings > Microsoft 365 Sending Account. |
+| `MAIL_MAILER` | `log` | `log`, `smtp`, `sendmail`, ... or `microsoft365` to send via Microsoft Graph using the account set under Settings > Microsoft 365 > Sending Account. |
 | `MAIL_HOST` | `127.0.0.1` | SMTP server (for `smtp`). |
 | `MAIL_PORT` | `2525` | SMTP port. |
 | `MAIL_USERNAME` | unset | SMTP user. |

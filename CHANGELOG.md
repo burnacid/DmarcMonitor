@@ -2,6 +2,16 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
+## [Unreleased]
+
+### Added
+
+- Admins can stop the "No recent reports" flag for domains whose DMARC record sends its reports to an address this app monitors, under Settings > Settings > Dashboard > Ignore missing reports for domains reporting here (off by default). Such a domain then shows the remark "Quiet, reports here" instead, on the Domains and Overview pages, and is no longer listed in the management report (PDF) for missing reports. If the record stops pointing here, or `DMARC_RUA_ADDRESS` isn't set, the flag comes back.
+
+### Changed
+
+- **Shorter settings menu**: Dashboard Settings, Public Dashboard and Report Branding are now tabs of one Settings page. The Microsoft 365 Mailboxes, Sending Account and App pages are now tabs of one Microsoft 365 page, which keeps the failing-mailbox count. The old addresses redirect to the matching tab, so bookmarks keep working. "Connect with Microsoft" returns to the tab it was started from. The callback address registered in Microsoft Entra doesn't change.
+
 ## [1.8.0]
 
 ### Added

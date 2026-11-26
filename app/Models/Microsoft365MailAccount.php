@@ -48,7 +48,7 @@ class Microsoft365MailAccount extends Model
 
     public function settingsUrl(): string
     {
-        return route('admin.microsoft365-mail-accounts');
+        return route('admin.microsoft365', ['tab' => 'mailboxes']);
     }
 
     public function scopeVisibleTo(Builder $query, User $user): Builder

@@ -15,9 +15,9 @@ class PublicDashboardAdminTest extends TestCase
 
     public function test_only_admins_can_open_the_page(): void
     {
-        $this->actingAs(User::factory()->editor()->create())->get(route('admin.public-dashboard'))->assertForbidden();
-        $this->actingAs(User::factory()->viewer()->create())->get(route('admin.public-dashboard'))->assertForbidden();
-        $this->actingAs(User::factory()->create())->get(route('admin.public-dashboard'))->assertOk();
+        $this->actingAs(User::factory()->editor()->create())->get(route('admin.settings', ['tab' => 'public-dashboard']))->assertForbidden();
+        $this->actingAs(User::factory()->viewer()->create())->get(route('admin.settings', ['tab' => 'public-dashboard']))->assertForbidden();
+        $this->actingAs(User::factory()->create())->get(route('admin.settings', ['tab' => 'public-dashboard']))->assertOk();
     }
 
     public function test_it_warns_when_any_proxy_is_trusted_while_an_allowlist_is_in_use(): void

@@ -9,7 +9,7 @@ use Symfony\Component\HttpFoundation\IpUtils;
 
 /**
  * An IP address or CIDR range allowed to open the public (unauthenticated)
- * overview, e.g. a wall screen. Managed under Settings > Public Dashboard.
+ * overview, e.g. a wall screen. Managed under Settings > Settings > Public Dashboard.
  */
 class DashboardAllowedIp extends Model
 {
