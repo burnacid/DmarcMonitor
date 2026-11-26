@@ -12,7 +12,7 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 
 ### Changed
 
-- **Tidier filters on the Reports page**: the search box now sits on top, next to Filters, Columns and Export CSV. "Filters" opens a panel with the domain, period, envelope, SPF, DKIM and disposition filters, and shows how many filters are in use. Filters in use are listed as chips under the search box, even while the panel is closed. The × on a chip removes that one filter, and "Clear filters" removes all of them.
+- **Tidier filters on the Reports page**: the search box now sits on top, next to Filters, Columns and Export CSV. "Filters" opens a panel with the organisation, domain, period, envelope, SPF, DKIM and disposition filters, and shows how many filters are in use. Filters in use are listed as chips under the search box, even while the panel is closed. The × on a chip removes that one filter, and "Clear filters" removes all of them. The organisation filter is new on this page: as on the dashboard, it narrows the domain list to that organisation's domains, and it also applies to the CSV export.
 - **Shorter settings menu**: Dashboard Settings, Public Dashboard and Report Branding are now tabs of one Settings page. The Microsoft 365 Mailboxes, Sending Account and App pages are now tabs of one Microsoft 365 page, which keeps the failing-mailbox count. The old addresses redirect to the matching tab, so bookmarks keep working. "Connect with Microsoft" returns to the tab it was started from. The callback address registered in Microsoft Entra doesn't change.
 
 ## [1.8.0]

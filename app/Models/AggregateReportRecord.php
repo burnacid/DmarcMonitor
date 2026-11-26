@@ -47,7 +47,7 @@ class AggregateReportRecord extends Model
      */
     public function scopeFilter(Builder $query, array $filters, User $user): Builder
     {
-        $reportFilters = array_intersect_key($filters, array_flip(['domain_id', 'from', 'to']));
+        $reportFilters = array_intersect_key($filters, array_flip(['organisation_id', 'domain_id', 'from', 'to']));
 
         return $query
             ->whereIn('aggregate_report_records.aggregate_report_id', AggregateReport::query()->visibleTo($user)->filter($reportFilters)->select('aggregate_reports.id'))

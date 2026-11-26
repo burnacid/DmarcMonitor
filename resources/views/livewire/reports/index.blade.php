@@ -4,6 +4,7 @@ use App\Livewire\Concerns\WithSorting;
 use App\Models\AggregateReport;
 use App\Models\AggregateReportRecord;
 use App\Models\Domain;
+use App\Models\Organisation;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -19,6 +20,9 @@ new #[Layout('layouts.app')] class extends Component
 
     #[Url]
     public ?int $domain_id = null;
+
+    #[Url(as: 'organisation')]
+    public ?int $organisation_id = null;
 
     #[Url]
     public string $ip = '';
@@ -64,6 +68,26 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         $this->visibleColumns = auth()->user()->reportRecordColumns();
+
+        if ($this->organisation_id !== null && ! auth()->user()->canAccessOrganisation($this->organisation_id)) {
+            $this->organisation_id = null;
+        }
+    }
+
+    /**
+     * Drops a domain selection that doesn't belong to the newly chosen
+     * organisation, as the dashboard does.
+     */
+    public function updatedOrganisationId(): void
+    {
+        if ($this->organisation_id !== null && ! auth()->user()->canAccessOrganisation($this->organisation_id)) {
+            $this->organisation_id = null;
+        }
+
+        if ($this->domain_id !== null && $this->organisation_id !== null
+            && Domain::find($this->domain_id)?->organisation_id !== $this->organisation_id) {
+            $this->domain_id = null;
+        }
     }
 
     /**
@@ -124,6 +148,7 @@ new #[Layout('layouts.app')] class extends Component
         $resultLabels = ['pass' => __('Pass'), 'fail' => __('Fail'), 'none' => __('None'), 'quarantine' => __('Quarantine'), 'reject' => __('Reject')];
 
         return array_filter([
+            'organisation_id' => $this->organisation_id ? __('Organisation: :value', ['value' => Organisation::find($this->organisation_id)?->name ?? $this->organisation_id]) : null,
             'domain_id' => $this->domain_id ? __('Domain: :value', ['value' => $domains->firstWhere('id', $this->domain_id)?->fqdn ?? $this->domain_id]) : null,
             'from' => $this->from ? __('From :date', ['date' => $this->from]) : null,
             'to' => $this->to ? __('To :date', ['date' => $this->to]) : null,
@@ -141,7 +166,7 @@ new #[Layout('layouts.app')] class extends Component
      */
     public function removeFilter(string $filter): void
     {
-        if (in_array($filter, ['domain_id', 'from', 'to', 'ip', 'envelope', 'spf_result', 'dkim_result', 'disposition', 'hideExpected'], true)) {
+        if (in_array($filter, ['organisation_id', 'domain_id', 'from', 'to', 'ip', 'envelope', 'spf_result', 'dkim_result', 'disposition', 'hideExpected'], true)) {
             $this->reset($filter);
             $this->resetPage();
         }
@@ -149,7 +174,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function clearFilters(): void
     {
-        $this->reset(['domain_id', 'ip', 'envelope', 'from', 'to', 'search', 'spf_result', 'dkim_result', 'disposition', 'hideExpected']);
+        $this->reset(['organisation_id', 'domain_id', 'ip', 'envelope', 'from', 'to', 'search', 'spf_result', 'dkim_result', 'disposition', 'hideExpected']);
     }
 
     /**
@@ -178,6 +203,7 @@ new #[Layout('layouts.app')] class extends Component
     public function filters(): array
     {
         return [
+            'organisation_id' => $this->organisation_id,
             'domain_id' => $this->domain_id,
             'ip' => $this->ip,
             'envelope' => $this->envelope,
@@ -241,9 +267,13 @@ new #[Layout('layouts.app')] class extends Component
                 ->paginate(15)
             : null;
 
-        $domains = Domain::visibleTo(auth()->user())->orderBy('fqdn')->get();
+        $domains = Domain::visibleTo(auth()->user())
+            ->when($this->organisation_id, fn (Builder $query, int $organisationId) => $query->where('organisation_id', $organisationId))
+            ->orderBy('fqdn')
+            ->get();
 
         return [
+            'organisations' => Organisation::visibleTo(auth()->user())->orderBy('name')->get(),
             'reports' => $reports,
             'records' => $records,
             'domains' => $domains,
@@ -324,10 +354,15 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
 
                 <div id="report-filters" x-show="filtersOpen" x-transition.opacity style="display: none;" class="border-t border-gray-200 dark:border-gray-700 p-4">
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div>
+                            <x-input-label for="organisation_id" :value="__('Organisation')" />
+                            <x-searchable-select wire:model.live="organisation_id" id="organisation_id" :options="$organisations->pluck('name', 'id')" :placeholder="__('All organisations')" class="mt-1 w-full" />
+                        </div>
+
                         <div>
                             <x-input-label for="domain_id" :value="__('Domain')" />
-                            <x-searchable-select wire:model.live="domain_id" id="domain_id" :options="$domains->pluck('fqdn', 'id')" :placeholder="__('All domains')" class="mt-1 w-full" />
+                            <x-searchable-select wire:model.live="domain_id" id="domain_id" wire:key="domain-filter-{{ $organisation_id ?? 'all' }}" :options="$domains->pluck('fqdn', 'id')" :placeholder="__('All domains')" class="mt-1 w-full" />
                         </div>
 
                         <div>

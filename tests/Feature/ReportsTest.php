@@ -5,9 +5,11 @@ namespace Tests\Feature;
 use App\Models\AggregateReport;
 use App\Models\AggregateReportRecord;
 use App\Models\Domain;
+use App\Models\Organisation;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
 use Livewire\Volt\Volt;
 use Tests\TestCase;
 
@@ -30,6 +32,52 @@ class ReportsTest extends TestCase
             ->assertSet('domain_id', $domain->id)
             ->call('removeFilter', 'search')
             ->assertViewHas('activeFilters', ['domain_id' => 'Domain: chips.example']);
+    }
+
+    public function test_reports_and_records_filter_by_organisation(): void
+    {
+        $acme = Organisation::factory()->create(['name' => 'Acme']);
+        $acmeReport = AggregateReport::factory()->create(['domain_id' => Domain::factory()->create(['organisation_id' => $acme->id])->id]);
+        $otherReport = AggregateReport::factory()->create(['domain_id' => Domain::factory()->create(['organisation_id' => Organisation::factory()->create()->id])->id]);
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $acmeReport->id, 'source_ip' => '203.0.113.1']);
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $otherReport->id, 'source_ip' => '203.0.113.2']);
+        $user = User::factory()->create();
+
+        Volt::actingAs($user)->test('reports.index')
+            ->set('organisation_id', $acme->id)
+            ->assertViewHas('reports', fn ($reports) => $reports->pluck('id')->all() === [$acmeReport->id])
+            ->assertViewHas('activeFilters', ['organisation_id' => 'Organisation: Acme'])
+            ->call('selectTab', 'records')
+            ->assertViewHas('records', fn ($records) => $records->pluck('source_ip')->all() === ['203.0.113.1']);
+
+        $export = $this->actingAs($user)->get(route('reports.export', ['view' => 'records', 'organisation_id' => $acme->id]))->streamedContent();
+        $this->assertStringContainsString('203.0.113.1', $export);
+        $this->assertStringNotContainsString('203.0.113.2', $export);
+    }
+
+    public function test_choosing_an_organisation_drops_a_domain_from_another_one(): void
+    {
+        $acme = Organisation::factory()->create();
+        $ownDomain = Domain::factory()->create(['organisation_id' => $acme->id]);
+        $otherDomain = Domain::factory()->create(['organisation_id' => Organisation::factory()->create()->id]);
+
+        Volt::actingAs(User::factory()->create())->test('reports.index')
+            ->set('domain_id', $otherDomain->id)
+            ->set('organisation_id', $acme->id)
+            ->assertSet('domain_id', null)
+            ->assertViewHas('domains', fn ($domains) => $domains->pluck('id')->all() === [$ownDomain->id]);
+    }
+
+    public function test_an_organisation_the_user_cannot_see_is_ignored(): void
+    {
+        $own = Organisation::factory()->create();
+        $foreign = Organisation::factory()->create();
+
+        Livewire::withQueryParams(['organisation' => $foreign->id])
+            ->actingAs(User::factory()->scopedTo($own)->create())
+            ->test('reports.index')
+            ->assertSet('organisation_id', null)
+            ->assertViewHas('organisations', fn ($organisations) => $organisations->pluck('id')->all() === [$own->id]);
     }
 
     public function test_guests_are_redirected_from_reports_pages(): void
