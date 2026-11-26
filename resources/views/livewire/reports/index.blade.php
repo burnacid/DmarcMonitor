@@ -4,6 +4,7 @@ use App\Livewire\Concerns\WithSorting;
 use App\Models\AggregateReport;
 use App\Models\AggregateReportRecord;
 use App\Models\Domain;
+use App\Models\ExpectedSource;
 use App\Models\Organisation;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -23,6 +24,10 @@ new #[Layout('layouts.app')] class extends Component
 
     #[Url(as: 'organisation')]
     public ?int $organisation_id = null;
+
+    /** Only records matched by this expected source, e.g. from its "Messages matched" link. */
+    #[Url(as: 'expected_source')]
+    public ?int $expected_source_id = null;
 
     #[Url]
     public string $ip = '';
@@ -157,6 +162,7 @@ new #[Layout('layouts.app')] class extends Component
             'spf_result' => $this->spf_result ? __('SPF: :value', ['value' => $resultLabels[$this->spf_result] ?? $this->spf_result]) : null,
             'dkim_result' => $this->dkim_result ? __('DKIM: :value', ['value' => $resultLabels[$this->dkim_result] ?? $this->dkim_result]) : null,
             'disposition' => $this->disposition ? __('Disposition: :value', ['value' => $resultLabels[$this->disposition] ?? $this->disposition]) : null,
+            'expected_source_id' => $this->expected_source_id ? __('Expected source: :value', ['value' => ExpectedSource::query()->visibleTo(auth()->user())->find($this->expected_source_id)?->label ?? $this->expected_source_id]) : null,
             'hideExpected' => $this->view === 'records' && $this->hideExpected ? __('Expected hidden') : null,
         ]);
     }
@@ -166,7 +172,7 @@ new #[Layout('layouts.app')] class extends Component
      */
     public function removeFilter(string $filter): void
     {
-        if (in_array($filter, ['organisation_id', 'domain_id', 'from', 'to', 'ip', 'envelope', 'spf_result', 'dkim_result', 'disposition', 'hideExpected'], true)) {
+        if (in_array($filter, ['organisation_id', 'domain_id', 'from', 'to', 'ip', 'envelope', 'spf_result', 'dkim_result', 'disposition', 'expected_source_id', 'hideExpected'], true)) {
             $this->reset($filter);
             $this->resetPage();
         }
@@ -174,7 +180,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function clearFilters(): void
     {
-        $this->reset(['organisation_id', 'domain_id', 'ip', 'envelope', 'from', 'to', 'search', 'spf_result', 'dkim_result', 'disposition', 'hideExpected']);
+        $this->reset(['organisation_id', 'domain_id', 'ip', 'envelope', 'from', 'to', 'search', 'spf_result', 'dkim_result', 'disposition', 'expected_source_id', 'hideExpected']);
     }
 
     /**
@@ -213,6 +219,7 @@ new #[Layout('layouts.app')] class extends Component
             'spf_result' => $this->spf_result,
             'dkim_result' => $this->dkim_result,
             'disposition' => $this->disposition,
+            'expected_source_id' => $this->expected_source_id,
             'hide_expected' => $this->view === 'records' && $this->hideExpected,
         ];
     }

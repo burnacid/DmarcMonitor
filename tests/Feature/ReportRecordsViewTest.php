@@ -92,6 +92,32 @@ class ReportRecordsViewTest extends TestCase
         $this->assertSame(['203.0.113.2'], $this->exportedIps($this->actingAs($user)->get(route('reports.export', ['view' => 'records', 'hide_expected' => 1]))));
     }
 
+    public function test_the_expected_source_filter_shows_only_the_records_it_matched(): void
+    {
+        $source = ExpectedSource::factory()->create(['label' => 'INKY']);
+        $report = $this->report();
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id, 'source_ip' => '203.0.113.1', 'expected_source_id' => $source->id]);
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id, 'source_ip' => '203.0.113.2', 'expected_source_id' => ExpectedSource::factory()->create()->id]);
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $report->id, 'source_ip' => '203.0.113.3']);
+        $user = User::factory()->create();
+
+        $component = $this->recordsView($user, ['expected_source' => $source->id]);
+
+        $this->assertSame(['203.0.113.1'], $this->listedIps($component));
+        $component->assertViewHas('activeFilters', ['expected_source_id' => 'Expected source: INKY']);
+        $this->assertSame(['203.0.113.1'], $this->exportedIps($this->actingAs($user)->get(route('reports.export', ['view' => 'records', 'expected_source_id' => $source->id]))));
+    }
+
+    public function test_the_expected_sources_page_links_its_match_count_to_the_records(): void
+    {
+        $source = ExpectedSource::factory()->create();
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $this->report()->id, 'expected_source_id' => $source->id, 'count' => 7]);
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('admin.expected-sources'))
+            ->assertSee(route('reports.index', ['view' => 'records', 'expected_source' => $source->id]));
+    }
+
     public function test_domain_and_date_filters_apply_to_the_records_report(): void
     {
         $recent = $this->report(['date_range_begin' => now()->subDays(2), 'date_range_end' => now()->subDay()]);

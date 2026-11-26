@@ -62,6 +62,7 @@ class AggregateReportRecord extends Model
             ->when($filters['spf_result'] ?? null, fn (Builder $q, $v) => $q->where('aggregate_report_records.spf_result', $v))
             ->when($filters['dkim_result'] ?? null, fn (Builder $q, $v) => $q->where('aggregate_report_records.dkim_result', $v))
             ->when($filters['disposition'] ?? null, fn (Builder $q, $v) => $q->where('aggregate_report_records.disposition', $v))
+            ->when($filters['expected_source_id'] ?? null, fn (Builder $q, $v) => $q->where('aggregate_report_records.expected_source_id', $v))
             ->when(filter_var($filters['hide_expected'] ?? false, FILTER_VALIDATE_BOOLEAN), fn (Builder $q) => $q->whereNull('aggregate_report_records.expected_source_id'))
             ->when(trim((string) ($filters['search'] ?? '')), fn (Builder $q, string $v) => $q->where(function (Builder $q2) use ($v) {
                 foreach (['source_ip', 'ptr_hostname', 'asn_org', 'header_from', 'envelope_from', 'envelope_to', 'dkim_domain', 'spf_domain'] as $column) {
