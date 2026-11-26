@@ -15,6 +15,23 @@ class ReportsTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_active_filters_show_as_chips_that_remove_one_filter_each(): void
+    {
+        $domain = Domain::factory()->create(['fqdn' => 'chips.example']);
+
+        Volt::actingAs(User::factory()->create())->test('reports.index')
+            ->assertViewHas('activeFilters', [])
+            ->set('domain_id', $domain->id)
+            ->set('spf_result', 'fail')
+            ->assertViewHas('activeFilters', ['domain_id' => 'Domain: chips.example', 'spf_result' => 'SPF: Fail'])
+            ->assertSee('Domain: chips.example')
+            ->call('removeFilter', 'spf_result')
+            ->assertSet('spf_result', '')
+            ->assertSet('domain_id', $domain->id)
+            ->call('removeFilter', 'search')
+            ->assertViewHas('activeFilters', ['domain_id' => 'Domain: chips.example']);
+    }
+
     public function test_guests_are_redirected_from_reports_pages(): void
     {
         $report = AggregateReport::factory()->create();

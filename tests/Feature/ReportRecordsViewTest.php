@@ -119,6 +119,48 @@ class ReportRecordsViewTest extends TestCase
         $this->assertSame(['203.0.113.2', '203.0.113.1'], $this->listedIps($this->recordsView($user, ['sort' => 'messages', 'dir' => 'desc'])));
     }
 
+    public function test_the_authentication_column_is_hidden_until_the_user_turns_it_on(): void
+    {
+        AggregateReportRecord::factory()->create(['aggregate_report_id' => $this->report()->id, 'dkim_domain' => 'example.com', 'dkim_selector' => 'selector-xyz']);
+        $user = User::factory()->create();
+
+        $this->recordsView($user)
+            ->assertSet('visibleColumns', User::DEFAULT_REPORT_RECORD_COLUMNS)
+            ->assertSee('Addresses')
+            ->assertDontSee('selector-xyz')
+            ->call('toggleColumn', 'authentication')
+            ->assertSee('selector-xyz');
+
+        $this->assertContains('authentication', $user->fresh()->report_record_columns);
+        $this->recordsView($user->fresh())->assertSee('selector-xyz');
+    }
+
+    public function test_hiding_columns_keeps_at_least_one_and_ignores_unknown_ones(): void
+    {
+        $user = User::factory()->create(['report_record_columns' => ['count']]);
+
+        $this->recordsView($user)
+            ->call('toggleColumn', 'count')
+            ->assertSet('visibleColumns', ['count'])
+            ->call('toggleColumn', 'bogus')
+            ->assertSet('visibleColumns', ['count'])
+            ->call('toggleColumn', 'source')
+            ->assertSet('visibleColumns', ['source', 'count']);
+
+        $this->assertSame(['source', 'count'], $user->fresh()->report_record_columns);
+    }
+
+    public function test_resetting_the_columns_restores_the_defaults(): void
+    {
+        $user = User::factory()->create(['report_record_columns' => ['count']]);
+
+        $this->recordsView($user)
+            ->call('resetColumns')
+            ->assertSet('visibleColumns', User::DEFAULT_REPORT_RECORD_COLUMNS);
+
+        $this->assertNull($user->fresh()->report_record_columns);
+    }
+
     public function test_switching_tabs_keeps_the_filters_and_clears_the_sort(): void
     {
         Livewire::withQueryParams(['spf_result' => 'fail', 'sort' => 'messages', 'dir' => 'asc'])->actingAs(User::factory()->create())->test('reports.index')

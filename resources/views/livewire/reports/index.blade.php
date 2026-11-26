@@ -4,7 +4,9 @@ use App\Livewire\Concerns\WithSorting;
 use App\Models\AggregateReport;
 use App\Models\AggregateReportRecord;
 use App\Models\Domain;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
@@ -52,11 +54,45 @@ new #[Layout('layouts.app')] class extends Component
 
     public const array VIEWS = ['reports', 'records'];
 
+    /** @var list<string> The Records columns shown, saved on the user. */
+    public array $visibleColumns = [];
+
     public function mount(): void
     {
         if (! in_array($this->view, self::VIEWS, true)) {
             $this->view = 'reports';
         }
+
+        $this->visibleColumns = auth()->user()->reportRecordColumns();
+    }
+
+    /**
+     * Shows or hides one Records column and remembers the choice on the
+     * user's account. The last visible column can't be hidden.
+     */
+    public function toggleColumn(string $column): void
+    {
+        if (! in_array($column, User::REPORT_RECORD_COLUMNS, true)) {
+            return;
+        }
+
+        $columns = in_array($column, $this->visibleColumns, true)
+            ? array_diff($this->visibleColumns, [$column])
+            : [...$this->visibleColumns, $column];
+
+        if ($columns === []) {
+            return;
+        }
+
+        $user = auth()->user();
+        $user->update(['report_record_columns' => array_values(array_intersect(User::REPORT_RECORD_COLUMNS, $columns))]);
+        $this->visibleColumns = $user->reportRecordColumns();
+    }
+
+    public function resetColumns(): void
+    {
+        auth()->user()->update(['report_record_columns' => null]);
+        $this->visibleColumns = User::DEFAULT_REPORT_RECORD_COLUMNS;
     }
 
     public function updated(): void
@@ -76,6 +112,41 @@ new #[Layout('layouts.app')] class extends Component
         $this->resetPage();
     }
 
+    /**
+     * The filters in use apart from the search box, for the chips above the
+     * list: property => label shown on the chip.
+     *
+     * @param  \Illuminate\Support\Collection<int, Domain>  $domains
+     * @return array<string, string>
+     */
+    private function activeFilters(Collection $domains): array
+    {
+        $resultLabels = ['pass' => __('Pass'), 'fail' => __('Fail'), 'none' => __('None'), 'quarantine' => __('Quarantine'), 'reject' => __('Reject')];
+
+        return array_filter([
+            'domain_id' => $this->domain_id ? __('Domain: :value', ['value' => $domains->firstWhere('id', $this->domain_id)?->fqdn ?? $this->domain_id]) : null,
+            'from' => $this->from ? __('From :date', ['date' => $this->from]) : null,
+            'to' => $this->to ? __('To :date', ['date' => $this->to]) : null,
+            'ip' => $this->ip ? __('Source IP: :value', ['value' => $this->ip]) : null,
+            'envelope' => $this->envelope ? __('Envelope: :value', ['value' => $this->envelope]) : null,
+            'spf_result' => $this->spf_result ? __('SPF: :value', ['value' => $resultLabels[$this->spf_result] ?? $this->spf_result]) : null,
+            'dkim_result' => $this->dkim_result ? __('DKIM: :value', ['value' => $resultLabels[$this->dkim_result] ?? $this->dkim_result]) : null,
+            'disposition' => $this->disposition ? __('Disposition: :value', ['value' => $resultLabels[$this->disposition] ?? $this->disposition]) : null,
+            'hideExpected' => $this->view === 'records' && $this->hideExpected ? __('Expected hidden') : null,
+        ]);
+    }
+
+    /**
+     * Removes one filter, from the × on its chip.
+     */
+    public function removeFilter(string $filter): void
+    {
+        if (in_array($filter, ['domain_id', 'from', 'to', 'ip', 'envelope', 'spf_result', 'dkim_result', 'disposition', 'hideExpected'], true)) {
+            $this->reset($filter);
+            $this->resetPage();
+        }
+    }
+
     public function clearFilters(): void
     {
         $this->reset(['domain_id', 'ip', 'envelope', 'from', 'to', 'search', 'spf_result', 'dkim_result', 'disposition', 'hideExpected']);
@@ -87,10 +158,7 @@ new #[Layout('layouts.app')] class extends Component
     protected function sortableColumns(): array
     {
         if ($this->view === 'records') {
-            return [
-                'date' => 'desc', 'domain' => 'asc', 'org_name' => 'asc', 'source_ip' => 'asc', 'count' => 'desc',
-                'disposition' => 'asc', 'dkim_result' => 'asc', 'spf_result' => 'asc', 'header_from' => 'asc',
-            ];
+            return ['date' => 'desc', 'domain' => 'asc', 'org_name' => 'asc', 'source_ip' => 'asc', 'count' => 'desc', 'header_from' => 'asc'];
         }
 
         return ['domain' => 'asc', 'org_name' => 'asc', 'date' => 'desc', 'records' => 'desc', 'messages' => 'desc'];
@@ -173,10 +241,13 @@ new #[Layout('layouts.app')] class extends Component
                 ->paginate(15)
             : null;
 
+        $domains = Domain::visibleTo(auth()->user())->orderBy('fqdn')->get();
+
         return [
             'reports' => $reports,
             'records' => $records,
-            'domains' => Domain::visibleTo(auth()->user())->orderBy('fqdn')->get(),
+            'domains' => $domains,
+            'activeFilters' => $this->activeFilters($domains),
         ];
     }
 }; ?>
@@ -190,81 +261,139 @@ new #[Layout('layouts.app')] class extends Component
         <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8 space-y-4">
             <x-tabs :tabs="['reports' => __('Reports'), 'records' => __('Records')]" :active="$view" />
 
-            <div class="flex flex-wrap items-end gap-3">
-                <div>
-                    <x-input-label for="domain_id" :value="__('Domain')" />
-                    <x-searchable-select wire:model.live="domain_id" id="domain_id" :options="$domains->pluck('fqdn', 'id')" :placeholder="__('All domains')" class="mt-1" />
+            @php
+                $selectClasses = 'mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm';
+                $toolbarButton = 'inline-flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md font-semibold text-xs text-gray-700 dark:text-gray-200 uppercase tracking-widest shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700';
+                $columnLabels = [
+                    'report' => __('Report'),
+                    'source' => __('Source'),
+                    'count' => __('Count'),
+                    'results' => __('Results'),
+                    'addresses' => __('Addresses'),
+                    'authentication' => __('Authentication'),
+                ];
+            @endphp
+            <div x-data="{ filtersOpen: false }" class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg">
+                <div class="flex flex-wrap items-center gap-3 p-4">
+                    <div class="relative flex-1 min-w-[14rem]">
+                        <label for="search" class="sr-only">{{ __('Search') }}</label>
+                        <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z" /></svg>
+                        <x-text-input
+                            wire:model.live.debounce.400ms="search"
+                            id="search"
+                            type="search"
+                            class="block w-full pl-9 text-sm"
+                            :placeholder="$view === 'records' ? __('Search IP, hostname, ASN, domain or org…') : __('Search org or report ID…')"
+                        />
+                    </div>
+
+                    <button type="button" @click="filtersOpen = ! filtersOpen" :aria-expanded="filtersOpen" aria-controls="report-filters" class="{{ $toolbarButton }}">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5h18M6 12h12M10 19h4" /></svg>
+                        {{ __('Filters') }}
+                        @if (count($activeFilters) > 0)
+                            <span class="inline-flex items-center justify-center rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-medium leading-none text-white">{{ count($activeFilters) }}</span>
+                        @endif
+                        <svg :class="{ 'rotate-180': filtersOpen }" class="h-4 w-4 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+
+                    @if ($view === 'records')
+                        <div class="relative" x-data="{ open: false }" @click.outside="open = false" @keydown.escape="open = false">
+                            <button type="button" @click="open = ! open" :aria-expanded="open" class="{{ $toolbarButton }}">
+                                {{ __('Columns') }}
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+                            <div x-show="open" x-transition style="display: none;" class="absolute right-0 z-50 mt-2 w-56 rounded-md bg-white dark:bg-gray-700 shadow-lg ring-1 ring-black ring-opacity-5 p-2 space-y-1">
+                                @foreach (\App\Models\User::REPORT_RECORD_COLUMNS as $column)
+                                    @php $isShown = in_array($column, $visibleColumns, true); @endphp
+                                    <label wire:key="column-{{ $column }}" class="flex items-center gap-2 rounded px-2 py-1 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                                        <input type="checkbox" wire:click="toggleColumn('{{ $column }}')" @checked($isShown) @disabled($isShown && count($visibleColumns) === 1) class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                                        {{ $columnLabels[$column] }}
+                                    </label>
+                                @endforeach
+                                <div class="border-t border-gray-200 dark:border-gray-600 pt-1">
+                                    <button type="button" wire:click="resetColumns" class="w-full rounded px-2 py-1 text-left text-xs text-indigo-600 dark:text-indigo-300 hover:bg-gray-100 dark:hover:bg-gray-600">{{ __('Reset to default') }}</button>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
+                    <a href="{{ route('reports.export', array_merge($this->filters(), $view === 'records' ? ['view' => 'records'] : [])) }}" class="{{ $toolbarButton }}">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" /></svg>
+                        {{ __('Export CSV') }}
+                    </a>
                 </div>
 
-                <div>
-                    <x-input-label for="from" :value="__('From')" />
-                    <x-text-input wire:model.live="from" id="from" type="date" class="mt-1 block text-sm" />
+                <div id="report-filters" x-show="filtersOpen" x-transition.opacity style="display: none;" class="border-t border-gray-200 dark:border-gray-700 p-4">
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <div>
+                            <x-input-label for="domain_id" :value="__('Domain')" />
+                            <x-searchable-select wire:model.live="domain_id" id="domain_id" :options="$domains->pluck('fqdn', 'id')" :placeholder="__('All domains')" class="mt-1 w-full" />
+                        </div>
+
+                        <div>
+                            <x-input-label for="from" :value="__('Period')" />
+                            <div class="mt-1 flex items-center gap-2">
+                                <x-text-input wire:model.live="from" id="from" type="date" class="block w-full text-sm" :aria-label="__('From')" />
+                                <span class="text-gray-400">&ndash;</span>
+                                <x-text-input wire:model.live="to" id="to" type="date" class="block w-full text-sm" :aria-label="__('To')" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <x-input-label for="envelope" :value="__('Envelope (from or to)')" />
+                            <x-text-input wire:model.live.debounce.400ms="envelope" id="envelope" type="text" class="mt-1 block w-full text-sm" />
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-2">
+                            <div>
+                                <x-input-label for="spf_result" :value="__('SPF')" />
+                                <select wire:model.live="spf_result" id="spf_result" class="{{ $selectClasses }}">
+                                    <option value="">{{ __('Any') }}</option>
+                                    <option value="pass">{{ __('Pass') }}</option>
+                                    <option value="fail">{{ __('Fail') }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <x-input-label for="dkim_result" :value="__('DKIM')" />
+                                <select wire:model.live="dkim_result" id="dkim_result" class="{{ $selectClasses }}">
+                                    <option value="">{{ __('Any') }}</option>
+                                    <option value="pass">{{ __('Pass') }}</option>
+                                    <option value="fail">{{ __('Fail') }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <x-input-label for="disposition" :value="__('Disposition')" />
+                                <select wire:model.live="disposition" id="disposition" class="{{ $selectClasses }}">
+                                    <option value="">{{ __('Any') }}</option>
+                                    <option value="none">{{ __('None') }}</option>
+                                    <option value="quarantine">{{ __('Quarantine') }}</option>
+                                    <option value="reject">{{ __('Reject') }}</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if ($view === 'records')
+                        <label class="mt-4 inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300" title="{{ __('Leave out records that match a source marked as expected under Settings > Expected Sources.') }}">
+                            <input wire:model.live="hideExpected" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                            {{ __('Hide expected sources') }}
+                        </label>
+                    @endif
                 </div>
 
-                <div>
-                    <x-input-label for="to" :value="__('To')" />
-                    <x-text-input wire:model.live="to" id="to" type="date" class="mt-1 block text-sm" />
-                </div>
-
-                <div class="flex-1 min-w-[12rem]">
-                    <x-input-label for="search" :value="$view === 'records' ? __('Search (IP, hostname, ASN, domain or org)') : __('Search (org or report ID)')" />
-                    <x-text-input wire:model.live.debounce.400ms="search" id="search" type="text" class="mt-1 block w-full text-sm" />
-                </div>
-
-                @if ($ip)
-                    <div>
-                        <x-input-label :value="__('Source IP(s)')" />
-                        <div class="mt-1 font-mono text-sm text-gray-700 dark:text-gray-300 py-2">{{ $ip }}</div>
+                @if ($activeFilters !== [] || $search)
+                    <div class="flex flex-wrap items-center gap-2 border-t border-gray-200 dark:border-gray-700 px-4 py-3">
+                        @foreach ($activeFilters as $filter => $label)
+                            <span wire:key="chip-{{ $filter }}" class="inline-flex items-center gap-1 rounded-full bg-indigo-50 dark:bg-indigo-900/50 py-0.5 pl-2.5 pr-1 text-xs font-medium text-indigo-700 dark:text-indigo-200">
+                                {{ $label }}
+                                <button type="button" wire:click="removeFilter('{{ $filter }}')" class="rounded-full p-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-800" aria-label="{{ __('Remove filter :filter', ['filter' => $label]) }}">
+                                    <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                            </span>
+                        @endforeach
+                        <button type="button" wire:click="clearFilters" class="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 underline">{{ __('Clear filters') }}</button>
                     </div>
                 @endif
-
-                <div>
-                    <x-input-label for="envelope" :value="__('Envelope (from or to)')" />
-                    <x-text-input wire:model.live.debounce.400ms="envelope" id="envelope" type="text" class="mt-1 block text-sm" />
-                </div>
-
-                <div>
-                    <x-input-label for="spf_result" :value="__('SPF')" />
-                    <select wire:model.live="spf_result" id="spf_result" class="mt-1 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
-                        <option value="">{{ __('Any') }}</option>
-                        <option value="pass">{{ __('Pass') }}</option>
-                        <option value="fail">{{ __('Fail') }}</option>
-                    </select>
-                </div>
-
-                <div>
-                    <x-input-label for="dkim_result" :value="__('DKIM')" />
-                    <select wire:model.live="dkim_result" id="dkim_result" class="mt-1 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
-                        <option value="">{{ __('Any') }}</option>
-                        <option value="pass">{{ __('Pass') }}</option>
-                        <option value="fail">{{ __('Fail') }}</option>
-                    </select>
-                </div>
-
-                <div>
-                    <x-input-label for="disposition" :value="__('Disposition')" />
-                    <select wire:model.live="disposition" id="disposition" class="mt-1 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
-                        <option value="">{{ __('Any') }}</option>
-                        <option value="none">{{ __('None') }}</option>
-                        <option value="quarantine">{{ __('Quarantine') }}</option>
-                        <option value="reject">{{ __('Reject') }}</option>
-                    </select>
-                </div>
-
-                @if ($view === 'records')
-                    <label class="inline-flex items-center gap-2 pb-2 text-sm text-gray-700 dark:text-gray-300" title="{{ __('Leave out records that match a source marked as expected under Settings > Expected Sources.') }}">
-                        <input wire:model.live="hideExpected" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500">
-                        {{ __('Hide expected') }}
-                    </label>
-                @endif
-
-                @if ($domain_id || $ip || $envelope || $from || $to || $search || $spf_result || $dkim_result || $disposition || ($view === 'records' && $hideExpected))
-                    <x-secondary-button wire:click="clearFilters">{{ __('Clear filters') }}</x-secondary-button>
-                @endif
-
-                <a href="{{ route('reports.export', array_merge($this->filters(), $view === 'records' ? ['view' => 'records'] : [])) }}" class="inline-flex items-center px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md font-semibold text-xs text-gray-700 dark:text-gray-200 uppercase tracking-widest shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700">
-                    {{ __('Export CSV') }}
-                </a>
             </div>
 
             @if ($view === 'reports')
@@ -312,73 +441,106 @@ new #[Layout('layouts.app')] class extends Component
                         'fail' => 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200',
                         default => '',
                     };
+                    $authLine = fn (?string $domain, ?string $detail, ?string $result) => ($domain ?? '—')
+                        .($detail ? " ({$detail})" : '')
+                        .($result ? " · {$result}" : '');
                 @endphp
                 <div class="bg-white dark:bg-gray-800 overflow-x-auto shadow-sm sm:rounded-lg">
+                    @php $shows = fn (string $column) => in_array($column, $visibleColumns, true); @endphp
                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 max-md:block">
                         <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
                             <tr>
-                                <x-sortable-th column="date" :sort="$this->currentSort">{{ __('Date range') }}</x-sortable-th>
-                                <x-sortable-th column="domain" :sort="$this->currentSort">{{ __('Domain') }}</x-sortable-th>
-                                <x-sortable-th column="org_name" :sort="$this->currentSort">{{ __('Reporting org') }}</x-sortable-th>
-                                <x-sortable-th column="source_ip" :sort="$this->currentSort">{{ __('Source IP') }}</x-sortable-th>
-                                <x-sortable-th column="count" align="right" :sort="$this->currentSort">{{ __('Count') }}</x-sortable-th>
-                                <x-sortable-th column="disposition" :sort="$this->currentSort">{{ __('Disposition') }}</x-sortable-th>
-                                <x-sortable-th column="dkim_result" :sort="$this->currentSort">{{ __('DKIM') }}</x-sortable-th>
-                                <x-sortable-th column="spf_result" :sort="$this->currentSort">{{ __('SPF') }}</x-sortable-th>
-                                <x-sortable-th column="header_from" :sort="$this->currentSort">{{ __('Header From') }}</x-sortable-th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Envelope From') }}</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Envelope To') }}</th>
+                                @if ($shows('report'))
+                                    <x-sortable-th column="date" :sort="$this->currentSort">{{ __('Report') }}</x-sortable-th>
+                                @endif
+                                @if ($shows('source'))
+                                    <x-sortable-th column="source_ip" :sort="$this->currentSort">{{ __('Source') }}</x-sortable-th>
+                                @endif
+                                @if ($shows('count'))
+                                    <x-sortable-th column="count" align="right" :sort="$this->currentSort">{{ __('Count') }}</x-sortable-th>
+                                @endif
+                                @if ($shows('results'))
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Results') }}</th>
+                                @endif
+                                @if ($shows('addresses'))
+                                    <x-sortable-th column="header_from" :sort="$this->currentSort">{{ __('Addresses') }}</x-sortable-th>
+                                @endif
+                                @if ($shows('authentication'))
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Authentication') }}</th>
+                                @endif
                                 <th class="px-6 py-3"></th>
                             </tr>
                         </thead>
                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:space-y-3 max-md:p-3">
                             @forelse ($records as $record)
-                                @php($report = $record->aggregateReport)
-                                <tr wire:key="record-{{ $record->id }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
-                                    <td data-label="{{ __('Date range') }}" class="{{ $cell }} whitespace-nowrap text-gray-500 dark:text-gray-400">{{ $report->date_range_begin->format('Y-m-d') }} &rarr; {{ $report->date_range_end->format('Y-m-d') }}</td>
-                                    <td data-label="{{ __('Domain') }}" class="{{ $cell }} whitespace-nowrap font-medium text-gray-900 dark:text-gray-100">{{ $report->domain?->fqdn }}</td>
-                                    <td data-label="{{ __('Reporting org') }}" class="{{ $cell }} whitespace-nowrap text-gray-500 dark:text-gray-400">{{ $report->org_name }}</td>
-                                    <td data-label="{{ __('Source IP') }}" class="{{ $cell }} whitespace-nowrap font-mono text-gray-900 dark:text-gray-100 max-md:items-start">
-                                        <span class="max-md:text-right">
-                                            <x-country-flag :code="$record->country" /> {{ $record->source_ip }}
-                                            @if ($record->ptr_hostname)
-                                                <div class="font-sans text-xs text-gray-400 dark:text-gray-500">{{ $record->ptr_hostname }}</div>
-                                            @endif
-                                            @if ($record->asn_org)
-                                                <div class="font-sans text-xs text-gray-400 dark:text-gray-500">{{ $record->asn_org }}</div>
-                                            @endif
-                                        </span>
-                                    </td>
-                                    <td data-label="{{ __('Count') }}" class="{{ $cell }} whitespace-nowrap text-right text-gray-500 dark:text-gray-400 tabular-nums max-md:text-left">{{ number_format($record->count) }}</td>
-                                    <td data-label="{{ __('Disposition') }}" class="{{ $cell }} whitespace-nowrap">
-                                        <x-disposition-badge :disposition="$record->disposition" />
-                                    </td>
-                                    <td data-label="{{ __('DKIM') }}" class="{{ $cell }} whitespace-nowrap">
-                                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $resultPill($record->dkim_result) }}">{{ $record->dkim_result }}</span>
-                                    </td>
-                                    <td data-label="{{ __('SPF') }}" class="{{ $cell }} whitespace-nowrap">
-                                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $resultPill($record->spf_result) }}">{{ $record->spf_result }}</span>
-                                    </td>
-                                    <td data-label="{{ __('Header From') }}" class="{{ $cell }} whitespace-nowrap text-gray-500 dark:text-gray-400">{{ $record->header_from ?? '—' }}</td>
-                                    <td data-label="{{ __('Envelope From') }}" class="{{ $cell }} whitespace-nowrap text-gray-500 dark:text-gray-400">
-                                        <span class="max-md:text-right">
-                                            {{ $record->envelope_from ?? '—' }}
-                                            <x-source-badges
-                                                :null-sender="$record->is_null_sender"
-                                                :helo-domains="$record->spf_scope === 'helo' ? [$record->spf_domain] : []"
-                                                :expected-labels="$record->expectedSource ? [$record->expectedSource->label] : []"
-                                                class="ml-1"
-                                            />
-                                        </span>
-                                    </td>
-                                    <td data-label="{{ __('Envelope To') }}" class="{{ $cell }} whitespace-nowrap text-gray-500 dark:text-gray-400">{{ $record->envelope_to ?? '—' }}</td>
+                                @php $report = $record->aggregateReport; @endphp
+                                <tr wire:key="record-{{ $record->id }}" class="align-top max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
+                                    @if ($shows('report'))
+                                        <td data-label="{{ __('Report') }}" class="{{ $cell }} max-md:items-start">
+                                            <span class="max-md:text-right">
+                                                <span class="block whitespace-nowrap font-medium text-gray-900 dark:text-gray-100">{{ $report->domain?->fqdn }}</span>
+                                                <span class="block whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{{ $report->date_range_begin->format('Y-m-d') }} &rarr; {{ $report->date_range_end->format('Y-m-d') }}</span>
+                                                <span class="block text-xs text-gray-400 dark:text-gray-500">{{ $report->org_name }}</span>
+                                            </span>
+                                        </td>
+                                    @endif
+                                    @if ($shows('source'))
+                                        <td data-label="{{ __('Source') }}" class="{{ $cell }} max-md:items-start">
+                                            <span class="max-md:text-right">
+                                                <span class="block whitespace-nowrap font-mono text-gray-900 dark:text-gray-100"><x-country-flag :code="$record->country" /> {{ $record->source_ip }}</span>
+                                                @if ($record->ptr_hostname)
+                                                    <span class="block text-xs text-gray-400 dark:text-gray-500 break-all">{{ $record->ptr_hostname }}</span>
+                                                @endif
+                                                @if ($record->asn_org)
+                                                    <span class="block text-xs text-gray-400 dark:text-gray-500">{{ $record->asn_org }}</span>
+                                                @endif
+                                            </span>
+                                        </td>
+                                    @endif
+                                    @if ($shows('count'))
+                                        <td data-label="{{ __('Count') }}" class="{{ $cell }} whitespace-nowrap text-right text-gray-700 dark:text-gray-300 tabular-nums max-md:text-left">{{ number_format($record->count) }}</td>
+                                    @endif
+                                    @if ($shows('results'))
+                                        <td data-label="{{ __('Results') }}" class="{{ $cell }}">
+                                            <span class="inline-flex flex-wrap items-center gap-1 max-md:justify-end">
+                                                <x-disposition-badge :disposition="$record->disposition" />
+                                                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $resultPill($record->dkim_result) }}" title="{{ __('DKIM') }}">{{ __('DKIM') }} {{ $record->dkim_result }}</span>
+                                                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ $resultPill($record->spf_result) }}" title="{{ __('SPF') }}">{{ __('SPF') }} {{ $record->spf_result }}</span>
+                                            </span>
+                                        </td>
+                                    @endif
+                                    @if ($shows('addresses'))
+                                        <td data-label="{{ __('Addresses') }}" class="{{ $cell }} max-md:items-start">
+                                            <span class="max-md:text-right">
+                                                <span class="block text-gray-900 dark:text-gray-100 break-all" title="{{ __('Header From') }}">{{ $record->header_from ?? '—' }}</span>
+                                                <span class="block text-xs text-gray-500 dark:text-gray-400 break-all">
+                                                    {{ __('Envelope from') }}: {{ $record->envelope_from ?? '—' }}
+                                                    <x-source-badges
+                                                        :null-sender="$record->is_null_sender"
+                                                        :helo-domains="$record->spf_scope === 'helo' ? [$record->spf_domain] : []"
+                                                        :expected-labels="$record->expectedSource ? [$record->expectedSource->label] : []"
+                                                        class="ml-1"
+                                                    />
+                                                </span>
+                                                <span class="block text-xs text-gray-500 dark:text-gray-400 break-all">{{ __('Envelope to') }}: {{ $record->envelope_to ?? '—' }}</span>
+                                            </span>
+                                        </td>
+                                    @endif
+                                    @if ($shows('authentication'))
+                                        <td data-label="{{ __('Authentication') }}" class="{{ $cell }} max-md:items-start">
+                                            <span class="max-md:text-right text-xs text-gray-500 dark:text-gray-400">
+                                                <span class="block break-all">{{ __('DKIM') }}: {{ $authLine($record->dkim_domain, $record->dkim_selector, $record->dkim_auth_result) }}</span>
+                                                <span class="block break-all">{{ __('SPF') }}: {{ $authLine($record->spf_domain, $record->spf_scope, $record->spf_auth_result) }}</span>
+                                            </span>
+                                        </td>
+                                    @endif
                                     <td class="px-6 py-3 whitespace-nowrap text-right text-sm max-md:block max-md:px-0 max-md:py-0 max-md:pt-1">
                                         <a href="{{ route('reports.show', ['report' => $report, 'spf_result' => $record->spf_result, 'dkim_result' => $record->dkim_result, 'disposition' => $record->disposition]) }}" wire:navigate class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('View report') }}</a>
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="12" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No records match these filters.') }}</td>
+                                    <td colspan="{{ count($visibleColumns) + 1 }}" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No records match these filters.') }}</td>
                                 </tr>
                             @endforelse
                         </tbody>
