@@ -88,6 +88,35 @@ class SpfEditorTest extends TestCase
             ->assertSet('spfDraft', 'v=spf1 -all');
     }
 
+    public function test_an_ip_can_be_tested_against_the_draft(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::factory()->create(['spf_record' => 'v=spf1 include:used.test -all']);
+
+        Volt::actingAs($user)->test('admin.domains')
+            ->call('openSpfEditor', $domain->id)
+            ->set('spfTestIp', '192.0.2.44')
+            ->assertSee('Pass: this IP may send')
+            ->assertSee('include:used.test › ip4:192.0.2.0/24')
+            ->set('spfTestIp', '198.51.100.1')
+            ->assertSee('Fail: receivers should reject')
+            ->set('spfTestIp', 'not-an-ip')
+            ->assertSee('Not a valid IP address.');
+    }
+
+    public function test_flatten_suggestions_are_grouped_under_a_collapsed_toggle(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::factory()->create(['spf_record' => 'v=spf1 include:used.test include:unused.test -all']);
+
+        Volt::actingAs($user)->test('admin.domains')
+            ->call('openSpfEditor', $domain->id)
+            ->assertSeeInOrder(['2 flatten suggestions', 'Flatten include:used.test', 'Flatten include:unused.test'])
+            ->assertSeeHtml('x-show="showFlatten"')
+            ->call('applySpfSuggestion', 'flatten:used.test')
+            ->assertSet('spfDraft', 'v=spf1 ip4:192.0.2.0/24 include:unused.test -all');
+    }
+
     public function test_an_include_no_reported_source_uses_can_be_removed_with_a_suggestion(): void
     {
         $user = User::factory()->create();

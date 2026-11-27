@@ -41,6 +41,9 @@ class SpfAnalyzer
     /** An mx mechanism looks up the addresses of at most this many hosts. */
     private const int MAX_MX_HOSTS = 10;
 
+    /** The result each qualifier gives a matching term (RFC 7208 §4.6.2). */
+    private const array QUALIFIER_RESULTS = ['+' => 'pass', '-' => 'fail', '~' => 'softfail', '?' => 'neutral'];
+
     /** How long the editor reuses a DNS answer while the record is being edited. */
     private const int CACHE_SECONDS = 300;
 
@@ -87,6 +90,115 @@ class SpfAnalyzer
             'terms' => $terms,
             'warnings' => $this->warnings($record, $terms, $lookups, $voidLookups),
         ];
+    }
+
+    /**
+     * The result a receiver would give mail from the IP address (RFC 7208
+     * §2.6): pass, fail, softfail, neutral, none or permerror, or unknown
+     * when a ptr, exists or macro decides it and can't be evaluated in
+     * advance. The path lists the terms that led to it, outermost first.
+     *
+     * @return array{result: string, path: list<string>}
+     */
+    public function checkIp(string $record, string $domain, string $ip): array
+    {
+        if (! SpfRecord::isSpfRecord($record)) {
+            return ['result' => 'none', 'path' => []];
+        }
+
+        return $this->matchIp($this->analyze($record, $domain)['terms'], $ip)
+            ?? ['result' => 'neutral', 'path' => []];
+    }
+
+    /**
+     * Evaluates the terms in order; the first that matches decides. Null
+     * when none matches and no redirect applies.
+     *
+     * @param  list<SpfNode>  $nodes
+     * @return array{result: string, path: list<string>}|null
+     */
+    private function matchIp(array $nodes, string $ip): ?array
+    {
+        $redirect = null;
+
+        foreach ($nodes as $node) {
+            if ($node['ignored'] || $node['name'] === 'exp') {
+                continue;
+            }
+
+            if ($node['name'] === 'redirect') {
+                $redirect = $node;
+
+                continue;
+            }
+
+            $outcome = $this->matchNode($node, $ip);
+
+            if ($outcome !== null) {
+                return $outcome;
+            }
+        }
+
+        if ($redirect === null) {
+            return null;
+        }
+
+        $outcome = $this->unevaluableOutcome($redirect)
+            ?? $this->matchIp($redirect['children'], $ip)
+            ?? ['result' => 'neutral', 'path' => []];
+
+        return ['result' => $outcome['result'], 'path' => [$redirect['term'], ...$outcome['path']]];
+    }
+
+    /**
+     * @param  SpfNode  $node
+     * @return array{result: string, path: list<string>}|null
+     */
+    private function matchNode(array $node, string $ip): ?array
+    {
+        $unevaluable = $this->unevaluableOutcome($node);
+
+        if ($unevaluable !== null) {
+            return $unevaluable;
+        }
+
+        $result = self::QUALIFIER_RESULTS[$node['qualifier']] ?? 'pass';
+
+        if ($node['name'] === 'all' || ($node['ranges'] !== [] && in_array($node['name'], ['ip4', 'ip6', 'a', 'mx'], true) && IpUtils::checkIp($ip, $node['ranges']))) {
+            return ['result' => $result, 'path' => [$node['term']]];
+        }
+
+        if ($node['name'] !== 'include') {
+            return null;
+        }
+
+        $inner = $this->matchIp($node['children'], $ip) ?? ['result' => 'neutral', 'path' => []];
+
+        return match ($inner['result']) {
+            'pass' => ['result' => $result, 'path' => [$node['term'], ...$inner['path']]],
+            'permerror', 'unknown' => ['result' => $inner['result'], 'path' => [$node['term'], ...$inner['path']]],
+            default => null,
+        };
+    }
+
+    /**
+     * The outcome of a term that can't be matched against an address: a
+     * ptr, exists or macro (unknown), or a broken term (permerror).
+     *
+     * @param  SpfNode  $node
+     * @return array{result: string, path: list<string>}|null
+     */
+    private function unevaluableOutcome(array $node): ?array
+    {
+        $isMissingAddresses = $node['void'] && in_array($node['name'], ['a', 'mx'], true);
+
+        $result = match (true) {
+            in_array($node['name'], ['ptr', 'exists'], true), str_contains((string) $node['target'], '%') => 'unknown',
+            $node['error'] !== null && ! $isMissingAddresses => 'permerror',
+            default => null,
+        };
+
+        return $result === null ? null : ['result' => $result, 'path' => [$node['term']]];
     }
 
     /**

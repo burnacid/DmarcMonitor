@@ -61,6 +61,33 @@ class SpfAnalyzerTest extends TestCase
         $this->assertSame(1, $analysis['void_lookups']);
     }
 
+    public function test_checking_an_ip_follows_includes_mx_and_the_all_qualifier(): void
+    {
+        $analyzer = $this->analyzer(
+            ['vendor.test' => ['v=spf1 ip4:198.51.100.0/24 ip6:2001:db8::/32 -all']],
+            ['mail.example.com' => ['203.0.113.7']],
+            ['example.com' => ['mail.example.com']],
+        );
+        $record = 'v=spf1 mx include:vendor.test ~all';
+
+        $this->assertSame(['result' => 'pass', 'path' => ['mx']], $analyzer->checkIp($record, 'example.com', '203.0.113.7'));
+        $this->assertSame(['result' => 'pass', 'path' => ['include:vendor.test', 'ip4:198.51.100.0/24']], $analyzer->checkIp($record, 'example.com', '198.51.100.42'));
+        $this->assertSame(['result' => 'pass', 'path' => ['include:vendor.test', 'ip6:2001:db8::/32']], $analyzer->checkIp($record, 'example.com', '2001:db8::1'));
+        $this->assertSame(['result' => 'softfail', 'path' => ['~all']], $analyzer->checkIp($record, 'example.com', '192.0.2.1'));
+    }
+
+    public function test_checking_an_ip_reports_qualifiers_redirects_and_terms_it_cannot_evaluate(): void
+    {
+        $analyzer = $this->analyzer(['parent.test' => ['v=spf1 ip4:192.0.2.0/24 -all']]);
+
+        $this->assertSame('fail', $analyzer->checkIp('v=spf1 -ip4:192.0.2.1 +all', 'example.com', '192.0.2.1')['result']);
+        $this->assertSame(['result' => 'pass', 'path' => ['redirect=parent.test', 'ip4:192.0.2.0/24']], $analyzer->checkIp('v=spf1 redirect=parent.test', 'example.com', '192.0.2.5'));
+        $this->assertSame('neutral', $analyzer->checkIp('v=spf1 ip4:192.0.2.1', 'example.com', '198.51.100.1')['result']);
+        $this->assertSame('unknown', $analyzer->checkIp('v=spf1 ptr -all', 'example.com', '198.51.100.1')['result']);
+        $this->assertSame('permerror', $analyzer->checkIp('v=spf1 include:gone.test -all', 'example.com', '198.51.100.1')['result']);
+        $this->assertSame('none', $analyzer->checkIp('ip4:192.0.2.1 -all', 'example.com', '192.0.2.1')['result']);
+    }
+
     public function test_it_warns_about_a_permissive_all(): void
     {
         $analysis = $this->analyzer([])->analyze('v=spf1 ip4:192.0.2.1 +all', 'example.com');

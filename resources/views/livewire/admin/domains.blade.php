@@ -91,6 +91,7 @@ new #[Layout('layouts.app')] class extends Component
     public string $spfDraft = '';
     public string $spfAddMechanism = 'include';
     public string $spfAddValue = '';
+    public string $spfTestIp = '';
 
     public function mount(): void
     {
@@ -465,7 +466,28 @@ new #[Layout('layouts.app')] class extends Component
      */
     public function closeSpfEditor(): void
     {
-        $this->reset(['spfDomainId', 'spfFqdn', 'spfCurrentRecord', 'spfDraft', 'spfAddMechanism', 'spfAddValue']);
+        $this->reset(['spfDomainId', 'spfFqdn', 'spfCurrentRecord', 'spfDraft', 'spfAddMechanism', 'spfAddValue', 'spfTestIp']);
+    }
+
+    /**
+     * What the draft record says about mail from the IP address being tested,
+     * or null while no address is entered.
+     *
+     * @return array{result: string, path: list<string>}|null
+     */
+    public function spfIpTest(): ?array
+    {
+        $ip = trim($this->spfTestIp);
+
+        if ($ip === '') {
+            return null;
+        }
+
+        if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
+            return ['result' => 'invalid', 'path' => []];
+        }
+
+        return app(SpfAnalyzer::class)->checkIp($this->spfDraft, $this->spfFqdn, $ip);
     }
 
     /**
@@ -1326,11 +1348,52 @@ new #[Layout('layouts.app')] class extends Component
                     @endforeach
                 </div>
 
+                @php
+                    $spfIpTest = $this->spfIpTest();
+                    [$spfIpTestClass, $spfIpTestLabel] = match ($spfIpTest['result'] ?? null) {
+                        'pass' => ['bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200', __('Pass: this IP may send for :domain.', ['domain' => $spfFqdn])],
+                        'fail' => ['bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200', __('Fail: receivers should reject mail from this IP.')],
+                        'softfail' => ['bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200', __('Soft fail: this IP is not authorised; mail is usually accepted but marked.')],
+                        'neutral' => ['bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200', __('Neutral: the record makes no statement about this IP.')],
+                        'none' => ['bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200', __('None: the draft is not a valid SPF record.')],
+                        'permerror' => ['bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200', __('Permanent error: a broken term stops evaluation, so SPF fails.')],
+                        'unknown' => ['bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200', __('Unknown: decided by a term that depends on the sender (ptr, exists or a macro), so it can\'t be tested in advance.')],
+                        'invalid' => ['bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200', __('Not a valid IP address.')],
+                        default => [null, null],
+                    };
+                @endphp
+                <div class="mt-4">
+                    <x-input-label for="spf_test_ip" :value="__('Test an IP address')" />
+                    <x-text-input wire:model.live.debounce.500ms="spfTestIp" id="spf_test_ip" type="text" class="mt-1 block w-full text-sm font-mono" placeholder="192.0.2.10" />
+                    @if ($spfIpTestLabel)
+                        <div class="mt-2 text-xs">
+                            <span class="inline-flex items-center rounded-full px-2 py-0.5 font-medium {{ $spfIpTestClass }}">{{ $spfIpTestLabel }}</span>
+                            @if ($spfIpTest['path'] !== [])
+                                <p class="mt-1 text-gray-500 dark:text-gray-400">
+                                    {{ __('Decided by') }}
+                                    <span class="font-mono text-gray-700 dark:text-gray-300">{{ implode(' › ', $spfIpTest['path']) }}</span>
+                                </p>
+                            @endif
+                        </div>
+                    @endif
+                </div>
+
                 @if ($spfSuggestions !== [])
-                    <div class="mt-6">
+                    @php
+                        [$spfFlattenSuggestions, $spfOtherSuggestions] = collect($spfSuggestions)->partition(fn (array $suggestion) => str_starts_with($suggestion['key'], 'flatten:') || str_starts_with($suggestion['key'], 'resolve:'));
+                    @endphp
+                    <div class="mt-6" x-data="{ showFlatten: false }">
                         <h3 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('Suggestions') }}</h3>
-                        <ul class="mt-2 space-y-3">
-                            @foreach ($spfSuggestions as $suggestion)
+                        @foreach (['other' => $spfOtherSuggestions, 'flatten' => $spfFlattenSuggestions] as $spfGroup => $spfGroupSuggestions)
+                        @continue($spfGroupSuggestions->isEmpty())
+                        @if ($spfGroup === 'flatten')
+                            <button type="button" x-on:click="showFlatten = ! showFlatten" class="mt-3 flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">
+                                <svg class="h-3 w-3 transition-transform" x-bind:class="showFlatten && 'rotate-90'" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.17 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
+                                {{ trans_choice(':count flatten suggestion|:count flatten suggestions', $spfGroupSuggestions->count()) }}
+                            </button>
+                        @endif
+                        <ul class="mt-2 space-y-3" @if ($spfGroup === 'flatten') x-show="showFlatten" x-cloak @endif>
+                            @foreach ($spfGroupSuggestions as $suggestion)
                                 <li wire:key="spf-suggestion-{{ $suggestion['key'] }}" class="rounded-md border border-gray-200 dark:border-gray-700 p-3">
                                     <div class="flex items-start justify-between gap-3">
                                         <div>
@@ -1351,6 +1414,7 @@ new #[Layout('layouts.app')] class extends Component
                                 </li>
                             @endforeach
                         </ul>
+                        @endforeach
                     </div>
                 @endif
 

@@ -2,6 +2,16 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
+## [Unreleased]
+
+### Added
+
+- **IP tester in the SPF editor**: type an IPv4 or IPv6 address under "Test an IP address" to see what the draft record gives mail from it: Pass, Fail, Soft fail, Neutral, None or Permanent error. It follows includes, redirects and the a and mx mechanisms, and shows the terms that decided it, for example `include:_spf.google.com › ip4:209.85.128.0/17`. When a ptr, exists or macro term decides it, the result is "Unknown", because those depend on the sender and can't be checked in advance. The test updates as you edit the record.
+
+### Changed
+
+- The SPF editor's flatten suggestions ("Flatten include:…" and "Replace … with its addresses") are now collapsed under a "N flatten suggestions" toggle, so the other suggestions are easier to find. Click it to show them.
+
 ## [1.9.0]
 
 ### Added
