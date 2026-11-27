@@ -8,15 +8,20 @@ use App\Services\Analytics\DmarcMetricsService;
 use App\Services\Analytics\DomainHealthService;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Lazy;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
+use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Lazy] class extends Component
 {
-    use WithSorting;
+    use WithPagination, WithSorting;
+
+    /** Rows per page of the sending-sources table. */
+    private const int SOURCES_PER_PAGE = 25;
 
     #[Url(as: 'organisation')]
     public ?int $organisationId = null;
@@ -105,6 +110,27 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
         })->values();
     }
 
+    /**
+     * One page of the sorted sending-sources table. Sorting covers every
+     * source; the envelope split is only loaded for the rows on the page.
+     *
+     * @param  Collection<int, array<string, mixed>>  $groups
+     * @param  array<int, int>|null  $allowedDomainIds
+     * @return LengthAwarePaginator<int, array<string, mixed>>
+     */
+    private function paginateSourceGroups(DmarcMetricsService $service, Collection $groups, Carbon $from, Carbon $to, ?array $allowedDomainIds): LengthAwarePaginator
+    {
+        $page = $this->getPage();
+        $rows = $this->sortSourceGroups($groups)->forPage($page, self::SOURCES_PER_PAGE)->values();
+
+        return new LengthAwarePaginator(
+            $service->attachEnvelopes($rows, $this->domainId, $from, $to, $this->organisationId, $allowedDomainIds, $this->failureCategory),
+            $groups->count(),
+            self::SOURCES_PER_PAGE,
+            $page,
+        );
+    }
+
     public function mount(): void
     {
         $this->days ??= auth()->user()->dashboardDays();
@@ -181,10 +207,13 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
      * keyed off the drill-down-aware effective window, so it also needs
      * refreshing when a day is selected/cleared. It is never narrowed to the
      * picked failure category itself (the other slices must stay clickable),
-     * it only highlights the picked slice.
+     * it only highlights the picked slice. Every filter change ends up here,
+     * so the sending-sources table also goes back to its first page.
      */
     private function dispatchChartUpdates(bool $trendChanged): void
     {
+        $this->resetPage();
+
         if ($trendChanged) {
             $this->dispatch('trend-updated', trend: $this->trendData());
         }
@@ -299,9 +328,8 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
             'summary' => $service->summary($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds, failureCategory: $this->failureCategory),
             'trend' => $this->trendData(),
             'failureBreakdown' => $service->failureBreakdown($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
-            'sourceGroups' => $this->sortSourceGroups($sources['groups']),
+            'sourceGroups' => $this->paginateSourceGroups($service, $sources['groups'], $from, $to, $allowedDomainIds),
             'topFailingSources' => $sources['top_failing'],
-            'totalSourceGroups' => $sources['total_groups'],
             'hiddenExpectedMessages' => $service->hiddenExpectedMessageCount($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
             'hasAnyReports' => \App\Models\AggregateReport::visibleTo($user)->exists(),
             'windowFrom' => $from->toDateString(),
@@ -505,7 +533,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                 </div>
 
                 {{-- Source breakdown --}}
-                <div class="relative bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
+                <div id="sending-sources" class="relative bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                     <div
                         wire:loading.delay
                         wire:target="sort"
@@ -520,17 +548,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                         </div>
                     </div>
                     <div class="flex items-center justify-between px-6 pt-4">
-                        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                            {{ __('Sending sources') }}
-                            @if ($totalSourceGroups > $sourceGroups->count())
-                                <span class="ml-1 font-normal text-gray-500 dark:text-gray-400">{{ __('Top :shown of :total', ['shown' => $sourceGroups->count(), 'total' => number_format($totalSourceGroups)]) }}</span>
-                                <a
-                                    href="{{ route('reports.index', ['view' => 'records', 'domain_id' => $domainId, 'organisation' => $organisationId, 'from' => $windowFrom, 'to' => $windowTo, 'hide_expected' => 1]) }}"
-                                    wire:navigate
-                                    class="ml-2 font-normal text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"
-                                >{{ __('View all') }}</a>
-                            @endif
-                        </h3>
+                        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Sending sources') }}</h3>
                         <a
                             href="{{ route('dashboard.export-sources', ['domain_id' => $domainId, 'organisation_id' => $organisationId, 'from' => $windowFrom, 'to' => $windowTo, 'failure' => $failureCategory]) }}"
                             class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 uppercase tracking-widest"
@@ -718,6 +736,11 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                             @endforelse
                         </table>
                     </div>
+                    @if ($sourceGroups->hasPages())
+                        <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+                            {{ $sourceGroups->links(data: ['scrollTo' => '#sending-sources']) }}
+                        </div>
+                    @endif
                 </div>
             @endif
         </div>

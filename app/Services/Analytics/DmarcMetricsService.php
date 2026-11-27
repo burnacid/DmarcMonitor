@@ -344,15 +344,15 @@ class DmarcMetricsService
     }
 
     /**
-     * The dashboard's sending-sources table (the $limit largest groups, with
-     * their envelope split) and its top failing sources (picked from all
-     * groups), plus how many groups there are in all. Cached briefly per
-     * filter set, since computing them means aggregating every record in the
-     * window; flushCache() invalidates it.
+     * The dashboard's sending-sources table (every group, without the
+     * envelope split: the dashboard sorts and pages them, then calls
+     * attachEnvelopes() for the shown page) and its top failing sources.
+     * Cached briefly per filter set, since computing them means aggregating
+     * every record in the window; flushCache() invalidates it.
      *
-     * @return array{groups: Collection<int, array<string, mixed>>, top_failing: Collection<int, array<string, mixed>>, total_groups: int}
+     * @return array{groups: Collection<int, array<string, mixed>>, top_failing: Collection<int, array<string, mixed>>}
      */
-    public function dashboardSources(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, int $limit = 25, ?string $failureCategory = null): array
+    public function dashboardSources(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, ?string $failureCategory = null): array
     {
         $failureCategory = self::isFailureCategory($failureCategory) ? $failureCategory : null;
 
@@ -363,21 +363,19 @@ class DmarcMetricsService
             $to->toDateTimeString(),
             $organisationId,
             $allowedDomainIds,
-            $limit,
             $failureCategory,
             $this->hidesExpectedSources,
         ]));
 
         // Cached as plain arrays: the cache refuses to unserialize objects
         // (cache.serializable_classes), so Collections are rebuilt on read.
-        $cached = Cache::remember($key, now()->addMinutes(self::DASHBOARD_CACHE_MINUTES), function () use ($domainId, $from, $to, $organisationId, $allowedDomainIds, $limit, $failureCategory) {
+        $cached = Cache::remember($key, now()->addMinutes(self::DASHBOARD_CACHE_MINUTES), function () use ($domainId, $from, $to, $organisationId, $allowedDomainIds, $failureCategory) {
             $groups = $this->groupedSourceBreakdown($domainId, $from, $to, $organisationId, $allowedDomainIds, withEnvelopes: false, failureCategory: $failureCategory);
             $dehydrate = fn (Collection $groups): array => $groups->map(fn (array $group) => [...$group, 'ips' => $group['ips']->all()])->all();
 
             return [
-                'groups' => $dehydrate($this->attachEnvelopes($groups->take($limit)->values(), $domainId, $from, $to, $organisationId, $allowedDomainIds, $failureCategory)),
+                'groups' => $dehydrate($groups),
                 'top_failing' => $dehydrate($this->topFailingSources($groups)),
-                'total_groups' => $groups->count(),
             ];
         });
 
@@ -386,7 +384,6 @@ class DmarcMetricsService
         return [
             'groups' => $hydrate($cached['groups']),
             'top_failing' => $hydrate($cached['top_failing']),
-            'total_groups' => $cached['total_groups'],
         ];
     }
 

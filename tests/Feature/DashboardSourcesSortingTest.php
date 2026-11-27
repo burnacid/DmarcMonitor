@@ -7,7 +7,7 @@ use App\Models\AggregateReportRecord;
 use App\Models\Domain;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Collection;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Livewire\Volt\Volt;
@@ -81,27 +81,51 @@ class DashboardSourcesSortingTest extends TestCase
         $this->dashboard()->assertSeeHtml('class="block max-w-xs truncate" title="'.e($longName).'"');
     }
 
-    public function test_a_cut_off_sources_table_says_how_many_sources_there_are_and_links_to_all_records(): void
+    public function test_sources_beyond_the_first_25_are_on_the_next_page_with_their_envelope_split(): void
+    {
+        $this->createManySources(26);
+
+        $dashboard = $this->dashboard();
+        $dashboard->assertViewHas('sourceGroups', fn (LengthAwarePaginator $groups) => $groups->count() === 25 && $groups->total() === 26);
+
+        $dashboard->call('gotoPage', 2)->assertViewHas('sourceGroups', fn (LengthAwarePaginator $groups) => $groups->pluck('label')->all() === ['Sender 26'] && isset($groups->first()['envelopes']));
+    }
+
+    public function test_sorting_covers_every_source_not_just_the_first_page(): void
+    {
+        $this->createManySources(26);
+
+        // The smallest sender is the only one failing, so it leads the first page when sorted on DMARC pass.
+        AggregateReportRecord::query()->orderBy('count')->first()->update(['dkim_result' => 'fail', 'spf_result' => 'fail']);
+
+        $this->dashboard()->call('gotoPage', 2)->call('sort', 'dmarc')
+            ->assertViewHas('sourceGroups', fn (LengthAwarePaginator $groups) => $groups->currentPage() === 1 && $groups->first()['label'] === 'Sender 26');
+    }
+
+    public function test_a_filter_change_goes_back_to_the_first_page(): void
+    {
+        $this->createManySources(26);
+
+        $this->dashboard()->call('gotoPage', 2)->call('clearSelectedDay')
+            ->assertViewHas('sourceGroups', fn (LengthAwarePaginator $groups) => $groups->currentPage() === 1);
+    }
+
+    /**
+     * Sender 1 sends the most mail and Sender $count the least, all passing.
+     */
+    private function createManySources(int $count): void
     {
         $domain = Domain::factory()->create();
         $report = AggregateReport::factory()->create(['domain_id' => $domain->id, 'date_range_begin' => now()]);
 
-        foreach (range(1, 26) as $number) {
-            AggregateReportRecord::factory()->enriched("Sender {$number}")->create(['aggregate_report_id' => $report->id]);
+        foreach (range(1, $count) as $number) {
+            AggregateReportRecord::factory()->enriched("Sender {$number}")->create([
+                'aggregate_report_id' => $report->id,
+                'count' => 100 - $number,
+                'dkim_result' => 'pass',
+                'spf_result' => 'pass',
+            ]);
         }
-
-        $this->dashboard()
-            ->assertSee(__('Top :shown of :total', ['shown' => 25, 'total' => 26]))
-            ->assertSee(__('View all'))
-            ->assertSeeHtml('view=records')
-            ->assertSeeHtml('hide_expected=1');
-    }
-
-    public function test_a_complete_sources_table_has_no_view_all_link(): void
-    {
-        $this->createSources();
-
-        $this->dashboard()->assertDontSee(__('View all'));
     }
 
     private function dashboard(): Testable
@@ -133,6 +157,6 @@ class DashboardSourcesSortingTest extends TestCase
      */
     private function assertSourceOrder(array $expected, Testable $dashboard): void
     {
-        $dashboard->assertViewHas('sourceGroups', fn (Collection $groups) => $groups->pluck('label')->all() === $expected);
+        $dashboard->assertViewHas('sourceGroups', fn (LengthAwarePaginator $groups) => $groups->pluck('label')->all() === $expected);
     }
 }
