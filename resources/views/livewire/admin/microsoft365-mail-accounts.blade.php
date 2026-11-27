@@ -235,103 +235,97 @@ new #[Layout('layouts.app')] class extends Component
 }; ?>
 
 <div>
-    <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-100 leading-tight">{{ __('Microsoft 365 Mailboxes') }}</h2>
-    </x-slot>
+    <div>
+        <x-microsoft365.setup-guide
+            :purpose="__('collecting DMARC reports')"
+            permission="Mail.ReadWrite"
+            :shared-app-configured="$sharedAppConfigured"
+            example-policy-mailbox="dmarc@example.com"
+        />
 
-    <div class="py-8">
-        <div class="max-w-[100rem] mx-auto sm:px-6 lg:px-8">
-            <x-microsoft365.setup-guide
-                :purpose="__('collecting DMARC reports')"
-                permission="Mail.ReadWrite"
-                :shared-app-configured="$sharedAppConfigured"
-                example-policy-mailbox="dmarc@example.com"
-            />
+        <div class="flex flex-wrap justify-end gap-3 mb-4">
+            @if ($sharedAppConfigured)
+                <a href="{{ route('admin.microsoft365.connect', 'mailbox') }}" class="inline-flex items-center px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md font-semibold text-xs text-gray-700 dark:text-gray-300 uppercase tracking-widest shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition ease-in-out duration-150">{{ __('Connect with Microsoft') }}</a>
+            @endif
+            <x-primary-button wire:click="create">{{ __('New Mailbox') }}</x-primary-button>
+        </div>
 
-            <div class="flex flex-wrap justify-end gap-3 mb-4">
-                @if ($sharedAppConfigured)
-                    <a href="{{ route('admin.microsoft365.connect', 'mailbox') }}" class="inline-flex items-center px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md font-semibold text-xs text-gray-700 dark:text-gray-300 uppercase tracking-widest shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition ease-in-out duration-150">{{ __('Connect with Microsoft') }}</a>
-                @endif
-                <x-primary-button wire:click="create">{{ __('New Mailbox') }}</x-primary-button>
+        @if ($failingAccounts->isNotEmpty())
+            <div class="mb-4 rounded-md bg-red-50 dark:bg-red-950 p-4 text-sm text-red-800 dark:text-red-200 space-y-1">
+                <p class="font-medium">{{ trans_choice('{1} This mailbox keeps failing, so no reports are collected from it:|[2,*] These mailboxes keep failing, so no reports are collected from them:', $failingAccounts->count()) }}</p>
+                <ul class="list-disc pl-5 space-y-1">
+                    @foreach ($failingAccounts as $failingAccount)
+                        <li>
+                            <span class="font-medium">{{ $failingAccount->label }}</span>
+                            — {{ __(':count failed polls in a row', ['count' => $failingAccount->consecutive_failures]) }}@if ($failingAccount->failure_notified_at), {{ __('since :time', ['time' => $failingAccount->failure_notified_at->diffForHumans()]) }}@endif:
+                            <span class="break-all">{{ $failingAccount->last_error }}</span>
+                        </li>
+                    @endforeach
+                </ul>
+                <p>{{ __('Admins have been emailed. Check the credentials with Edit and Test; the warning clears after the next successful poll.') }}</p>
             </div>
+        @endif
 
-            @if ($failingAccounts->isNotEmpty())
-                <div class="mb-4 rounded-md bg-red-50 dark:bg-red-950 p-4 text-sm text-red-800 dark:text-red-200 space-y-1">
-                    <p class="font-medium">{{ trans_choice('{1} This mailbox keeps failing, so no reports are collected from it:|[2,*] These mailboxes keep failing, so no reports are collected from them:', $failingAccounts->count()) }}</p>
-                    <ul class="list-disc pl-5 space-y-1">
-                        @foreach ($failingAccounts as $failingAccount)
-                            <li>
-                                <span class="font-medium">{{ $failingAccount->label }}</span>
-                                — {{ __(':count failed polls in a row', ['count' => $failingAccount->consecutive_failures]) }}@if ($failingAccount->failure_notified_at), {{ __('since :time', ['time' => $failingAccount->failure_notified_at->diffForHumans()]) }}@endif:
-                                <span class="break-all">{{ $failingAccount->last_error }}</span>
-                            </li>
-                        @endforeach
-                    </ul>
-                    <p>{{ __('Admins have been emailed. Check the credentials with Edit and Test; the warning clears after the next successful poll.') }}</p>
-                </div>
-            @endif
+        @if ($testResult)
+            <div class="mb-4 rounded-md bg-white dark:bg-gray-800 shadow-sm p-4 text-sm {{ $testResultIsError ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400' }}">
+                {{ $testResult }}
+            </div>
+        @endif
 
-            @if ($testResult)
-                <div class="mb-4 rounded-md bg-white dark:bg-gray-800 shadow-sm p-4 text-sm {{ $testResultIsError ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400' }}">
-                    {{ $testResult }}
-                </div>
-            @endif
-
-            <div class="bg-white dark:bg-gray-800 overflow-x-auto shadow-sm sm:rounded-lg">
-                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 max-md:block">
-                    <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Label') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Mailbox') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Domains') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Last Polled') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Status') }}</th>
-                            <th class="px-6 py-3"></th>
+        <div class="bg-white dark:bg-gray-800 overflow-x-auto shadow-sm sm:rounded-lg">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 max-md:block">
+                <thead class="bg-gray-50 dark:bg-gray-700 max-md:hidden">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Label') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Mailbox') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Domains') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Last Polled') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ __('Status') }}</th>
+                        <th class="px-6 py-3"></th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:space-y-3 max-md:p-3">
+                    @forelse ($accounts as $account)
+                        <tr wire:key="m365-mail-{{ $account->id }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
+                            <td data-label="{{ __('Label') }}" class="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400 max-md:before:font-normal">{{ $account->label }}</td>
+                            <td data-label="{{ __('Mailbox') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $account->mailbox }}</td>
+                            <td data-label="{{ __('Domains') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $account->domains_count }}</td>
+                            <td data-label="{{ __('Last Polled') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $account->last_polled_at?->diffForHumans() ?? '—' }}</td>
+                            <td data-label="{{ __('Status') }}" class="px-6 py-4 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
+                                @if ($account->isFailing())
+                                    <span class="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900 px-2 py-0.5 text-xs font-medium text-red-800 dark:text-red-200" title="{{ $account->last_error }}">{{ __('Failing') }}</span>
+                                @elseif ($account->last_error)
+                                    <span class="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900 px-2 py-0.5 text-xs font-medium text-red-800 dark:text-red-200" title="{{ $account->last_error }}">{{ __('Error') }}</span>
+                                @elseif ($account->is_active)
+                                    <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">{{ __('Active') }}</span>
+                                @else
+                                    <span class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">{{ __('Inactive') }}</span>
+                                @endif
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm space-x-3 max-md:px-0 max-md:py-0 max-md:pt-1 max-md:space-x-0 max-md:flex max-md:flex-wrap max-md:gap-3">
+                                <button wire:click="fetchNow({{ $account->id }})" wire:loading.attr="disabled" class="text-emerald-600 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-300">
+                                    <span wire:loading.remove wire:target="fetchNow({{ $account->id }})">{{ __('Fetch now') }}</span>
+                                    <span wire:loading wire:target="fetchNow({{ $account->id }})">{{ __('Fetching…') }}</span>
+                                </button>
+                                <button wire:click="testConnection({{ $account->id }})" wire:loading.attr="disabled" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300">
+                                    <span wire:loading.remove wire:target="testConnection({{ $account->id }})">{{ __('Test') }}</span>
+                                    <span wire:loading wire:target="testConnection({{ $account->id }})">{{ __('Testing…') }}</span>
+                                </button>
+                                <button wire:click="edit({{ $account->id }})" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Edit') }}</button>
+                                <button wire:click="delete({{ $account->id }})" wire:confirm="{{ __('Delete this Microsoft 365 mailbox?') }}" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">{{ __('Delete') }}</button>
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 max-md:block max-md:divide-y-0 max-md:space-y-3 max-md:p-3">
-                        @forelse ($accounts as $account)
-                            <tr wire:key="m365-mail-{{ $account->id }}" class="max-md:block max-md:rounded-lg max-md:border max-md:border-gray-200 dark:max-md:border-gray-700 max-md:p-3 max-md:space-y-2">
-                                <td data-label="{{ __('Label') }}" class="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400 max-md:before:font-normal">{{ $account->label }}</td>
-                                <td data-label="{{ __('Mailbox') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $account->mailbox }}</td>
-                                <td data-label="{{ __('Domains') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $account->domains_count }}</td>
-                                <td data-label="{{ __('Last Polled') }}" class="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $account->last_polled_at?->diffForHumans() ?? '—' }}</td>
-                                <td data-label="{{ __('Status') }}" class="px-6 py-4 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
-                                    @if ($account->isFailing())
-                                        <span class="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900 px-2 py-0.5 text-xs font-medium text-red-800 dark:text-red-200" title="{{ $account->last_error }}">{{ __('Failing') }}</span>
-                                    @elseif ($account->last_error)
-                                        <span class="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900 px-2 py-0.5 text-xs font-medium text-red-800 dark:text-red-200" title="{{ $account->last_error }}">{{ __('Error') }}</span>
-                                    @elseif ($account->is_active)
-                                        <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">{{ __('Active') }}</span>
-                                    @else
-                                        <span class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">{{ __('Inactive') }}</span>
-                                    @endif
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-right text-sm space-x-3 max-md:px-0 max-md:py-0 max-md:pt-1 max-md:space-x-0 max-md:flex max-md:flex-wrap max-md:gap-3">
-                                    <button wire:click="fetchNow({{ $account->id }})" wire:loading.attr="disabled" class="text-emerald-600 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-300">
-                                        <span wire:loading.remove wire:target="fetchNow({{ $account->id }})">{{ __('Fetch now') }}</span>
-                                        <span wire:loading wire:target="fetchNow({{ $account->id }})">{{ __('Fetching…') }}</span>
-                                    </button>
-                                    <button wire:click="testConnection({{ $account->id }})" wire:loading.attr="disabled" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300">
-                                        <span wire:loading.remove wire:target="testConnection({{ $account->id }})">{{ __('Test') }}</span>
-                                        <span wire:loading wire:target="testConnection({{ $account->id }})">{{ __('Testing…') }}</span>
-                                    </button>
-                                    <button wire:click="edit({{ $account->id }})" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">{{ __('Edit') }}</button>
-                                    <button wire:click="delete({{ $account->id }})" wire:confirm="{{ __('Delete this Microsoft 365 mailbox?') }}" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">{{ __('Delete') }}</button>
-                                </td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="6" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No Microsoft 365 mailboxes yet.') }}</td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
+                    @empty
+                        <tr>
+                            <td colspan="6" class="px-6 py-8 text-center text-gray-400 dark:text-gray-500">{{ __('No Microsoft 365 mailboxes yet.') }}</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
 
-            <div class="mt-4">
-                {{ $accounts->links() }}
-            </div>
+        <div class="mt-4">
+            {{ $accounts->links() }}
         </div>
     </div>
 

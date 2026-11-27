@@ -36,6 +36,8 @@ class OrganisationManagementReport
     }
 
     /**
+     * Covers every domain of the organisation, or only $domain when given.
+     *
      * @return array{
      *     verdict: array{status: string, label: string, sentence: string},
      *     kpis: list<array{label: string, value: string, caption: string, delta: ?string, direction: ?string, sentiment: ?string}>,
@@ -47,20 +49,24 @@ class OrganisationManagementReport
      *     previousTo: CarbonInterface,
      * }
      */
-    public function build(Organisation $organisation, CarbonInterface $from, CarbonInterface $to, string $accent = ReportBranding::DEFAULT_ACCENT): array
+    public function build(Organisation $organisation, CarbonInterface $from, CarbonInterface $to, string $accent = ReportBranding::DEFAULT_ACCENT, ?Domain $domain = null): array
     {
         $days = (int) Carbon::parse($from)->startOfDay()->diffInDays(Carbon::parse($to)->startOfDay(), true) + 1;
         $previousFrom = Carbon::parse($from)->subDays($days)->startOfDay();
         $previousTo = Carbon::parse($from)->subDay()->endOfDay();
 
-        $domains = Domain::where('organisation_id', $organisation->id)->orderBy('fqdn')->get();
+        $domainId = $domain?->id;
+        $domains = Domain::where('organisation_id', $organisation->id)
+            ->when($domainId, fn ($query, int $id) => $query->whereKey($id))
+            ->orderBy('fqdn')
+            ->get();
         $healthRows = $this->health->forDomains($domains);
         $rollUp = $this->health->rollUp($healthRows);
 
-        $current = $this->metrics->summary(null, $from, $to, $organisation->id);
-        $previous = $this->metrics->summary(null, $previousFrom, $previousTo, $organisation->id);
-        $currentFailures = $this->metrics->failureBreakdown(null, $from, $to, $organisation->id);
-        $previousFailures = $this->metrics->failureBreakdown(null, $previousFrom, $previousTo, $organisation->id);
+        $current = $this->metrics->summary($domainId, $from, $to, $organisation->id);
+        $previous = $this->metrics->summary($domainId, $previousFrom, $previousTo, $organisation->id);
+        $currentFailures = $this->metrics->failureBreakdown($domainId, $from, $to, $organisation->id);
+        $previousFailures = $this->metrics->failureBreakdown($domainId, $previousFrom, $previousTo, $organisation->id);
         $periodByDomain = $this->metrics->summaryByDomain($domains->pluck('id')->all(), $from, $to);
 
         [$actions, $moreActions] = $this->actions($healthRows);
@@ -68,7 +74,7 @@ class OrganisationManagementReport
         return [
             'verdict' => $this->verdict($current, $healthRows, $rollUp),
             'kpis' => $this->kpis($current, $previous, $currentFailures, $previousFailures, $domains),
-            'chartSvg' => $this->trendChartSvg($this->metrics->trend(null, $from, $to, $organisation->id), $accent),
+            'chartSvg' => $this->trendChartSvg($this->metrics->trend($domainId, $from, $to, $organisation->id), $accent),
             'scorecard' => $this->scorecard($healthRows, $periodByDomain),
             'actions' => $actions,
             'moreActions' => $moreActions,
@@ -103,6 +109,7 @@ class OrganisationManagementReport
 
         $domainsLine = match (true) {
             $rollUp['domains'] === 0 => __('no domains are configured yet.'),
+            $rollUp['domains'] === 1 => $rollUp['domains_with_issues'] === 0 ? __('the domain is in good shape.') : __('the domain needs attention.'),
             $rollUp['domains_with_issues'] === 0 => __('all :count domains are in good shape.', ['count' => $rollUp['domains']]),
             default => __(':issues of :count domains need attention.', ['issues' => $rollUp['domains_with_issues'], 'count' => $rollUp['domains']]),
         };

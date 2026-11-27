@@ -14,7 +14,7 @@
     @else
         <p class="mt-2">
             {{ __('Not enabled yet. Register one multi-tenant app, once, and every tenant can then be connected with a single sign-in:') }}
-            <a href="{{ route('admin.microsoft365-app') }}" wire:navigate class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ __('set up the Microsoft 365 App') }}</a>.
+            <a href="{{ route('admin.microsoft365', ['tab' => 'app']) }}" wire:navigate class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ __('set up the Microsoft 365 App') }}</a>.
         </p>
     @endif
 

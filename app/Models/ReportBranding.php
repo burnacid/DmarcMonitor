@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Storage;
 /**
  * The installation-wide look of the PDF reports: an accent colour and a logo
  * (stored on the private local disk). Only a single row is ever stored;
- * managed under Settings > Report Branding.
+ * managed under Settings > Settings > Report Branding.
  */
 class ReportBranding extends Model
 {

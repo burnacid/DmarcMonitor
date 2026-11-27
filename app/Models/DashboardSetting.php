@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Which periods the dashboard offers (7d, 14d, ...) and which one it opens
  * with for users who haven't picked their own default on their profile.
- * Only a single row is ever stored; managed under Settings > Dashboard.
+ * Only a single row is ever stored; managed under Settings > Settings > Dashboard.
  */
 class DashboardSetting extends Model
 {
@@ -29,7 +29,7 @@ class DashboardSetting extends Model
 
     public const int DEFAULT_PASS_RATE_DAYS = 30;
 
-    protected $fillable = ['day_ranges', 'default_days', 'pass_rate_days'];
+    protected $fillable = ['day_ranges', 'default_days', 'pass_rate_days', 'ignore_missing_reports_when_reporting_here'];
 
     /**
      * @return array<string, string>
@@ -40,6 +40,7 @@ class DashboardSetting extends Model
             'day_ranges' => 'array',
             'default_days' => 'integer',
             'pass_rate_days' => 'integer',
+            'ignore_missing_reports_when_reporting_here' => 'boolean',
         ];
     }
 
@@ -140,6 +141,24 @@ class DashboardSetting extends Model
 
         $setting = static::current() ?? new self;
         $setting->fill(['pass_rate_days' => $days])->save();
+
+        return $setting;
+    }
+
+    /**
+     * Whether a domain whose DMARC record sends its reports to this app is
+     * left unflagged when no report has arrived lately: quiet spells are
+     * fine as long as the reports would land here.
+     */
+    public static function ignoresMissingReportsWhenReportingHere(): bool
+    {
+        return (bool) static::current()?->ignore_missing_reports_when_reporting_here;
+    }
+
+    public static function toggleIgnoreMissingReports(): self
+    {
+        $setting = static::current() ?? new self;
+        $setting->fill(['ignore_missing_reports_when_reporting_here' => ! static::ignoresMissingReportsWhenReportingHere()])->save();
 
         return $setting;
     }

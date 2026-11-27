@@ -10,7 +10,7 @@ use App\Models\Organisation;
 use App\Models\User;
 use App\Services\Analytics\DomainHealthService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Collection;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Livewire;
 use Livewire\Volt\Volt;
 use Tests\TestCase;
@@ -79,7 +79,7 @@ class NullSenderDisplayTest extends TestCase
         $this->inkyRecord(ExpectedSource::factory()->create(['label' => 'INKY']));
 
         Volt::actingAs(User::factory()->create())->test('dashboard')
-            ->assertViewHas('sourceGroups', fn (Collection $groups) => $groups->sole()['expected_labels'] === ['INKY'])
+            ->assertViewHas('sourceGroups', fn (LengthAwarePaginator $groups) => $groups->sole()['expected_labels'] === ['INKY'])
             ->assertSee('Expected: INKY')
             ->assertDontSee('via ipw.inkyphishfence.com')
             ->assertDontSee('Null sender');
@@ -93,7 +93,7 @@ class NullSenderDisplayTest extends TestCase
         Volt::actingAs(User::factory()->create())->test('dashboard')
             ->assertViewHas('summary', fn (array $summary) => $summary['total'] === 20 && $summary['dmarc_pass_pct'] === 100.0)
             ->assertViewHas('failureBreakdown', fn (array $breakdown) => $breakdown['both_fail'] === 0)
-            ->assertViewHas('sourceGroups', fn (Collection $groups) => $groups->pluck('label')->all() === ['Google LLC'])
+            ->assertViewHas('sourceGroups', fn (LengthAwarePaginator $groups) => $groups->pluck('label')->all() === ['Google LLC'])
             ->assertViewHas('hiddenExpectedMessages', AggregateReportRecord::whereKeyNot($healthy->id)->sole()->count)
             ->assertSee('from expected sources are hidden');
     }

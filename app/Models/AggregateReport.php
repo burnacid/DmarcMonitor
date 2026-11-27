@@ -52,15 +52,16 @@ class AggregateReport extends Model
 
     /**
      * The reports list's filter set, shared with its CSV export so both stay
-     * in lockstep instead of drifting apart. Recognised keys: domain_id, ip
-     * (comma-separated), envelope, from, to, search, spf_result, dkim_result,
-     * disposition — every key is optional.
+     * in lockstep instead of drifting apart. Recognised keys: organisation_id,
+     * domain_id, ip (comma-separated), envelope, from, to, search, spf_result,
+     * dkim_result, disposition, expected_source_id — every key is optional.
      *
      * @param  array<string, mixed>  $filters
      */
     public function scopeFilter(Builder $query, array $filters): Builder
     {
         return $query
+            ->when($filters['organisation_id'] ?? null, fn (Builder $q, $v) => $q->whereIn('domain_id', Domain::withTrashed()->where('organisation_id', $v)->select('id')))
             ->when($filters['domain_id'] ?? null, fn (Builder $q, $v) => $q->where('domain_id', $v))
             ->when($filters['from'] ?? null, fn (Builder $q, $v) => $q->whereDate('date_range_begin', '>=', $v))
             ->when($filters['to'] ?? null, fn (Builder $q, $v) => $q->whereDate('date_range_begin', '<=', $v))
@@ -81,6 +82,7 @@ class AggregateReport extends Model
                 ->when($filters['spf_result'] ?? null, fn (Builder $q3, $v) => $q3->where('spf_result', $v))
                 ->when($filters['dkim_result'] ?? null, fn (Builder $q3, $v) => $q3->where('dkim_result', $v))
                 ->when($filters['disposition'] ?? null, fn (Builder $q3, $v) => $q3->where('disposition', $v))
-            ));
+            ))
+            ->when($filters['expected_source_id'] ?? null, fn (Builder $q, $v) => $q->whereHas('records', fn (Builder $q2) => $q2->where('expected_source_id', $v)));
     }
 }

@@ -6,6 +6,7 @@ use App\Models\AggregateReport;
 use App\Models\AggregateReportRecord;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -32,7 +33,7 @@ class DashboardFailureFilterTest extends TestCase
             ->call('selectFailureCategory', 'spf_fail_only')
             ->assertSet('failureCategory', 'spf_fail_only')
             ->assertViewHas('summary', fn (array $summary) => $summary['total'] === 20)
-            ->assertViewHas('sourceGroups', fn (Collection $groups) => $groups->pluck('label')->all() === ['SpfBroken'])
+            ->assertViewHas('sourceGroups', fn (LengthAwarePaginator $groups) => $groups->pluck('label')->all() === ['SpfBroken'])
             ->assertViewHas('topFailingSources', fn (Collection $groups) => $groups->isEmpty());
     }
 
@@ -44,7 +45,7 @@ class DashboardFailureFilterTest extends TestCase
             ->call('selectFailureCategory', 'both_fail')
             ->assertDispatched('failure-breakdown-updated', fn (string $event, array $params) => $params['selected'] === 'both_fail' && $params['breakdown']['total'] === 60)
             ->assertViewHas('failureBreakdown', fn (array $breakdown) => $breakdown['total'] === 60)
-            ->assertViewHas('sourceGroups', fn (Collection $groups) => $groups->pluck('label')->all() === ['Spoofer']);
+            ->assertViewHas('sourceGroups', fn (LengthAwarePaginator $groups) => $groups->pluck('label')->all() === ['Spoofer']);
     }
 
     public function test_clicking_the_same_slice_again_clears_the_filter(): void

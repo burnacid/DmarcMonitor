@@ -56,9 +56,12 @@ class DomainHealthService
     public const array ISSUES = ['no_reports', 'dmarc_missing', 'spf_missing', 'spf_broken_split', 'spf_too_many_lookups', 'spf_too_long', 'dkim_missing', 'dkim_selector_missing', 'low_pass_rate', 'open_alerts', 'not_reporting_here', 'report_auth_missing'];
 
     /** Worth knowing, but not a reason for a domain to need attention. */
-    public const array REMARKS = ['rarely_sends', 'no_mail_seen'];
+    public const array REMARKS = ['rarely_sends', 'no_mail_seen', 'quiet_reporting_here'];
 
     private DmarcMetricsService $metrics;
+
+    /** The admin's "ignore missing reports while the DMARC record reports here" setting, read per forDomains() call. */
+    private bool $ignoreMissingReportsWhenReportingHere = false;
 
     /**
      * Pass rates leave out expected sources hidden from the dashboard, so a
@@ -102,6 +105,7 @@ class DomainHealthService
         return match ($remark) {
             'rarely_sends' => __('Rarely sends mail'),
             'no_mail_seen' => __('No mail seen'),
+            'quiet_reporting_here' => __('Quiet, reports here'),
             default => $remark,
         };
     }
@@ -111,6 +115,7 @@ class DomainHealthService
         return match ($remark) {
             'rarely_sends' => __('No reports for over :days days, which is normal for this domain.', ['days' => self::NO_REPORTS_DAYS]),
             'no_mail_seen' => __('The DMARC record sends reports here, but none have arrived yet. The domain most likely sends no mail.'),
+            'quiet_reporting_here' => __('No reports for over :days days. The DMARC record sends reports here, so missing reports are ignored.', ['days' => self::NO_REPORTS_DAYS]),
             default => '',
         };
     }
@@ -140,6 +145,7 @@ class DomainHealthService
     public function forDomains(Collection $domains, ?int $days = null): Collection
     {
         $days ??= DashboardSetting::passRateDays();
+        $this->ignoreMissingReportsWhenReportingHere = DashboardSetting::ignoresMissingReportsWhenReportingHere();
         $domainIds = $domains->pluck('id')->all();
 
         if ($domainIds === []) {
@@ -352,7 +358,8 @@ class DomainHealthService
      * Why missing reports are expected rather than a problem, if they are:
      * the domain has historically sent only now and then, or its DMARC
      * record points here and no report has ever arrived, so it most likely
-     * sends no mail at all.
+     * sends no mail at all, or an admin chose to ignore missing reports for
+     * every domain whose record points here.
      *
      * @param  array<string, mixed>  $health
      */
@@ -361,6 +368,7 @@ class DomainHealthService
         return match (true) {
             $health['rarely_sends'] => 'rarely_sends',
             $health['last_report_at'] === null && $health['reports_to_us'] === true => 'no_mail_seen',
+            $this->ignoreMissingReportsWhenReportingHere && $health['reports_to_us'] === true => 'quiet_reporting_here',
             default => null,
         };
     }

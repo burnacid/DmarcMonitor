@@ -16,20 +16,22 @@ use Illuminate\Support\Str;
 class Microsoft365ConnectController extends Controller
 {
     /**
+     * Connect target => tab of the Microsoft 365 page to return to.
+     *
      * @var array<string, string>
      */
-    private const array TARGET_ROUTES = [
-        'mailbox' => 'admin.microsoft365-mail-accounts',
-        'sending' => 'admin.microsoft365-send-account',
+    private const array TARGET_TABS = [
+        'mailbox' => 'mailboxes',
+        'sending' => 'sending',
     ];
 
     public function redirect(Request $request, string $target): RedirectResponse
     {
-        abort_unless(array_key_exists($target, self::TARGET_ROUTES), 404);
+        abort_unless(array_key_exists($target, self::TARGET_TABS), 404);
 
         if (! Microsoft365App::isConfigured()) {
-            return redirect()->route(self::TARGET_ROUTES[$target])
-                ->with('microsoft365_connect_error', __('Connect with Microsoft is not configured: register the app under Settings > Microsoft 365 App.'));
+            return $this->backToTab(self::TARGET_TABS[$target])
+                ->with('microsoft365_connect_error', __('Connect with Microsoft is not configured: register the app under Settings > Microsoft 365 > App.'));
         }
 
         $state = Str::random(40);
@@ -41,10 +43,10 @@ class Microsoft365ConnectController extends Controller
     public function callback(Request $request): RedirectResponse
     {
         $pending = $request->session()->pull('microsoft365_connect');
-        $route = self::TARGET_ROUTES[$pending['target'] ?? 'mailbox'] ?? self::TARGET_ROUTES['mailbox'];
+        $tab = self::TARGET_TABS[$pending['target'] ?? 'mailbox'] ?? self::TARGET_TABS['mailbox'];
 
         if (! is_array($pending) || ! hash_equals((string) $pending['state'], (string) $request->query('state'))) {
-            return redirect()->route($route)
+            return $this->backToTab($tab)
                 ->with('microsoft365_connect_error', __('The Microsoft sign-in could not be verified. Please try connecting again.'));
         }
 
@@ -53,13 +55,13 @@ class Microsoft365ConnectController extends Controller
                 ? __('Permission was not granted. Sign in with a Global Administrator or Privileged Role Administrator account and accept the requested permissions.')
                 : (string) ($request->query('error_description') ?: $request->query('error'));
 
-            return redirect()->route($route)->with('microsoft365_connect_error', $message);
+            return $this->backToTab($tab)->with('microsoft365_connect_error', $message);
         }
 
         $tenantId = (string) $request->query('tenant');
 
         if (! Str::isUuid($tenantId) || strtolower((string) $request->query('admin_consent')) !== 'true') {
-            return redirect()->route($route)
+            return $this->backToTab($tab)
                 ->with('microsoft365_connect_error', __('Microsoft did not confirm admin consent. Please try connecting again.'));
         }
 
@@ -69,6 +71,11 @@ class Microsoft365ConnectController extends Controller
             context: ['tenant_id' => $tenantId, 'target' => $pending['target']],
         );
 
-        return redirect()->route($route)->with('microsoft365_connected_tenant', $tenantId);
+        return $this->backToTab($tab)->with('microsoft365_connected_tenant', $tenantId);
+    }
+
+    private function backToTab(string $tab): RedirectResponse
+    {
+        return redirect()->route('admin.microsoft365', ['tab' => $tab]);
     }
 }

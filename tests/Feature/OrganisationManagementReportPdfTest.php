@@ -87,6 +87,26 @@ class OrganisationManagementReportPdfTest extends TestCase
         $this->assertSame('at_risk', $this->build($organisation)['verdict']['status']);
     }
 
+    public function test_a_single_domain_report_leaves_out_the_organisations_other_domains(): void
+    {
+        $organisation = Organisation::factory()->create();
+        $healthy = Domain::factory()->create(['organisation_id' => $organisation->id, 'fqdn' => 'healthy.test']);
+        $missing = Domain::factory()->create(['organisation_id' => $organisation->id, 'fqdn' => 'missing.test', 'dmarc_status' => 'missing']);
+        $this->addRecords($healthy, now()->subDay(), pass: 100, fail: 0);
+        $this->addRecords($missing, now()->subDay(), pass: 0, fail: 40);
+
+        $report = app(OrganisationManagementReport::class)->build($organisation, now()->subDays(29)->startOfDay(), now()->endOfDay(), domain: $healthy);
+
+        $this->assertSame(['healthy.test'], array_column($report['scorecard'], 'fqdn'));
+        $this->assertSame('100', $report['kpis'][1]['value']);
+        $this->assertSame('healthy', $report['verdict']['status']);
+        $this->assertStringContainsString('the domain is in good shape', $report['verdict']['sentence']);
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('organisations.management-report-pdf', ['organisation' => $organisation, 'domain' => $healthy->id]))
+            ->assertOk();
+    }
+
     public function test_kpis_compare_against_the_previous_period_of_equal_length(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-09-30 12:00'));

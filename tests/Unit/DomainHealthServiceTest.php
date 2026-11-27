@@ -140,6 +140,36 @@ class DomainHealthServiceTest extends TestCase
         $this->assertSame([], $this->health($reportsElsewhere)['remarks']);
     }
 
+    public function test_missing_reports_are_ignored_for_domains_reporting_here_when_the_admin_enables_it(): void
+    {
+        config(['dmarc.rua_address' => 'dmarc@msp.test']);
+        $reportsHere = $this->healthyDomain();
+        $this->addReport($reportsHere, 50, ingestedAt: now()->subDays(10));
+        $reportsElsewhere = $this->healthyDomain('v=DMARC1; p=none; rua=mailto:reports@vendor.test');
+        $this->addReport($reportsElsewhere, 50, ingestedAt: now()->subDays(10));
+
+        $this->assertContains('no_reports', $this->health($reportsHere)['issues']);
+
+        DashboardSetting::toggleIgnoreMissingReports();
+
+        $health = $this->health($reportsHere);
+        $this->assertSame([], $health['issues']);
+        $this->assertSame(['quiet_reporting_here'], $health['remarks']);
+
+        $this->assertContains('no_reports', $this->health($reportsElsewhere)['issues']);
+        $this->assertSame([], $this->health($reportsElsewhere)['remarks']);
+    }
+
+    public function test_missing_reports_are_not_ignored_without_a_configured_report_address(): void
+    {
+        config(['dmarc.rua_address' => null]);
+        DashboardSetting::toggleIgnoreMissingReports();
+        $domain = $this->healthyDomain();
+        $this->addReport($domain, 50, ingestedAt: now()->subDays(10));
+
+        $this->assertContains('no_reports', $this->health($domain)['issues']);
+    }
+
     public function test_dns_problems_low_pass_rate_open_alerts_and_foreign_rua_are_issues(): void
     {
         config(['dmarc.rua_address' => 'dmarc@msp.test']);

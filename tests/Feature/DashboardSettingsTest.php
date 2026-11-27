@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuditLog;
 use App\Models\DashboardSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -15,9 +16,9 @@ class DashboardSettingsTest extends TestCase
 
     public function test_only_admins_can_open_the_settings_page(): void
     {
-        $this->actingAs(User::factory()->editor()->create())->get(route('admin.dashboard-settings'))->assertForbidden();
-        $this->actingAs(User::factory()->viewer()->create())->get(route('admin.dashboard-settings'))->assertForbidden();
-        $this->actingAs(User::factory()->create())->get(route('admin.dashboard-settings'))->assertOk();
+        $this->actingAs(User::factory()->editor()->create())->get(route('admin.settings', ['tab' => 'dashboard']))->assertForbidden();
+        $this->actingAs(User::factory()->viewer()->create())->get(route('admin.settings', ['tab' => 'dashboard']))->assertForbidden();
+        $this->actingAs(User::factory()->create())->get(route('admin.settings', ['tab' => 'dashboard']))->assertOk();
     }
 
     public function test_the_dashboard_offers_14_days_out_of_the_box(): void
@@ -119,5 +120,22 @@ class DashboardSettingsTest extends TestCase
             ->call('setPassRateDays', 90);
 
         $this->assertSame(14, DashboardSetting::passRateDays());
+    }
+
+    public function test_admin_can_switch_ignoring_missing_reports_on_and_off(): void
+    {
+        $this->assertFalse(DashboardSetting::ignoresMissingReportsWhenReportingHere());
+
+        $component = Volt::actingAs(User::factory()->create())->test('admin.dashboard-settings')
+            ->call('toggleIgnoreMissingReports')
+            ->assertViewHas('ignoreMissingReports', true);
+
+        $this->assertTrue(DashboardSetting::ignoresMissingReportsWhenReportingHere());
+        $this->assertTrue(AuditLog::where('action', 'dashboard.ignore_missing_reports_enabled')->exists());
+
+        $component->call('toggleIgnoreMissingReports')->assertViewHas('ignoreMissingReports', false);
+
+        $this->assertFalse(DashboardSetting::ignoresMissingReportsWhenReportingHere());
+        $this->assertTrue(AuditLog::where('action', 'dashboard.ignore_missing_reports_disabled')->exists());
     }
 }

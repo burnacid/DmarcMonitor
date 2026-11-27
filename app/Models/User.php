@@ -15,12 +15,18 @@ use Illuminate\Support\Facades\Password;
 use Laravel\Passkeys\Contracts\PasskeyUser;
 use Laravel\Passkeys\PasskeyAuthenticatable;
 
-#[Fillable(['name', 'email', 'password', 'role', 'all_organisations', 'dashboard_default_days'])]
+#[Fillable(['name', 'email', 'password', 'role', 'all_organisations', 'dashboard_default_days', 'report_record_columns'])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
 class User extends Authenticatable implements PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, PasskeyAuthenticatable;
+
+    /** The columns the Records tab on the Reports page can show, in display order. */
+    public const array REPORT_RECORD_COLUMNS = ['report', 'source', 'count', 'results', 'addresses', 'authentication'];
+
+    /** The Records columns shown until the user picks their own. */
+    public const array DEFAULT_REPORT_RECORD_COLUMNS = ['report', 'source', 'count', 'results', 'addresses'];
 
     /**
      * Get the attributes that should be cast.
@@ -37,7 +43,21 @@ class User extends Authenticatable implements PasskeyUser
             'two_factor_confirmed_at' => 'datetime',
             'all_organisations' => 'boolean',
             'dashboard_default_days' => 'integer',
+            'report_record_columns' => 'array',
         ];
+    }
+
+    /**
+     * The Records columns this user sees, in display order: their own pick
+     * of known columns, or the defaults when they have none.
+     *
+     * @return list<string>
+     */
+    public function reportRecordColumns(): array
+    {
+        $columns = array_values(array_intersect(self::REPORT_RECORD_COLUMNS, (array) $this->report_record_columns));
+
+        return $columns !== [] ? $columns : self::DEFAULT_REPORT_RECORD_COLUMNS;
     }
 
     /**

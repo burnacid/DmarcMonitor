@@ -8,15 +8,20 @@ use App\Services\Analytics\DmarcMetricsService;
 use App\Services\Analytics\DomainHealthService;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Lazy;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
+use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Lazy] class extends Component
 {
-    use WithSorting;
+    use WithPagination, WithSorting;
+
+    /** Rows per page of the sending-sources table. */
+    private const int SOURCES_PER_PAGE = 25;
 
     #[Url(as: 'organisation')]
     public ?int $organisationId = null;
@@ -105,6 +110,27 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
         })->values();
     }
 
+    /**
+     * One page of the sorted sending-sources table. Sorting covers every
+     * source; the envelope split is only loaded for the rows on the page.
+     *
+     * @param  Collection<int, array<string, mixed>>  $groups
+     * @param  array<int, int>|null  $allowedDomainIds
+     * @return LengthAwarePaginator<int, array<string, mixed>>
+     */
+    private function paginateSourceGroups(DmarcMetricsService $service, Collection $groups, Carbon $from, Carbon $to, ?array $allowedDomainIds): LengthAwarePaginator
+    {
+        $page = $this->getPage();
+        $rows = $this->sortSourceGroups($groups)->forPage($page, self::SOURCES_PER_PAGE)->values();
+
+        return new LengthAwarePaginator(
+            $service->attachEnvelopes($rows, $this->domainId, $from, $to, $this->organisationId, $allowedDomainIds, $this->failureCategory),
+            $groups->count(),
+            self::SOURCES_PER_PAGE,
+            $page,
+        );
+    }
+
     public function mount(): void
     {
         $this->days ??= auth()->user()->dashboardDays();
@@ -181,10 +207,13 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
      * keyed off the drill-down-aware effective window, so it also needs
      * refreshing when a day is selected/cleared. It is never narrowed to the
      * picked failure category itself (the other slices must stay clickable),
-     * it only highlights the picked slice.
+     * it only highlights the picked slice. Every filter change ends up here,
+     * so the sending-sources table also goes back to its first page.
      */
     private function dispatchChartUpdates(bool $trendChanged): void
     {
+        $this->resetPage();
+
         if ($trendChanged) {
             $this->dispatch('trend-updated', trend: $this->trendData());
         }
@@ -299,7 +328,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
             'summary' => $service->summary($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds, failureCategory: $this->failureCategory),
             'trend' => $this->trendData(),
             'failureBreakdown' => $service->failureBreakdown($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
-            'sourceGroups' => $this->sortSourceGroups($sources['groups']),
+            'sourceGroups' => $this->paginateSourceGroups($service, $sources['groups'], $from, $to, $allowedDomainIds),
             'topFailingSources' => $sources['top_failing'],
             'hiddenExpectedMessages' => $service->hiddenExpectedMessageCount($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
             'hasAnyReports' => \App\Models\AggregateReport::visibleTo($user)->exists(),
@@ -504,17 +533,18 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                 </div>
 
                 {{-- Source breakdown --}}
-                <div class="relative bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
+                <div id="sending-sources" class="relative bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                     <div
                         wire:loading.delay
-                        wire:target="sort"
+                        wire:target="sort, gotoPage, nextPage, previousPage"
                         class="absolute inset-0 z-10 bg-white/70 dark:bg-gray-800/70"
                         role="status"
                     >
                         <div class="flex h-full w-full items-center justify-center">
                             <span class="inline-flex items-center gap-2 rounded-md bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-500 dark:text-gray-300 shadow">
                                 <x-spinner class="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                                {{ __('Sorting…') }}
+                                <span wire:loading.delay wire:target="sort">{{ __('Sorting…') }}</span>
+                                <span wire:loading.delay wire:target="gotoPage, nextPage, previousPage">{{ __('Loading…') }}</span>
                             </span>
                         </div>
                     </div>
@@ -560,16 +590,16 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                                     >
                                         <td data-label="{{ __('Domain') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $group['domain'] }}</td>
                                         <td data-label="{{ __('Source') }}" class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
-                                            <div class="flex items-center gap-2">
+                                            <div class="flex min-w-0 items-center gap-2 max-md:max-w-[60%]">
                                                 @if ($expandable)
                                                     <svg :class="{ 'rotate-90': open }" class="h-3.5 w-3.5 text-gray-400 dark:text-gray-500 transition-transform shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
                                                     </svg>
                                                 @else
-                                                    <span class="inline-block w-3.5"></span>
+                                                    <span class="inline-block w-3.5 shrink-0"></span>
                                                 @endif
-                                                <span>
-                                                    <span class="whitespace-nowrap">{{ $group['label'] }}</span>
+                                                <span class="min-w-0">
+                                                    <span class="block max-w-xs truncate" title="{{ $group['label'] }}">{{ $group['label'] }}</span>
                                                     <x-source-badges :expected-labels="$group['expected_labels'] ?? []" class="mt-0.5" />
                                                 </span>
                                             </div>
@@ -638,7 +668,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                                             @php($envelopeDkimStatus = $this->statusFor($envelope['dkim_pass_pct']))
                                             <tr x-show="open" x-cloak class="bg-gray-100 dark:bg-gray-900/40 max-md:block max-md:p-3 max-md:space-y-2 max-md:border-t max-md:border-gray-200 dark:max-md:border-gray-700">
                                                 <td class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400 max-md:hidden">{{ $group['domain'] }}</td>
-                                                <td data-label="{{ __('Source') }}" class="md:pl-14 md:pr-6 py-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $group['label'] }}</td>
+                                                <td data-label="{{ __('Source') }}" class="md:pl-14 md:pr-6 py-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400"><span class="block max-w-xs truncate max-md:max-w-[60%]" title="{{ $group['label'] }}">{{ $group['label'] }}</span></td>
                                                 <td data-label="{{ __('IP Addresses') }}" class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                                     @if (count($envelope['ips']) > 1)
                                                         <span class="group relative inline-flex items-center rounded-full bg-gray-200 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap cursor-default">
@@ -707,6 +737,11 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                             @endforelse
                         </table>
                     </div>
+                    @if ($sourceGroups->hasPages())
+                        <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+                            {{ $sourceGroups->links(data: ['scrollTo' => '#sending-sources']) }}
+                        </div>
+                    @endif
                 </div>
             @endif
         </div>

@@ -65,14 +65,19 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Volt::route('users', 'admin.users')->name('users');
     Volt::route('domains/trash', 'admin.domains-trash')->name('domains.trash');
     Volt::route('imap-accounts', 'admin.imap-accounts')->name('imap-accounts');
-    Volt::route('microsoft365-mailboxes', 'admin.microsoft365-mail-accounts')->name('microsoft365-mail-accounts');
-    Volt::route('microsoft365-sending', 'admin.microsoft365-send-account')->name('microsoft365-send-account');
-    Volt::route('microsoft365-app', 'admin.microsoft365-app')->name('microsoft365-app');
+    Volt::route('microsoft365', 'admin.microsoft365')->name('microsoft365');
     Route::get('microsoft365/connect/{target}', [Microsoft365ConnectController::class, 'redirect'])->name('microsoft365.connect');
     Route::get('microsoft365/callback', [Microsoft365ConnectController::class, 'callback'])->name('microsoft365.callback');
-    Volt::route('report-branding', 'admin.report-branding')->name('report-branding');
-    Volt::route('dashboard-settings', 'admin.dashboard-settings')->name('dashboard-settings');
-    Volt::route('public-dashboard', 'admin.public-dashboard')->name('public-dashboard');
+    Volt::route('settings', 'admin.settings')->name('settings');
+
+    // Former separate pages, now tabs; kept so bookmarks keep working.
+    Route::redirect('microsoft365-mailboxes', '/admin/microsoft365?tab=mailboxes')->name('microsoft365-mail-accounts');
+    Route::redirect('microsoft365-sending', '/admin/microsoft365?tab=sending')->name('microsoft365-send-account');
+    Route::redirect('microsoft365-app', '/admin/microsoft365?tab=app')->name('microsoft365-app');
+    Route::redirect('report-branding', '/admin/settings?tab=report-branding')->name('report-branding');
+    Route::redirect('dashboard-settings', '/admin/settings?tab=dashboard')->name('dashboard-settings');
+    Route::redirect('public-dashboard', '/admin/settings?tab=public-dashboard')->name('public-dashboard');
+
     Volt::route('scheduled-tasks', 'admin.scheduled-tasks')->name('scheduled-tasks');
     Volt::route('audit-log', 'admin.audit-log')->name('audit-log');
 });

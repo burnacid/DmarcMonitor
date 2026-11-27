@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Model;
  * when the address doesn't pick one, and which policies its "Enforced" tile
  * counts (reject, quarantine or both). The ranges offered are the periods
  * enabled for the dashboard (see DashboardSetting). Only a single row is ever
- * stored; managed under Settings > Public Dashboard. Off until an admin
+ * stored; managed under Settings > Settings > Public Dashboard. Off until an admin
  * enables it.
  */
 class PublicDashboardSetting extends Model

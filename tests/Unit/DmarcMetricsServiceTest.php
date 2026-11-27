@@ -284,12 +284,12 @@ class DmarcMetricsServiceTest extends TestCase
         $this->assertTrue($groups->every(fn ($group) => $group['envelopes'] === [] && $group['envelope_count'] === 0));
     }
 
-    public function test_dashboard_sources_limits_the_table_but_picks_failing_sources_from_all_groups(): void
+    public function test_dashboard_sources_lists_every_group_largest_first_and_picks_the_failing_ones(): void
     {
         (new AggregateReportParser)->parseFile($this->fixture('multi-record-multi-auth.xml'));
 
-        // The passing source has the most volume; the failing one only falls
-        // outside a one-row table but is still large enough to count as failing.
+        // The passing source has the most volume; the failing one is still
+        // large enough to count as failing.
         AggregateReportRecord::where('source_ip', '40.92.90.104')->update(['count' => 10]);
         AggregateReportRecord::where('source_ip', '203.0.113.55')->update(['count' => 6]);
 
@@ -297,12 +297,13 @@ class DmarcMetricsServiceTest extends TestCase
         $from = Carbon::createFromTimestamp(1735689600)->subDay();
         $to = Carbon::createFromTimestamp(1735689600)->addDay();
 
-        $sources = $service->dashboardSources(null, $from, $to, limit: 1);
+        $sources = $service->dashboardSources(null, $from, $to);
 
-        $this->assertCount(1, $sources['groups']);
-        $this->assertEquals('40.92.90.104', $sources['groups'][0]['label']);
-        $this->assertEquals(1, $sources['groups'][0]['envelope_count']);
-        $this->assertEquals('recipient.example.net', $sources['groups'][0]['envelopes'][0]['domain']);
+        $this->assertEquals(['40.92.90.104', '203.0.113.55'], $sources['groups']->pluck('label')->all());
+
+        $withEnvelopes = $service->attachEnvelopes($sources['groups']->take(1), null, $from, $to);
+        $this->assertEquals(1, $withEnvelopes[0]['envelope_count']);
+        $this->assertEquals('recipient.example.net', $withEnvelopes[0]['envelopes'][0]['domain']);
 
         $this->assertCount(1, $sources['top_failing']);
         $this->assertEquals('203.0.113.55', $sources['top_failing'][0]['label']);

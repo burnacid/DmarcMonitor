@@ -2,6 +2,28 @@
 
 All notable changes to DMARC Monitor are listed here. Versions follow the [VERSION](VERSION) file and the Docker image tags.
 
+## [1.9.0]
+
+### Added
+
+- The PDF reports of an organisation (technical and management) can now cover a single domain. Pick it under "Domain" in the PDF Report dialog on the Organisations page; "All domains" is still the default. The report then shows that domain's name under the title, uses only its mail, and is named after the domain.
+
+- On the Expected Sources page, the "Messages matched" number of a source is now a link. It opens the Records tab of the Reports page with only the records that source matched, so you can check whether it matches the right mail. The source shows as an "Expected source: <label>" chip there; its × removes the filter. The filter also applies to the CSV export.
+
+- **Records tab on the Reports page**: switch from the list of reports to a list of their individual records, one row per source IP, across all reports you can see. The table is compact: a Report column (domain, period and reporting organisation), a Source column (IP with country, hostname and ASN organisation), the count, a Results column (disposition, DKIM and SPF), and an Addresses column (header from, envelope from and envelope to). The "Columns" menu shows or hides each column, and also offers an Authentication column with the DKIM domain and selector and the SPF domain and scope. Your choice is saved on your account, so it follows you to other devices; "Reset to default" brings back the standard set. The filters stay when you switch tabs, but in the Records tab they apply to each record. For example, SPF = Fail shows only the failing records, not every record of a report that has one. The search looks through the source IP, hostname, ASN (e.g. `AS13335`) and ASN organisation, the header, envelope, DKIM and SPF domains, and the reporting organisation. Tick "Hide expected sources" under Filters to leave out records that match an expected source. Click a column header to sort. "View report" opens the record's report filtered to its results, and Export CSV downloads exactly the listed records.
+
+- Admins can stop the "No recent reports" flag for domains whose DMARC record sends its reports to an address this app monitors, under Settings > Settings > Dashboard > Ignore missing reports for domains reporting here (off by default). Such a domain then shows the remark "Quiet, reports here" instead, on the Domains and Overview pages, and is no longer listed in the management report (PDF) for missing reports. If the record stops pointing here, or `DMARC_RUA_ADDRESS` isn't set, the flag comes back.
+
+### Changed
+
+- **Tidier filters on the Reports page**: the search box now sits on top, next to Filters, Columns and Export CSV. "Filters" opens a panel with the organisation, domain, period, envelope, SPF, DKIM and disposition filters, and shows how many filters are in use. Filters in use are listed as chips under the search box, even while the panel is closed. The × on a chip removes that one filter, and "Clear filters" removes all of them. The organisation filter is new on this page: as on the dashboard, it narrows the domain list to that organisation's domains, and it also applies to the CSV export.
+- **Shorter settings menu**: Dashboard Settings, Public Dashboard and Report Branding are now tabs of one Settings page. The Microsoft 365 Mailboxes, Sending Account and App pages are now tabs of one Microsoft 365 page, which keeps the failing-mailbox count. The old addresses redirect to the matching tab, so bookmarks keep working. "Connect with Microsoft" returns to the tab it was started from. The callback address registered in Microsoft Entra doesn't change.
+- The dashboard's Sending sources table now lists every source, 25 per page, instead of only the 25 largest. Sorting on a column covers all sources, so sorting on DMARC Pass also brings small sources that fail to the top. Changing a filter, the period or the selected day goes back to the first page. While a page loads, the table is covered by a "Loading…" spinner, as it is while sorting.
+
+### Fixed
+
+- Long source names (for example "Compagnie Francaise d'Assurance pour le Commerce Exterieur S.A.") made the dashboard's Sending sources table scroll sideways. They are now cut off with "…"; hover over the name to see it in full.
+
 ## [1.8.0]
 
 ### Added
