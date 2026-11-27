@@ -61,14 +61,20 @@ class DashboardSourcesSortingTest extends TestCase
         $this->assertSourceOrder(['Bravo', 'Charlie', 'Alpha'], $dashboard);
     }
 
-    public function test_the_sending_sources_table_shows_an_overlay_while_sorting(): void
+    public function test_the_sending_sources_table_shows_an_overlay_while_sorting_or_changing_pages(): void
     {
         $this->createSources();
 
-        $dashboard = $this->dashboard()->assertSeeHtmlInOrder(['wire:target="sort"', __('Sorting…'), __('Sending sources')]);
+        $dashboard = $this->dashboard()->assertSeeHtmlInOrder([
+            'wire:target="sort, gotoPage, nextPage, previousPage"',
+            __('Sorting…'),
+            'wire:target="gotoPage, nextPage, previousPage"',
+            __('Loading…'),
+            __('Sending sources'),
+        ]);
 
         // Livewire only hides loading elements up front for its known attribute names; others (e.g. wire:loading.delay.flex) show all the time.
-        $this->assertMatchesRegularExpression('/\swire:loading\.delay\s+wire:target="sort"/', $dashboard->html());
+        $this->assertMatchesRegularExpression('/\swire:loading\.delay\s+wire:target="sort, gotoPage, nextPage, previousPage"/', $dashboard->html());
     }
 
     public function test_long_source_names_are_truncated_with_the_full_name_on_hover(): void
