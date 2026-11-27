@@ -71,6 +71,16 @@ class DashboardSourcesSortingTest extends TestCase
         $this->assertMatchesRegularExpression('/\swire:loading\.delay\s+wire:target="sort"/', $dashboard->html());
     }
 
+    public function test_long_source_names_are_truncated_with_the_full_name_on_hover(): void
+    {
+        $longName = "Compagnie Francaise d'Assurance pour le Commerce Exterieur S.A.";
+        $domain = Domain::factory()->create();
+        $report = AggregateReport::factory()->create(['domain_id' => $domain->id, 'date_range_begin' => now()]);
+        AggregateReportRecord::factory()->enriched($longName)->create(['aggregate_report_id' => $report->id]);
+
+        $this->dashboard()->assertSeeHtml('class="block max-w-xs truncate" title="'.e($longName).'"');
+    }
+
     private function dashboard(): Testable
     {
         return Volt::actingAs(User::factory()->create())->test('dashboard');

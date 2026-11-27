@@ -47,6 +47,7 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 
 ### Fixed
 
+- Long source names (for example "Compagnie Francaise d'Assurance pour le Commerce Exterieur S.A.") made the dashboard's Sending sources table scroll sideways. They are now cut off with "…"; hover over the name to see it in full.
 - Microsoft 365 mailboxes set up in another language than English failed with "Inbox folder [Inbox] not found", because Outlook shows the inbox under a translated name (for example "Postvak IN"). Standard folders such as Inbox, Archive, Junk Email and Deleted Items are now found in any language. "Test connection" also shows Microsoft's own error message when the folder lookup is refused, for example because of missing permissions.
 - The dashboard's sending-sources and top-failing-sources tables could leave out or mix up rows after changing the period with "All domains" selected. This happened when the same source (for example Google) sent mail for more than one domain.
 - Microsoft 365 and Proton Mail domains were reported as "DKIM selector missing". These providers only publish the keys they are currently using, so a selector that is set up correctly can still have no key. Microsoft 365 publishes one of selector1 and selector2; Proton Mail publishes some of protonmail, protonmail2 and protonmail3. Such a selector, with its CNAME in place, is now shown as "Standby" and is no longer reported as a problem, as long as DKIM works. A domain where no DKIM key is published at all is still reported as "DKIM missing".

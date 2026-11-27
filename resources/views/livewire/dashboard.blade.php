@@ -560,16 +560,16 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                                     >
                                         <td data-label="{{ __('Domain') }}" class="px-6 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $group['domain'] }}</td>
                                         <td data-label="{{ __('Source') }}" class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0 max-md:before:content-[attr(data-label)] max-md:before:text-xs max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
-                                            <div class="flex items-center gap-2">
+                                            <div class="flex min-w-0 items-center gap-2 max-md:max-w-[60%]">
                                                 @if ($expandable)
                                                     <svg :class="{ 'rotate-90': open }" class="h-3.5 w-3.5 text-gray-400 dark:text-gray-500 transition-transform shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
                                                     </svg>
                                                 @else
-                                                    <span class="inline-block w-3.5"></span>
+                                                    <span class="inline-block w-3.5 shrink-0"></span>
                                                 @endif
-                                                <span>
-                                                    <span class="whitespace-nowrap">{{ $group['label'] }}</span>
+                                                <span class="min-w-0">
+                                                    <span class="block max-w-xs truncate" title="{{ $group['label'] }}">{{ $group['label'] }}</span>
                                                     <x-source-badges :expected-labels="$group['expected_labels'] ?? []" class="mt-0.5" />
                                                 </span>
                                             </div>
@@ -638,7 +638,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                                             @php($envelopeDkimStatus = $this->statusFor($envelope['dkim_pass_pct']))
                                             <tr x-show="open" x-cloak class="bg-gray-100 dark:bg-gray-900/40 max-md:block max-md:p-3 max-md:space-y-2 max-md:border-t max-md:border-gray-200 dark:max-md:border-gray-700">
                                                 <td class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400 max-md:hidden">{{ $group['domain'] }}</td>
-                                                <td data-label="{{ __('Source') }}" class="md:pl-14 md:pr-6 py-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">{{ $group['label'] }}</td>
+                                                <td data-label="{{ __('Source') }}" class="md:pl-14 md:pr-6 py-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400"><span class="block max-w-xs truncate max-md:max-w-[60%]" title="{{ $group['label'] }}">{{ $group['label'] }}</span></td>
                                                 <td data-label="{{ __('IP Addresses') }}" class="px-6 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400 max-md:flex max-md:justify-between max-md:items-center max-md:gap-3 max-md:px-0 max-md:before:content-[attr(data-label)] max-md:before:font-medium max-md:before:uppercase max-md:before:tracking-wider max-md:before:text-gray-500 dark:max-md:before:text-gray-400">
                                                     @if (count($envelope['ips']) > 1)
                                                         <span class="group relative inline-flex items-center rounded-full bg-gray-200 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap cursor-default">
