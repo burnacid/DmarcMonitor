@@ -301,6 +301,7 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
             'failureBreakdown' => $service->failureBreakdown($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
             'sourceGroups' => $this->sortSourceGroups($sources['groups']),
             'topFailingSources' => $sources['top_failing'],
+            'totalSourceGroups' => $sources['total_groups'],
             'hiddenExpectedMessages' => $service->hiddenExpectedMessageCount($this->domainId, $from, $to, $this->organisationId, $allowedDomainIds),
             'hasAnyReports' => \App\Models\AggregateReport::visibleTo($user)->exists(),
             'windowFrom' => $from->toDateString(),
@@ -519,7 +520,17 @@ new #[Layout('layouts.app')] #[Lazy] class extends Component
                         </div>
                     </div>
                     <div class="flex items-center justify-between px-6 pt-4">
-                        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Sending sources') }}</h3>
+                        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {{ __('Sending sources') }}
+                            @if ($totalSourceGroups > $sourceGroups->count())
+                                <span class="ml-1 font-normal text-gray-500 dark:text-gray-400">{{ __('Top :shown of :total', ['shown' => $sourceGroups->count(), 'total' => number_format($totalSourceGroups)]) }}</span>
+                                <a
+                                    href="{{ route('reports.index', ['view' => 'records', 'domain_id' => $domainId, 'organisation' => $organisationId, 'from' => $windowFrom, 'to' => $windowTo, 'hide_expected' => 1]) }}"
+                                    wire:navigate
+                                    class="ml-2 font-normal text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"
+                                >{{ __('View all') }}</a>
+                            @endif
+                        </h3>
                         <a
                             href="{{ route('dashboard.export-sources', ['domain_id' => $domainId, 'organisation_id' => $organisationId, 'from' => $windowFrom, 'to' => $windowTo, 'failure' => $failureCategory]) }}"
                             class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 uppercase tracking-widest"

@@ -81,6 +81,29 @@ class DashboardSourcesSortingTest extends TestCase
         $this->dashboard()->assertSeeHtml('class="block max-w-xs truncate" title="'.e($longName).'"');
     }
 
+    public function test_a_cut_off_sources_table_says_how_many_sources_there_are_and_links_to_all_records(): void
+    {
+        $domain = Domain::factory()->create();
+        $report = AggregateReport::factory()->create(['domain_id' => $domain->id, 'date_range_begin' => now()]);
+
+        foreach (range(1, 26) as $number) {
+            AggregateReportRecord::factory()->enriched("Sender {$number}")->create(['aggregate_report_id' => $report->id]);
+        }
+
+        $this->dashboard()
+            ->assertSee(__('Top :shown of :total', ['shown' => 25, 'total' => 26]))
+            ->assertSee(__('View all'))
+            ->assertSeeHtml('view=records')
+            ->assertSeeHtml('hide_expected=1');
+    }
+
+    public function test_a_complete_sources_table_has_no_view_all_link(): void
+    {
+        $this->createSources();
+
+        $this->dashboard()->assertDontSee(__('View all'));
+    }
+
     private function dashboard(): Testable
     {
         return Volt::actingAs(User::factory()->create())->test('dashboard');

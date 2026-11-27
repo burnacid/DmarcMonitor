@@ -346,16 +346,17 @@ class DmarcMetricsService
     /**
      * The dashboard's sending-sources table (the $limit largest groups, with
      * their envelope split) and its top failing sources (picked from all
-     * groups). Cached briefly per filter set, since computing them means
-     * aggregating every record in the window; flushCache() invalidates it.
+     * groups), plus how many groups there are in all. Cached briefly per
+     * filter set, since computing them means aggregating every record in the
+     * window; flushCache() invalidates it.
      *
-     * @return array{groups: Collection<int, array<string, mixed>>, top_failing: Collection<int, array<string, mixed>>}
+     * @return array{groups: Collection<int, array<string, mixed>>, top_failing: Collection<int, array<string, mixed>>, total_groups: int}
      */
     public function dashboardSources(?int $domainId, CarbonInterface $from, CarbonInterface $to, ?int $organisationId = null, ?array $allowedDomainIds = null, int $limit = 25, ?string $failureCategory = null): array
     {
         $failureCategory = self::isFailureCategory($failureCategory) ? $failureCategory : null;
 
-        $key = 'dashboard-sources-v3:'.md5(serialize([
+        $key = 'dashboard-sources-v4:'.md5(serialize([
             Cache::get(self::CACHE_VERSION_KEY, 0),
             $domainId,
             $from->toDateTimeString(),
@@ -376,6 +377,7 @@ class DmarcMetricsService
             return [
                 'groups' => $dehydrate($this->attachEnvelopes($groups->take($limit)->values(), $domainId, $from, $to, $organisationId, $allowedDomainIds, $failureCategory)),
                 'top_failing' => $dehydrate($this->topFailingSources($groups)),
+                'total_groups' => $groups->count(),
             ];
         });
 
@@ -384,6 +386,7 @@ class DmarcMetricsService
         return [
             'groups' => $hydrate($cached['groups']),
             'top_failing' => $hydrate($cached['top_failing']),
+            'total_groups' => $cached['total_groups'],
         ];
     }
 

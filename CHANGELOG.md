@@ -18,6 +18,11 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 
 - **Tidier filters on the Reports page**: the search box now sits on top, next to Filters, Columns and Export CSV. "Filters" opens a panel with the organisation, domain, period, envelope, SPF, DKIM and disposition filters, and shows how many filters are in use. Filters in use are listed as chips under the search box, even while the panel is closed. The × on a chip removes that one filter, and "Clear filters" removes all of them. The organisation filter is new on this page: as on the dashboard, it narrows the domain list to that organisation's domains, and it also applies to the CSV export.
 - **Shorter settings menu**: Dashboard Settings, Public Dashboard and Report Branding are now tabs of one Settings page. The Microsoft 365 Mailboxes, Sending Account and App pages are now tabs of one Microsoft 365 page, which keeps the failing-mailbox count. The old addresses redirect to the matching tab, so bookmarks keep working. "Connect with Microsoft" returns to the tab it was started from. The callback address registered in Microsoft Entra doesn't change.
+- The dashboard's Sending sources table shows the 25 largest sources. When there are more, its header now says so (for example "Top 25 of 312") and has a "View all" link. The link opens the Records tab of the Reports page with the same domain, organisation and period, and with expected sources hidden, as on the dashboard.
+
+### Fixed
+
+- Long source names (for example "Compagnie Francaise d'Assurance pour le Commerce Exterieur S.A.") made the dashboard's Sending sources table scroll sideways. They are now cut off with "…"; hover over the name to see it in full.
 
 ## [1.8.0]
 
@@ -47,7 +52,6 @@ All notable changes to DMARC Monitor are listed here. Versions follow the [VERSI
 
 ### Fixed
 
-- Long source names (for example "Compagnie Francaise d'Assurance pour le Commerce Exterieur S.A.") made the dashboard's Sending sources table scroll sideways. They are now cut off with "…"; hover over the name to see it in full.
 - Microsoft 365 mailboxes set up in another language than English failed with "Inbox folder [Inbox] not found", because Outlook shows the inbox under a translated name (for example "Postvak IN"). Standard folders such as Inbox, Archive, Junk Email and Deleted Items are now found in any language. "Test connection" also shows Microsoft's own error message when the folder lookup is refused, for example because of missing permissions.
 - The dashboard's sending-sources and top-failing-sources tables could leave out or mix up rows after changing the period with "All domains" selected. This happened when the same source (for example Google) sent mail for more than one domain.
 - Microsoft 365 and Proton Mail domains were reported as "DKIM selector missing". These providers only publish the keys they are currently using, so a selector that is set up correctly can still have no key. Microsoft 365 publishes one of selector1 and selector2; Proton Mail publishes some of protonmail, protonmail2 and protonmail3. Such a selector, with its CNAME in place, is now shown as "Standby" and is no longer reported as a problem, as long as DKIM works. A domain where no DKIM key is published at all is still reported as "DKIM missing".
